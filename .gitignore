@@ -20,3 +20,12 @@ keys/
 .DS_Store
 .idea/
 .vscode/
+
+# CML software lives in software/ and is never committed. The folder keeps
+# only its own .gitignore and README. See docs/PREREQUISITES.md.
+software/*
+!software/.gitignore
+!software/README.md
+*.iso
+*.pkg
+*.qcow2
