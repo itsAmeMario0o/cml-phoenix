@@ -1,0 +1,22 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+vendor/cloud-cml/.terraform.lock.hcl
+
+# Rendered config and secrets
+config/cml.yml
+config/mcp-env/*
+!config/mcp-env/.gitignore
+.envrc
+keys/
+*.pem
+*.key
+
+# OS and editor
+.DS_Store
+.idea/
+.vscode/
