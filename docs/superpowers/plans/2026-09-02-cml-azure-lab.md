@@ -2113,3 +2113,1146 @@ git commit -m "infra: bump cloud-cml fork to the persistence hook, add its tests
 ```
 
 ---
+
+### Task 9: Config files, the tfvars parser, the config renderer, and the MCP wiring
+
+**Files:**
+- Create: `config/refplat.txt`
+- Create: `config/cml.tfvars.example`
+- Create: `config/cml.yml.tftpl`
+- Create: `config/mcp-env/.gitignore`
+- Create: `scripts/lib/tfvars.py`
+- Create: `scripts/lib/render_cml_config.py`
+- Create: `scripts/mcp-cml.sh`
+- Create: `.mcp.json`
+- Create: `tests/test_tfvars.py`, `tests/test_render.py`
+
+**Interfaces:**
+- Consumes: persistent outputs by name (passed in as `--set`), `config/cml.tfvars`, `config/refplat.txt`.
+- Produces: `config/cml.yml` for the fork (`TF_VAR_cfg_file`), and `scripts/mcp-cml.sh` for `.mcp.json` and Task 11. `python3 scripts/lib/render_cml_config.py --template T --tfvars V --refplat R --out O --set K=V...` exits 0 on success, 1 with a message naming every missing placeholder or bad value.
+
+- [ ] **Step 1: Write the failing tests**
+
+`tests/test_tfvars.py`:
+```python
+"""Tests for scripts/lib/tfvars.py, the HCL-subset parser."""
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "lib"))
+import tfvars  # noqa: E402
+
+
+class ParseTfvarsTest(unittest.TestCase):
+    def test_parses_every_supported_type(self) -> None:
+        text = """
+        # comment line
+        name = "cml"   # trailing comment
+        count = 12
+        price = -1
+        flag = true
+        other = false
+        cidrs = ["10.0.0.1/32", "10.0.0.2/32"]
+        empty = []
+        """
+        result = tfvars.parse_tfvars(text)
+        self.assertEqual(result["name"], "cml")
+        self.assertEqual(result["count"], 12)
+        self.assertEqual(result["price"], -1)
+        self.assertIs(result["flag"], True)
+        self.assertIs(result["other"], False)
+        self.assertEqual(result["cidrs"], ["10.0.0.1/32", "10.0.0.2/32"])
+        self.assertEqual(result["empty"], [])
+
+    def test_rejects_unknown_syntax_with_line_number(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            tfvars.parse_tfvars('a = "ok"\nb = { nested = 1 }\n')
+        self.assertIn("line 2", str(ctx.exception))
+
+    def test_string_may_contain_hash(self) -> None:
+        result = tfvars.parse_tfvars('token = "abc#def"\n')
+        self.assertEqual(result["token"], "abc#def")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+`tests/test_render.py`:
+```python
+"""Tests for scripts/lib/render_cml_config.py."""
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+RENDER = REPO / "scripts" / "lib" / "render_cml_config.py"
+TEMPLATE = REPO / "config" / "cml.yml.tftpl"
+
+SETS = {
+    "RESOURCE_GROUP": "rg-cml-lab", "STORAGE_ACCOUNT": "stcmllababc123",
+    "CONTAINER_NAME": "cml", "VNET_NAME": "vnet-cml-lab", "SUBNET_NAME": "snet-cml",
+    "PRIVATE_IP": "10.20.1.10", "PUBLIC_IP_NAME": "pip-cml-lab",
+    "DATA_DISK_ID": "/subscriptions/x/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/disks/disk-cml-lab-data",
+    "OS_DISK_TYPE": "Premium_LRS", "APPS_SUBNET_CIDR": "10.20.2.0/24",
+    "LAB_SUMMARY_CIDR": "10.100.0.0/16", "SSH_KEY_NAME": "sshkey-cml-lab",
+    "APP_PASSWORD": "AppPass1234567890", "SYS_PASSWORD": "SysPass1234567890",
+}
+
+TFVARS = '''
+smartlicense_token = "TOKENVALUE"
+license_flavor = "CML_Personal"
+allowed_ipv4_subnets_mgmt = ["203.0.113.10/32"]
+allowed_ipv4_subnets_cml2 = ["203.0.113.10/32", "203.0.113.11/32"]
+vm_size = "Standard_E16ds_v5"
+os_disk_size_gb = 200
+spot_enabled = false
+spot_max_bid_price = -1
+sas_validity = "4h"
+software_package = "cml2_2.9.0-3_amd64-3.pkg"
+'''
+
+REFPLAT = "# def image\nalpine alpine-base-3-21-3\niosv iosv-159-3-m10\n"
+
+
+class RenderTest(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp_root = REPO / "tests"
+        self.tmp = Path(tempfile.mkdtemp(prefix=".tmp.", dir=tmp_root))
+        (self.tmp / "cml.tfvars").write_text(TFVARS)
+        (self.tmp / "refplat.txt").write_text(REFPLAT)
+
+    def tearDown(self) -> None:
+        for p in self.tmp.iterdir():
+            p.unlink()
+        self.tmp.rmdir()
+
+    def run_render(self, tfvars_text: str | None = None, sets: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+        if tfvars_text is not None:
+            (self.tmp / "cml.tfvars").write_text(tfvars_text)
+        cmd = [sys.executable, str(RENDER), "--template", str(TEMPLATE),
+               "--tfvars", str(self.tmp / "cml.tfvars"), "--refplat", str(self.tmp / "refplat.txt"),
+               "--out", str(self.tmp / "cml.yml")]
+        for k, v in (sets if sets is not None else SETS).items():
+            cmd += ["--set", f"{k}={v}"]
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    def test_renders_complete_yaml(self) -> None:
+        proc = self.run_render()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        out = (self.tmp / "cml.yml").read_text()
+        self.assertNotIn("${", out)
+        self.assertIn("target: azure", out)
+        self.assertIn("size: Standard_E16ds_v5", out)
+        self.assertIn('allowed_ipv4_subnets_cml2: ["203.0.113.10/32", "203.0.113.11/32"]', out)
+        self.assertIn("    - alpine-base-3-21-3", out)
+        self.assertIn("    - iosv\n", out)
+        self.assertIn("raw_secret: TOKENVALUE", out)
+        self.assertIn("software: cml2_2.9.0-3_amd64-3.pkg", out)
+        self.assertIn("enabled: false", out)
+        mode = oct(os.stat(self.tmp / "cml.yml").st_mode & 0o777)
+        self.assertEqual(mode, "0o600")
+
+    def test_refuses_open_cidr(self) -> None:
+        proc = self.run_render(TFVARS.replace('"203.0.113.10/32"]', '"0.0.0.0/0"]', 1))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("0.0.0.0/0", proc.stderr)
+
+    def test_reports_missing_placeholders(self) -> None:
+        sets = dict(SETS)
+        del sets["DATA_DISK_ID"]
+        proc = self.run_render(sets=sets)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("DATA_DISK_ID", proc.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `python3 -m unittest discover -s tests -p 'test_*.py'`
+Expected: import errors and failures, the modules and template do not exist.
+
+- [ ] **Step 3: Write `config/refplat.txt`**
+
+```text
+# Reference platform selection. One "definition image" pair per line.
+# Single source for scripts/10-upload-images.sh, the preflight presence
+# check, and the refplat block rendered into config/cml.yml.
+#
+# Names must match the folders on the refplat ISO exactly. These are from
+# the June 2025 ISO; update them from the newer ISO before the first upload.
+# Keep the first build small. Add Nexus, Cat9k, and IOS XR per scenario.
+alpine alpine-base-3-21-3
+ubuntu ubuntu-24-04-20250503
+iosv iosv-159-3-m10
+iosvl2 iosvl2-2020
+cat8000v cat8000v-17-16-01a
+```
+
+- [ ] **Step 4: Write `config/cml.tfvars.example`**
+
+```hcl
+# Copy to config/cml.tfvars (gitignored) and fill in. Parsed by
+# scripts/lib/tfvars.py: only "string", numbers, true/false, and ["lists"]
+# of strings are supported. One key per line.
+
+# From Smart Software Manager. See docs/PREREQUISITES.md section 1.2.
+smartlicense_token = "PASTE-TOKEN-HERE"
+
+# CML_Personal, CML_Personal40, CML_Education, or CML_Enterprise.
+license_flavor = "CML_Personal"
+
+# Your public IP as /32. `curl -4 ifconfig.me`. Never 0.0.0.0/0.
+allowed_ipv4_subnets_mgmt = ["203.0.113.10/32"]
+allowed_ipv4_subnets_cml2 = ["203.0.113.10/32"]
+
+# Needs Edsv5 quota in eastus2. See docs/PREREQUISITES.md section 2.1.
+vm_size = "Standard_E16ds_v5"
+
+# OS disk holds CML itself and node overlay disks. Images are on /data.
+os_disk_size_gb = 200
+
+# Spot: false for the first build. -1 bids up to the on-demand price.
+spot_enabled = false
+spot_max_bid_price = -1
+
+# How long the image copy SAS stays valid. Preflight warns if too short.
+sas_validity = "4h"
+
+# Exact filename of the package in software/ and in the cml container.
+software_package = "cml2_2.9.0-3_amd64-3.pkg"
+```
+
+- [ ] **Step 5: Write `config/cml.yml.tftpl`**
+
+Every `${NAME}` is a placeholder for `render_cml_config.py`. The `aws:` and `cluster:` blocks stay because upstream's `vars.sh` and templates read them even for the Azure target.
+
+```yaml
+# Rendered by scripts/20-up.sh from this template. Do not edit config/cml.yml.
+# Schema is upstream cloud-cml v2.9.0 config.yml. Keys under azure: that
+# upstream does not know are read by the azure-lab fork, ADR 0001.
+target: azure
+
+aws:
+  region: unused
+  availability_zone: unused
+  bucket: unused
+  flavor: unused
+  flavor_compute: unused
+  profile: unused
+  subnet_id: ""
+  sg_id: ""
+  public_vpc_ipv4_cidr: 10.0.0.0/16
+  enable_ebs_encryption: false
+  vpc_id: ""
+  gw_id: ""
+  spot_instances:
+    use_spot_for_controller: false
+    use_spot_for_computes: false
+
+azure:
+  resource_group: ${RESOURCE_GROUP}
+  size: ${VM_SIZE}
+  size_compute: unused_at_the_moment
+  storage_account: ${STORAGE_ACCOUNT}
+  container_name: ${CONTAINER_NAME}
+  # azure-lab fork keys
+  vnet_name: ${VNET_NAME}
+  subnet_name: ${SUBNET_NAME}
+  private_ip: ${PRIVATE_IP}
+  public_ip_name: ${PUBLIC_IP_NAME}
+  data_disk_id: ${DATA_DISK_ID}
+  os_disk_type: ${OS_DISK_TYPE}
+  sas_validity: ${SAS_VALIDITY}
+  spot:
+    enabled: ${SPOT_ENABLED}
+    max_bid_price: ${SPOT_MAX_BID_PRICE}
+  apps_subnet_cidr: ${APPS_SUBNET_CIDR}
+  lab_summary_cidr: ${LAB_SUMMARY_CIDR}
+
+common:
+  disk_size: ${OS_DISK_SIZE_GB}
+  controller_hostname: cml-controller
+  key_name: ${SSH_KEY_NAME}
+  allowed_ipv4_subnets_mgmt: ${ALLOWED_MGMT}
+  allowed_ipv4_subnets_cml2: ${ALLOWED_CML2}
+  enable_patty: false
+
+cluster:
+  enable_cluster: false
+  allow_vms_on_controller: true
+  number_of_compute_nodes: 0
+  compute_hostname_prefix: cml-compute
+  compute_disk_size: 32
+
+secret:
+  manager: dummy
+  conjur:
+  vault:
+    kv_secret_v2_mount: secret
+    skip_child_token: true
+  secrets:
+    app:
+      username: admin
+      raw_secret: ${APP_PASSWORD}
+    sys:
+      username: sysadmin
+      raw_secret: ${SYS_PASSWORD}
+    smartlicense_token:
+      raw_secret: ${LICENSE_TOKEN}
+    cluster:
+
+app:
+  software: ${SOFTWARE_PACKAGE}
+  customize:
+    - 05-persist.sh
+    - 99-dummy.sh
+
+license:
+  flavor: ${LICENSE_FLAVOR}
+  nodes: 0
+
+refplat:
+  definitions:
+${REFPLAT_DEFINITIONS}
+  images:
+${REFPLAT_IMAGES}
+```
+
+- [ ] **Step 6: Write `scripts/lib/tfvars.py`**
+
+```python
+#!/usr/bin/env python3
+"""Parse the HCL subset used by config/cml.tfvars.
+
+Supported, one assignment per line:
+    key = "string"
+    key = 123        (also negative)
+    key = true | false
+    key = ["a", "b"] (strings only, may be empty)
+    # comments, whole line or after a value
+
+Anything else raises ValueError naming the line. Stdlib only.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+
+_ASSIGN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
+_STRING = re.compile(r'^"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$')
+_NUMBER = re.compile(r"^(-?\d+)\s*(?:#.*)?$")
+_BOOL = re.compile(r"^(true|false)\s*(?:#.*)?$")
+_LIST = re.compile(r"^\[(.*)\]\s*(?:#.*)?$")
+_LIST_ITEM = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def _parse_value(raw: str, lineno: int) -> Any:
+    if m := _STRING.match(raw):
+        return m.group(1)
+    if m := _NUMBER.match(raw):
+        return int(m.group(1))
+    if m := _BOOL.match(raw):
+        return m.group(1) == "true"
+    if m := _LIST.match(raw):
+        body = m.group(1).strip()
+        if not body:
+            return []
+        items = _LIST_ITEM.findall(body)
+        leftover = _LIST_ITEM.sub("", body).replace(",", "").strip()
+        if leftover:
+            raise ValueError(f"line {lineno}: lists may hold only quoted strings")
+        return items
+    raise ValueError(f"line {lineno}: unsupported value syntax: {raw!r}")
+
+
+def parse_tfvars(text: str) -> dict[str, Any]:
+    """Return a dict of the assignments in *text*."""
+    result: dict[str, Any] = {}
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        m = _ASSIGN.match(line)
+        if not m:
+            raise ValueError(f"line {lineno}: expected 'key = value'")
+        result[m.group(1)] = _parse_value(m.group(2), lineno)
+    return result
+
+
+def load(path: Path) -> dict[str, Any]:
+    """Parse the file at *path*."""
+    return parse_tfvars(path.read_text())
+```
+
+- [ ] **Step 7: Write `scripts/lib/render_cml_config.py`**
+
+```python
+#!/usr/bin/env python3
+"""Render config/cml.yml from the template, cml.tfvars, refplat.txt, and
+values passed as --set NAME=VALUE (the persistent Terraform outputs).
+
+Exit 0 on success. Exit 1 with a message on stderr naming every missing
+placeholder, an open CIDR, or a malformed input. Never touches Terraform so
+the fork stays unaware of this repo. ADR 0004 for why secrets pass this way.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import string
+import sys
+from pathlib import Path
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import tfvars  # noqa: E402
+
+REQUIRED_TFVARS = [
+    "smartlicense_token", "license_flavor", "allowed_ipv4_subnets_mgmt",
+    "allowed_ipv4_subnets_cml2", "vm_size", "os_disk_size_gb", "spot_enabled",
+    "spot_max_bid_price", "sas_validity", "software_package",
+]
+
+
+def yaml_flow_list(items: list[str]) -> str:
+    return "[" + ", ".join(f'"{item}"' for item in items) + "]"
+
+
+def yaml_block_list(items: list[str], indent: int = 4) -> str:
+    return "\n".join(f"{' ' * indent}- {item}" for item in items)
+
+
+def read_refplat(path: Path) -> tuple[list[str], list[str]]:
+    definitions: list[str] = []
+    images: list[str] = []
+    for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if len(parts) != 2:
+            raise ValueError(f"{path}: line {lineno}: expected 'definition image'")
+        if parts[0] not in definitions:
+            definitions.append(parts[0])
+        images.append(parts[1])
+    if not images:
+        raise ValueError(f"{path}: no images listed")
+    return definitions, images
+
+
+def check_cidrs(values: dict[str, Any]) -> None:
+    for key in ("allowed_ipv4_subnets_mgmt", "allowed_ipv4_subnets_cml2"):
+        cidrs = values[key]
+        if not isinstance(cidrs, list) or not cidrs:
+            raise ValueError(f"{key} must be a non-empty list")
+        if "0.0.0.0/0" in cidrs:
+            raise ValueError(f"{key} contains 0.0.0.0/0, which is never allowed")
+
+
+def build_mapping(values: dict[str, Any], refplat: tuple[list[str], list[str]], sets: dict[str, str]) -> dict[str, str]:
+    definitions, images = refplat
+    mapping = dict(sets)
+    mapping.update({
+        "LICENSE_TOKEN": str(values["smartlicense_token"]),
+        "LICENSE_FLAVOR": str(values["license_flavor"]),
+        "ALLOWED_MGMT": yaml_flow_list(values["allowed_ipv4_subnets_mgmt"]),
+        "ALLOWED_CML2": yaml_flow_list(values["allowed_ipv4_subnets_cml2"]),
+        "VM_SIZE": str(values["vm_size"]),
+        "OS_DISK_SIZE_GB": str(values["os_disk_size_gb"]),
+        "SPOT_ENABLED": "true" if values["spot_enabled"] else "false",
+        "SPOT_MAX_BID_PRICE": str(values["spot_max_bid_price"]),
+        "SAS_VALIDITY": str(values["sas_validity"]),
+        "SOFTWARE_PACKAGE": str(values["software_package"]),
+        "REFPLAT_DEFINITIONS": yaml_block_list(definitions),
+        "REFPLAT_IMAGES": yaml_block_list(images),
+    })
+    return mapping
+
+
+def render(template_text: str, mapping: dict[str, str]) -> str:
+    template = string.Template(template_text)
+    needed = {m.group("named") or m.group("braced") for m in template.pattern.finditer(template_text)}
+    needed.discard(None)
+    missing = sorted(name for name in needed if name not in mapping)
+    if missing:
+        raise KeyError("missing placeholders: " + ", ".join(missing))
+    return template.substitute(mapping)
+
+
+def parse_sets(pairs: list[str]) -> dict[str, str]:
+    sets: dict[str, str] = {}
+    for pair in pairs:
+        if "=" not in pair:
+            raise ValueError(f"--set expects NAME=VALUE, got {pair!r}")
+        name, value = pair.split("=", 1)
+        sets[name.strip()] = value
+    return sets
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--template", required=True, type=Path)
+    parser.add_argument("--tfvars", required=True, type=Path)
+    parser.add_argument("--refplat", required=True, type=Path)
+    parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE")
+    args = parser.parse_args(argv)
+    try:
+        values = tfvars.load(args.tfvars)
+        missing = [k for k in REQUIRED_TFVARS if k not in values]
+        if missing:
+            raise ValueError(f"{args.tfvars}: missing keys: {', '.join(missing)}")
+        check_cidrs(values)
+        mapping = build_mapping(values, read_refplat(args.refplat), parse_sets(args.set))
+        rendered = render(args.template.read_text(), mapping)
+    except (ValueError, KeyError, OSError) as exc:
+        print(f"render_cml_config: {exc}", file=sys.stderr)
+        return 1
+    args.out.write_text(rendered)
+    os.chmod(args.out, 0o600)
+    print(f"rendered {args.out} ({len(mapping)} values)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+```
+
+- [ ] **Step 8: Run the tests to verify they pass**
+
+Run: `python3 -m unittest discover -s tests -p 'test_*.py' -v`
+Expected: all tests in `test_tfvars` and `test_render` pass.
+
+- [ ] **Step 9: Write the MCP wiring**
+
+`config/mcp-env/.gitignore`:
+```gitignore
+# CML credentials written by scripts/20-up.sh. Everything but this file is ignored.
+*
+!.gitignore
+```
+
+`scripts/mcp-cml.sh`:
+```bash
+#!/usr/bin/env bash
+# Launch cml-mcp for Claude Code with credentials from config/mcp-env/cml.env.
+# Referenced by .mcp.json. Claude Code cannot source a file itself, hence
+# this wrapper. The env file is written by scripts/20-up.sh.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${CML_MCP_ENV:-${REPO_ROOT}/config/mcp-env/cml.env}"
+
+main() {
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    echo "mcp-cml: ${ENV_FILE} missing. Run scripts/20-up.sh first." >&2
+    exit 1
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+  exec uvx cml-mcp "$@"
+}
+
+main "$@"
+```
+
+`.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "cml": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["scripts/mcp-cml.sh"]
+    }
+  }
+}
+```
+
+- [ ] **Step 10: Run the full gate and commit**
+
+```bash
+chmod +x scripts/mcp-cml.sh scripts/lib/render_cml_config.py
+tests/run.sh && pre-commit run --all-files
+git add config/refplat.txt config/cml.tfvars.example config/cml.yml.tftpl config/mcp-env/.gitignore scripts/lib/tfvars.py scripts/lib/render_cml_config.py scripts/mcp-cml.sh .mcp.json tests/test_tfvars.py tests/test_render.py
+git commit -m "feat: add config template, tfvars parser, renderer, and cml-mcp wiring"
+```
+
+---
+
+### Task 10: Remote CML API helper, run on the host over SSH
+
+**Files:**
+- Create: `scripts/lib/cml-remote.sh`
+- Create: `tests/fake_cml_api.py`
+- Create: `tests/test_cml_remote.sh`
+
+**Interfaces:**
+- Consumes: `/provision/vars.sh` on the host (upstream writes `CFG_APP_USER` and `CFG_APP_PASS` there, readable by sysadmin), the local API at `http://ip6-localhost:8001/api/v0`.
+- Produces: subcommands `list-labs`, `export-labs DIR`, `stop-labs`, `license-status`, `deregister`. Invoked from the Mac as `cml_ssh "bash -s -- SUBCOMMAND ARGS" < scripts/lib/cml-remote.sh`. Output formats below are what Tasks 15, 16, and 18 parse.
+
+Output contract:
+- `list-labs`: one line per lab, tab separated `id<TAB>title<TAB>state`. Empty output when no labs.
+- `export-labs DIR`: creates `DIR`, writes `<title-slug>-<id>.yaml` per lab, prints `exported N labs to DIR`.
+- `stop-labs`: stops every lab not already `STOPPED`, prints `stopped N labs`.
+- `license-status`: prints `REGISTERED` or `NOT_REGISTERED` (the value of `registration.status`).
+- `deregister`: calls `DELETE /licensing/deregistration`, then prints the new `license-status`. Exit 1 if it is still `REGISTERED`.
+
+- [ ] **Step 1: Write the fake API used by the test**
+
+`tests/fake_cml_api.py`:
+```python
+#!/usr/bin/env python3
+"""Minimal stand-in for the CML controller API, for tests of cml-remote.sh.
+
+Serves on 127.0.0.1 at the port given as argv[1]. State lives in memory:
+two labs, one started, one stopped, and a registered license.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+STATE: dict = {
+    "labs": {
+        "lab-1": {"lab_title": "Spine Leaf", "state": "STARTED"},
+        "lab-2": {"lab_title": "TrustSec Demo", "state": "STOPPED"},
+    },
+    "registration": "REGISTERED",
+}
+
+
+class Handler(BaseHTTPRequestHandler):
+    def _send(self, code: int, body: object, content_type: str = "application/json") -> None:
+        data = body.encode() if isinstance(body, str) else json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _authorized(self) -> bool:
+        return self.headers.get("Authorization") == "Bearer FAKE-TOKEN"
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/api/v0/authenticate":
+            length = int(self.headers.get("Content-Length", "0"))
+            creds = json.loads(self.rfile.read(length))
+            if creds == {"username": "admin", "password": "secret"}:
+                self._send(200, "FAKE-TOKEN")
+            else:
+                self._send(403, {"description": "bad credentials"})
+            return
+        self._send(404, {})
+
+    def do_GET(self) -> None:  # noqa: N802
+        if not self._authorized():
+            self._send(401, {})
+            return
+        if self.path == "/api/v0/labs":
+            self._send(200, list(STATE["labs"]))
+        elif self.path == "/api/v0/licensing":
+            self._send(200, {"registration": {"status": STATE["registration"]}})
+        elif self.path.startswith("/api/v0/labs/") and self.path.endswith("/download"):
+            lab_id = self.path.split("/")[4]
+            self._send(200, f"lab:\n  title: {STATE['labs'][lab_id]['lab_title']}\n", "text/plain")
+        elif self.path.startswith("/api/v0/labs/"):
+            lab_id = self.path.split("/")[4]
+            self._send(200, {"id": lab_id, **STATE["labs"][lab_id]})
+        else:
+            self._send(404, {})
+
+    def do_PUT(self) -> None:  # noqa: N802
+        if not self._authorized():
+            self._send(401, {})
+            return
+        if self.path.startswith("/api/v0/labs/") and self.path.endswith("/stop"):
+            STATE["labs"][self.path.split("/")[4]]["state"] = "STOPPED"
+            self._send(204, "")
+        else:
+            self._send(404, {})
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        if not self._authorized():
+            self._send(401, {})
+            return
+        if self.path == "/api/v0/licensing/deregistration":
+            STATE["registration"] = "NOT_REGISTERED"
+            self._send(202, {})
+        else:
+            self._send(404, {})
+
+    def log_message(self, *_: object) -> None:
+        pass
+
+
+def main() -> None:
+    port = int(sys.argv[1])
+    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+- [ ] **Step 2: Write the failing test**
+
+`tests/test_cml_remote.sh`:
+```bash
+#!/usr/bin/env bash
+# Runs scripts/lib/cml-remote.sh against tests/fake_cml_api.py.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="${REPO_ROOT}/scripts/lib/cml-remote.sh"
+TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+PORT=18001
+failures=0
+
+python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT}" &
+API_PID=$!
+trap 'kill "${API_PID}" 2>/dev/null || true; rm -rf "${TMP}"' EXIT
+sleep 1
+
+printf 'CFG_APP_USER="admin"\nCFG_APP_PASS="secret"\n' > "${TMP}/vars.sh"
+export CML_API="http://127.0.0.1:${PORT}/api/v0" VARS_FILE="${TMP}/vars.sh"
+
+assert_eq() {
+  local label="$1" expected="$2" actual="$3"
+  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
+}
+
+out="$(bash "${SCRIPT}" list-labs)"
+assert_eq "list-labs two lines" "2" "$(echo "${out}" | wc -l | tr -d ' ')"
+assert_eq "list-labs first row" "$(printf 'lab-1\tSpine Leaf\tSTARTED')" "$(echo "${out}" | head -1)"
+
+out="$(bash "${SCRIPT}" export-labs "${TMP}/exports")"
+assert_eq "export message" "exported 2 labs to ${TMP}/exports" "${out}"
+assert_eq "export file exists" "yes" "$([[ -f "${TMP}/exports/spine-leaf-lab-1.yaml" ]] && echo yes || echo no)"
+assert_eq "export file content" "lab:" "$(head -1 "${TMP}/exports/spine-leaf-lab-1.yaml")"
+
+out="$(bash "${SCRIPT}" stop-labs)"
+assert_eq "stop-labs stops the started one" "stopped 1 labs" "${out}"
+assert_eq "second stop is a no-op" "stopped 0 labs" "$(bash "${SCRIPT}" stop-labs)"
+
+assert_eq "license-status registered" "REGISTERED" "$(bash "${SCRIPT}" license-status)"
+assert_eq "deregister" "NOT_REGISTERED" "$(bash "${SCRIPT}" deregister)"
+assert_eq "license-status after" "NOT_REGISTERED" "$(bash "${SCRIPT}" license-status)"
+
+rc=0; bash "${SCRIPT}" bogus >/dev/null 2>&1 || rc=$?
+assert_eq "unknown subcommand exits 2" "2" "${rc}"
+
+if [[ "${failures}" -gt 0 ]]; then echo "test_cml_remote: ${failures} failure(s)"; exit 1; fi
+echo "test_cml_remote: all passed"
+```
+
+- [ ] **Step 3: Run it to verify it fails**
+
+Run: `bash tests/test_cml_remote.sh`
+Expected: `[FAIL]` lines, script missing.
+
+- [ ] **Step 4: Write `scripts/lib/cml-remote.sh`**
+
+```bash
+#!/usr/bin/env bash
+# Runs ON THE CML HOST, piped over SSH from the Mac:
+#   cml_ssh "bash -s -- list-labs" < scripts/lib/cml-remote.sh
+#
+# Talks to the controller's local API with the admin credentials that
+# cloud-cml leaves in /provision/vars.sh (group-readable by sysadmin).
+#
+# Subcommands and output contract (parsed by 30-export, 40-down, 90-smoke):
+#   list-labs          id<TAB>title<TAB>state per line
+#   export-labs DIR    writes <slug>-<id>.yaml, prints "exported N labs to DIR"
+#   stop-labs          stops labs not STOPPED, prints "stopped N labs"
+#   license-status     prints registration.status
+#   deregister         deregisters, prints new status, exit 1 if still REGISTERED
+#
+# Overrides for tests: CML_API, VARS_FILE. Needs curl and jq, both present on
+# a cloud-cml host. Stays bash 3.2 compatible so tests run on the Mac.
+set -euo pipefail
+
+CML_API="${CML_API:-http://ip6-localhost:8001/api/v0}"
+VARS_FILE="${VARS_FILE:-/provision/vars.sh}"
+TOKEN=""
+
+load_credentials() {
+  if [[ ! -r "${VARS_FILE}" ]]; then
+    echo "cml-remote: cannot read ${VARS_FILE}" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC1090
+  source "${VARS_FILE}"
+  : "${CFG_APP_USER:?missing in ${VARS_FILE}}" "${CFG_APP_PASS:?missing in ${VARS_FILE}}"
+}
+
+authenticate() {
+  TOKEN="$(printf '{"username":"%s","password":"%s"}' "${CFG_APP_USER}" "${CFG_APP_PASS}" |
+    curl -sf -H "Content-Type: application/json" -d @- "${CML_API}/authenticate" | jq -r .)"
+  if [[ -z "${TOKEN}" || "${TOKEN}" == "null" ]]; then
+    echo "cml-remote: authentication failed" >&2
+    exit 1
+  fi
+}
+
+api() {
+  local method="$1" path="$2"
+  curl -sf -X "${method}" -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/json" "${CML_API}${path}"
+}
+
+lab_ids() {
+  api GET /labs | jq -r '.[]'
+}
+
+lab_row() {
+  local id="$1"
+  api GET "/labs/${id}" | jq -r '[.id, .lab_title, .state] | @tsv'
+}
+
+slugify() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]+/-/g' -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
+}
+
+cmd_list_labs() {
+  local id
+  for id in $(lab_ids); do
+    lab_row "${id}"
+  done
+}
+
+cmd_export_labs() {
+  local dir="$1" id title count=0
+  mkdir -p "${dir}"
+  for id in $(lab_ids); do
+    title="$(api GET "/labs/${id}" | jq -r .lab_title)"
+    api GET "/labs/${id}/download" > "${dir}/$(slugify "${title}")-${id}.yaml"
+    count=$((count + 1))
+  done
+  echo "exported ${count} labs to ${dir}"
+}
+
+cmd_stop_labs() {
+  local id state count=0
+  for id in $(lab_ids); do
+    state="$(api GET "/labs/${id}" | jq -r .state)"
+    if [[ "${state}" != "STOPPED" ]]; then
+      api PUT "/labs/${id}/stop" > /dev/null
+      count=$((count + 1))
+    fi
+  done
+  echo "stopped ${count} labs"
+}
+
+cmd_license_status() {
+  api GET /licensing | jq -r '.registration.status'
+}
+
+cmd_deregister() {
+  local status
+  api DELETE /licensing/deregistration > /dev/null || true
+  status="$(cmd_license_status)"
+  echo "${status}"
+  [[ "${status}" != "REGISTERED" ]]
+}
+
+main() {
+  local sub="${1:-}"
+  shift || true
+  load_credentials
+  authenticate
+  case "${sub}" in
+    list-labs) cmd_list_labs ;;
+    export-labs) cmd_export_labs "${1:?export-labs needs a directory}" ;;
+    stop-labs) cmd_stop_labs ;;
+    license-status) cmd_license_status ;;
+    deregister) cmd_deregister ;;
+    *) echo "usage: cml-remote.sh list-labs|export-labs DIR|stop-labs|license-status|deregister" >&2; exit 2 ;;
+  esac
+}
+
+main "$@"
+```
+
+Note on `slugify`: BSD sed on macOS has no `+` in basic regex, which is why the second expression repeats the class and the third collapses runs. It gives `spine-leaf` for `Spine Leaf` on both platforms.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run: `bash tests/test_cml_remote.sh`
+Expected: all `[OK]`, `test_cml_remote: all passed`. Then `tests/run.sh` all passed.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/lib/cml-remote.sh tests/fake_cml_api.py tests/test_cml_remote.sh
+git commit -m "feat: add remote CML API helper with fake API tests"
+```
+
+---
+
+### Task 11: MCP stdio client for the smoke test
+
+**Files:**
+- Create: `scripts/lib/mcp_call.py`
+- Create: `tests/fake_mcp_server.py`
+- Create: `tests/test_mcp_call.py`
+
+**Interfaces:**
+- Consumes: any MCP stdio server command, by default `scripts/mcp-cml.sh`.
+- Produces: `python3 scripts/lib/mcp_call.py --cmd CMD --tool NAME [--arg K=V]` prints the tool result's text content and exits 0; exits 1 on any JSON-RPC error or if the tool is not listed; exits 2 on a timeout (default 60 s).
+
+- [ ] **Step 1: Write the fake server and the failing test**
+
+`tests/fake_mcp_server.py`:
+```python
+#!/usr/bin/env python3
+"""Tiny MCP stdio server: answers initialize, tools/list, and tools/call for
+one tool, get_cml_labs. Newline-delimited JSON-RPC, like real servers."""
+from __future__ import annotations
+
+import json
+import sys
+
+
+def reply(msg_id: object, result: object) -> None:
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": msg_id, "result": result}) + "\n")
+    sys.stdout.flush()
+
+
+def main() -> None:
+    for line in sys.stdin:
+        msg = json.loads(line)
+        method = msg.get("method")
+        if method == "initialize":
+            reply(msg["id"], {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}},
+                              "serverInfo": {"name": "fake", "version": "0"}})
+        elif method == "notifications/initialized":
+            continue
+        elif method == "tools/list":
+            reply(msg["id"], {"tools": [{"name": "get_cml_labs", "description": "labs", "inputSchema": {"type": "object"}}]})
+        elif method == "tools/call":
+            if msg["params"]["name"] == "get_cml_labs":
+                reply(msg["id"], {"content": [{"type": "text", "text": '[{"id": "lab-1", "title": "Spine Leaf"}]'}]})
+            else:
+                sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": msg["id"],
+                                             "error": {"code": -32601, "message": "unknown tool"}}) + "\n")
+                sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+`tests/test_mcp_call.py`:
+```python
+"""Tests for scripts/lib/mcp_call.py against tests/fake_mcp_server.py."""
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+CLIENT = REPO / "scripts" / "lib" / "mcp_call.py"
+FAKE = f"{sys.executable} {REPO / 'tests' / 'fake_mcp_server.py'}"
+
+
+def call(*extra: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([sys.executable, str(CLIENT), "--cmd", FAKE, *extra],
+                          capture_output=True, text=True, timeout=30)
+
+
+class McpCallTest(unittest.TestCase):
+    def test_calls_tool_and_prints_text(self) -> None:
+        proc = call("--tool", "get_cml_labs")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("Spine Leaf", proc.stdout)
+
+    def test_unknown_tool_exits_1(self) -> None:
+        proc = call("--tool", "nope")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("nope", proc.stderr)
+
+    def test_dead_command_exits_1(self) -> None:
+        proc = subprocess.run([sys.executable, str(CLIENT), "--cmd", "false", "--tool", "x"],
+                              capture_output=True, text=True, timeout=30)
+        self.assertEqual(proc.returncode, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `python3 -m unittest tests.test_mcp_call -v`
+Expected: failures, the client does not exist.
+
+- [ ] **Step 3: Write `scripts/lib/mcp_call.py`**
+
+```python
+#!/usr/bin/env python3
+"""Call one tool on an MCP stdio server and print its text result.
+
+    python3 scripts/lib/mcp_call.py --cmd "bash scripts/mcp-cml.sh" --tool get_cml_labs
+
+Does the initialize handshake, checks the tool is listed, calls it, prints
+the concatenated text content. Exit 0 ok, 1 on error or unknown tool, 2 on
+timeout. Stdlib only. Used by scripts/90-smoke-test.sh to prove cml-mcp can
+reach the controller from the Mac.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import shlex
+import subprocess
+import sys
+import threading
+from typing import Any
+
+PROTOCOL = "2024-11-05"
+
+
+class McpClient:
+    def __init__(self, cmd: str, timeout: float) -> None:
+        self.proc = subprocess.Popen(shlex.split(cmd), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True, bufsize=1)
+        self.timeout = timeout
+        self.next_id = 1
+
+    def _write(self, msg: dict[str, Any]) -> None:
+        assert self.proc.stdin is not None
+        self.proc.stdin.write(json.dumps(msg) + "\n")
+        self.proc.stdin.flush()
+
+    def _read_response(self, msg_id: int) -> dict[str, Any]:
+        assert self.proc.stdout is not None
+        result: dict[str, Any] = {}
+
+        def reader() -> None:
+            for line in self.proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if msg.get("id") == msg_id:
+                    result.update(msg)
+                    return
+
+        t = threading.Thread(target=reader, daemon=True)
+        t.start()
+        t.join(self.timeout)
+        if t.is_alive():
+            raise TimeoutError(f"no response to request {msg_id} in {self.timeout}s")
+        if not result:
+            raise RuntimeError("server closed the stream: " + self._stderr_tail())
+        return result
+
+    def _stderr_tail(self) -> str:
+        assert self.proc.stderr is not None
+        try:
+            return self.proc.stderr.read()[-2000:]
+        except ValueError:
+            return ""
+
+    def request(self, method: str, params: dict[str, Any] | None = None) -> Any:
+        msg_id = self.next_id
+        self.next_id += 1
+        self._write({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params or {}})
+        response = self._read_response(msg_id)
+        if "error" in response:
+            raise RuntimeError(f"{method}: {response['error'].get('message', response['error'])}")
+        return response["result"]
+
+    def notify(self, method: str) -> None:
+        self._write({"jsonrpc": "2.0", "method": method})
+
+    def close(self) -> None:
+        try:
+            if self.proc.stdin:
+                self.proc.stdin.close()
+            self.proc.terminate()
+            self.proc.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            self.proc.kill()
+
+
+def parse_args_kv(pairs: list[str]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for pair in pairs:
+        key, _, value = pair.partition("=")
+        out[key] = value
+    return out
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cmd", required=True, help="server command line")
+    parser.add_argument("--tool", required=True)
+    parser.add_argument("--arg", action="append", default=[], metavar="KEY=VALUE")
+    parser.add_argument("--timeout", type=float, default=60.0)
+    args = parser.parse_args(argv)
+
+    try:
+        client = McpClient(args.cmd, args.timeout)
+    except OSError as exc:
+        print(f"mcp_call: cannot start server: {exc}", file=sys.stderr)
+        return 1
+    try:
+        client.request("initialize", {"protocolVersion": PROTOCOL, "capabilities": {},
+                                      "clientInfo": {"name": "cml-azure-lab-smoke", "version": "1"}})
+        client.notify("notifications/initialized")
+        tools = {t["name"] for t in client.request("tools/list").get("tools", [])}
+        if args.tool not in tools:
+            print(f"mcp_call: tool {args.tool!r} not offered. Offered: {sorted(tools)}", file=sys.stderr)
+            return 1
+        result = client.request("tools/call", {"name": args.tool, "arguments": parse_args_kv(args.arg)})
+        if result.get("isError"):
+            print(f"mcp_call: tool reported an error: {result}", file=sys.stderr)
+            return 1
+        for item in result.get("content", []):
+            if item.get("type") == "text":
+                print(item["text"])
+        return 0
+    except TimeoutError as exc:
+        print(f"mcp_call: {exc}", file=sys.stderr)
+        return 2
+    except RuntimeError as exc:
+        print(f"mcp_call: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        client.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `python3 -m unittest tests.test_mcp_call -v && tests/run.sh`
+Expected: 3 tests pass, full gate passes.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/lib/mcp_call.py tests/fake_mcp_server.py tests/test_mcp_call.py
+git commit -m "feat: add MCP stdio client for smoke testing cml-mcp"
+```
+
+---
