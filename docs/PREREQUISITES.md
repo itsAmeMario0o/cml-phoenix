@@ -135,19 +135,12 @@ email) and `expires` (a date, used only as a tag).
 
 ## 3. GitHub
 
-The spec pins cloud-cml as a submodule from a fork. No fork exists yet.
-Say "create the fork" and I will run it with `gh` under `itsAmeMario0o`,
-branch `azure-lab` from tag `v2.9.0`. Or fork it yourself in the browser and
-tell me when it exists.
+Done 2026-09-02. Fork at https://github.com/itsAmeMario0o/cloud-cml with
+branch `azure-lab` created from tag `v2.9.0`, commit `b32edd5`.
 
 ## 4. Tools on the Mac
 
-Missing today: `azcopy`, `shellcheck`, `gitleaks`. Install with:
-
-```sh
-brew install azcopy shellcheck gitleaks
-```
-
+Installed 2026-09-02: azcopy 10.32.8, shellcheck 0.11.0, gitleaks 8.30.1.
 Already present: terraform 1.5.7, az 2.89, jq, uv, pre-commit, gh, python3.
 Terraform 1.5.7 is old enough that I will pin `required_version = ">= 1.5"`
 rather than assume newer syntax.
@@ -181,5 +174,5 @@ success steps 2 through 7.
 - [ ] Quota request submitted for EDSv5 and regional cores in eastus2
 - [ ] `ARM_SUBSCRIPTION_ID` exported in shell profile
 - [ ] Public IP known for the two allowed-subnet lists
-- [ ] Fork created, or permission given to create it
-- [ ] `brew install azcopy shellcheck gitleaks` done, or permission given
+- [x] Fork created, branch `azure-lab` at v2.9.0
+- [x] azcopy, shellcheck, gitleaks installed

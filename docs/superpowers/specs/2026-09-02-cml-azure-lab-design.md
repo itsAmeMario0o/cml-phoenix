@@ -1,6 +1,6 @@
 # cml-azure-lab: repo skeleton and CML tier
 
-Status: approved in conversation 2026-09-02, pending written review
+Status: approved 2026-09-02
 Scope: sub-project 1 of 3. The external ISE and FTD tier and the TrustSec lab
 content are separate specs that build on this one.
 
