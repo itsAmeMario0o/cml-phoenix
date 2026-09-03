@@ -1475,7 +1475,7 @@ cp -n terraform/persistent/terraform.tfvars.example terraform/persistent/terrafo
 # edit owner and expires in terraform/persistent/terraform.tfvars
 terraform -chdir=terraform/persistent plan
 ```
-Expected: 20 to add (resource group, random string, storage account, 2 containers, role assignment, SSH key, public IP, managed disk, VNet, 5 subnets, route table, route table association, 2 passwords), 0 to change, 0 to destroy. Do not apply yet: the 512 GB Premium disk bills from creation. `20-up.sh` applies it when the images are ready.
+Expected: 19 to add (resource group, random string, storage account, 2 containers, role assignment, SSH key, public IP, managed disk, VNet, 5 subnets, route table with its inline route, route table association, 2 passwords), 0 to change, 0 to destroy. Do not apply yet: the 512 GB Premium disk bills from creation. `20-up.sh` applies it when the images are ready.
 
 - [ ] **Step 5: Commit**
 
@@ -5206,7 +5206,7 @@ scripts/10-upload-images.sh --dry-run
 scripts/10-upload-images.sh
 scripts/00-preflight.sh
 ```
-Expected: persistent apply 20 added. Upload completes. Preflight fully green and writes `.preflight-ok`.
+Expected: persistent apply 19 added. Upload completes. Preflight fully green and writes `.preflight-ok`.
 
 - [ ] **Step 3: Spec step 2, full build**
 
