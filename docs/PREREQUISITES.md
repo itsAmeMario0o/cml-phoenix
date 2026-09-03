@@ -145,26 +145,33 @@ Already present: terraform 1.5.7, az 2.89, jq, uv, pre-commit, gh, python3.
 Terraform 1.5.7 is old enough that I will pin `required_version = ">= 1.5"`
 rather than assume newer syntax.
 
-## 5. What gets built without any of the above
+## 5. What has been built, and what still gates the first build
 
-All of it except the CML VM itself:
+The repo is built. What is true today:
 
-- `terraform/bootstrap` and `terraform/persistent`: written, `fmt`,
-  `validate`, and `plan` all pass. Bootstrap can be applied now, it costs
-  cents. Persistent is held until images exist, because the 512 GB Premium
-  data disk bills about 75 USD a month from the moment it is created.
-- The fork branch with all ten patches: `validate` passes against the
-  rendered config template with placeholder values.
-- All six scripts, `CLAUDE.md`, `.claude/settings.json`, pre-commit, gitleaks
-  rules, four ADRs, `STATUS.md`, `LESSONS-LEARNED.md`.
+- `terraform/bootstrap` is applied in Azure: resource group
+  `rg-cml-lab-tfstate`, storage account `st792kcotfstate`. It costs cents.
+- `terraform/persistent` is validated and planned, 19 to add, but not
+  applied. It is held until images exist and quota is approved, because the
+  512 GB Premium data disk bills about 75 USD a month from the moment it is
+  created.
+- The fork branch `azure-lab` carries patches 0 to 10 plus one fix commit,
+  pinned as the submodule. `validate` passes against the rendered config
+  template with placeholder values.
+- All seven scripts (00, 10, 20, 30, 40, 50, 90), `CLAUDE.md`,
+  `.claude/settings.json`, pre-commit, gitleaks rules, four ADRs,
+  `STATUS.md`, `LESSONS-LEARNED.md`, and the `tests/run.sh` gate all exist
+  and pass.
 - An upload script for the `.pkg` and the selected refplat images, tested
   against an empty folder.
 - `00-preflight.sh` runs today and fails on the missing token, images, and
   quota. That is the intended behaviour and a real test of the script.
+- No CML VM has ever been built from this repo.
 
-What cannot happen until sections 1 and 2 are done: `20-up.sh` past the
-persistent root, the smoke test, export, down, and cml-mcp. Those are spec
-success steps 2 through 7.
+What still gates the first build: sections 1 and 2 above, in full. Until
+then, the persistent apply, the CML build itself, `20-up.sh` past the
+persistent root, the smoke test, export, down, and cml-mcp stay out of
+reach. Those are spec success steps 2 through 7.
 
 ## 6. Checklist
 
