@@ -132,7 +132,8 @@ check_quota() {
   size="$(tfvar vm_size)"
   [[ -n "${size}" ]] || return 0
   family="$(az vm list-skus -l "${LOCATION}" --size "${size}" --query "[?name=='${size}'].family | [0]" -o tsv 2>/dev/null || true)"
-  vcpus="$(az vm list-skus -l "${LOCATION}" --size "${size}" --query "[?name=='${size}'].capabilities[?name=='vCPUs'].value | [0][0]" -o tsv 2>/dev/null || true)"
+  # A filter projection cannot be filtered again, so pipe to the single object first.
+  vcpus="$(az vm list-skus -l "${LOCATION}" --size "${size}" --query "[?name=='${size}'] | [0].capabilities[?name=='vCPUs'].value | [0]" -o tsv 2>/dev/null || true)"
   if [[ -z "${family}" || -z "${vcpus}" ]]; then
     miss "quota: size ${size} not found in ${LOCATION}"
     return 0
@@ -162,14 +163,14 @@ sas_seconds() {
     *) s="${v}" ;;
   esac
   if [[ "${h}" =~ ^[0-9]+$ && "${m}" =~ ^[0-9]+$ && "${s}" =~ ^[0-9]+$ ]]; then
-    echo $(( h * 3600 + m * 60 + s ))
+    echo $(( 10#${h} * 3600 + 10#${m} * 60 + 10#${s} ))
   else
     echo 0
   fi
 }
 
 check_blobs() {
-  local sa pkg def img count bytes total_bytes=0 est validity
+  local sa pkg def img count bytes total_bytes=0 est validity sas_validity_val
   if ! sa="$(tf_out persistent storage_account_name 2>/dev/null)" || [[ -z "${sa}" ]]; then
     warn "blob checks skipped: persistent root not applied yet"
     return 0
@@ -196,10 +197,11 @@ check_blobs() {
       miss "blob image ${img} missing. Run: scripts/10-upload-images.sh"
     fi
   done < "${REFPLAT_FILE}"
-  validity="$(sas_seconds "$(tfvar sas_validity)")"
+  sas_validity_val="$(tfvar sas_validity)"
+  validity="$(sas_seconds "${sas_validity_val}")"
   est=$(( total_bytes / (ASSUMED_MBPS * 1048576) ))
   if [[ "${validity}" -eq 0 ]]; then
-    miss "cml.tfvars sas_validity '$(tfvar sas_validity)' is not a duration like 4h or 4h30m"
+    miss "cml.tfvars sas_validity '${sas_validity_val}' is not a duration like 4h or 4h30m"
   elif [[ "${est}" -gt $(( validity * 8 / 10 )) ]]; then
     warn "image copy estimate ${est}s at ${ASSUMED_MBPS} MB/s is close to SAS validity ${validity}s. Raise sas_validity"
   else

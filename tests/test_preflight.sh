@@ -32,6 +32,8 @@ assert_eq "sas_seconds 30m" "1800" "$(sas_of 30m)"
 assert_eq "sas_seconds 240" "240" "$(sas_of 240)"
 assert_eq "sas_seconds abc" "0" "$(sas_of abc)"
 assert_eq "sas_seconds 4h30 (missing trailing m)" "0" "$(sas_of 4h30)"
+assert_eq "sas_seconds 08h (no octal parse)" "28800" "$(sas_of 08h)"
+assert_eq "sas_seconds 08h08m (no octal parse, compound)" "29280" "$(sas_of 08h08m)"
 
 # Missing tfvars must be a FAIL line, not a crash, and the marker must not exist.
 rm -f "${REPO_ROOT}/.preflight-ok"
