@@ -89,3 +89,13 @@ learned twice.
   does not resolve yet.
 - Fix: the hook calls `udevadm settle` after `mkfs` and before the
   mount-by-label step.
+
+## License registration status string is unverified
+
+- Symptom: the smoke test may fail on a healthy build.
+- Cause: the exact `registration.status` value a real CML controller reports
+  once licensed has never been observed; the design assumed `REGISTERED`,
+  but a real build may report `COMPLETED` instead.
+- Fix: `check_license` accepts both `REGISTERED` and `COMPLETED`. Record the
+  real value on the first build (Task 21 step 4) and tighten the check once
+  it is known.

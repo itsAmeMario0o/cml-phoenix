@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the repo, the two durable Terraform roots, the cloud-cml fork patches, and the six operator scripts so a CML instance can be built and destroyed per session with its images and lab exports surviving on a persistent data disk.
+**Goal:** Build the repo, the two durable Terraform roots, the cloud-cml fork patches, and the seven operator scripts so a CML instance can be built and destroyed per session with its images and lab exports surviving on a persistent data disk.
 
 **Architecture:** Three Terraform roots split by lifetime: `terraform/bootstrap` (local state, holds the state storage), `terraform/persistent` (blob state, everything that must survive), and `vendor/cloud-cml` (a pinned fork submodule, local state, the disposable CML VM). Bash scripts on the Mac orchestrate the three roots, render the fork's config file from persistent outputs, and talk to the CML host over SSH on port 1122. A provisioning hook inside the fork mounts the data disk and bind-mounts the libvirt images directory onto it before CML installs, so images copy once.
 
@@ -5218,9 +5218,13 @@ Expected: CML apply completes in 15 to 30 minutes; the readiness module waits fo
 - [ ] **Step 4: Spec step 3, smoke test and cml-mcp**
 
 ```bash
+curl -sk https://IP/api/v0/licensing | jq .registration.status
 scripts/90-smoke-test.sh
 ```
-Expected: 0 FAIL, including `cml-mcp get_cml_labs answered`. In Claude Code, `/mcp` shows server `cml` connected.
+Record the raw `registration.status` value in `docs/LESSONS-LEARNED.md` (see
+"License registration status string is unverified"), then run the smoke
+test. Expected: 0 FAIL, including `cml-mcp get_cml_labs answered`. In Claude
+Code, `/mcp` shows server `cml` connected.
 
 - [ ] **Step 5: Spec step 4, a throwaway lab exported**
 

@@ -35,8 +35,8 @@ software downloads in 1.3.
 4. Copy the token. It goes into `config/cml.tfvars` as `smartlicense_token`.
    That file is gitignored. Never paste it anywhere else in the repo.
 
-Tell me which flavor you bought. It goes into `config/cml.yml.tftpl` under
-`license.flavor`.
+Tell me which flavor you bought. It goes into `config/cml.tfvars` as
+`license_flavor`.
 
 ### 1.3 Download the software
 
@@ -119,12 +119,12 @@ committed. `az login` is already valid on this Mac.
 
 ### 2.3 Values for `config/cml.tfvars`
 
-I will generate `config/cml.tfvars.example`. You copy it to
-`config/cml.tfvars` and fill in:
+Copy `config/cml.tfvars.example` to `config/cml.tfvars` and fill in:
 
 | Key | What to put |
 |---|---|
 | `smartlicense_token` | From 1.2 |
+| `license_flavor` | From 1.1: `CML_Personal`, `CML_Personal40`, `CML_Education`, or `CML_Enterprise` |
 | `allowed_ipv4_subnets_mgmt` | Your public IP as `/32`. Get it with `curl -4 ifconfig.me`. SSH and Cockpit. |
 | `allowed_ipv4_subnets_cml2` | Same `/32`. The CML UI and API, which is what cml-mcp uses. |
 | `vm_size` | `Standard_E16ds_v5` to start |

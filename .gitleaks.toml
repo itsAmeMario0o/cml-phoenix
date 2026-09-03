@@ -9,8 +9,12 @@ paths = [
   '''config/cml\.tfvars\.example''',
   '''terraform/persistent/terraform\.tfvars\.example''',
   '''config/tunnels\.conf\.example''',
-  '''docs/.*\.md''',
-  '''tests/.*''',
+  '''\.example$''',
+  '''docs/superpowers/.*''',
+  '''docs/design-notes\.md''',
+  '''docs/PREREQUISITES\.md''',
+  '''tests/fake_.*\.py''',
+  '''tests/test_.*''',
 ]
 
 # Cisco Smart License tokens are long base64-like strings that usually end in
@@ -32,5 +36,5 @@ tags = ["azure", "credential"]
 [[rules]]
 id = "cml-admin-password"
 description = "CML admin or sysadmin password assignment"
-regex = '''(?i)(CML_PASSWORD|CFG_APP_PASS|CFG_SYS_PASS|raw_secret)\s*[=:]\s*['"]?[A-Za-z0-9]{16}['"]?\s*$'''
+regex = '''(?i)(CML_PASSWORD|CFG_APP_PASS|CFG_SYS_PASS|raw_secret)\s*[=:]\s*['"]?[A-Za-z0-9]{12,}['"]?'''
 tags = ["cml", "credential"]
