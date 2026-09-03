@@ -6,9 +6,10 @@ Status: accepted, 2026-09-02
 
 The CML VM is rebuilt per session. The refplat images, the lab exports, the
 static public IP, the SSH key, the VNet, and the Terraform state itself must
-not be rebuilt. One root with `prevent_destroy` on the precious resources is
-tempting but a single `terraform destroy` still tries, and a state mishap
-takes everything with it.
+not be rebuilt. One root with `prevent_destroy` on the precious resources
+is tempting. But a single `terraform destroy` still tries, and one state
+mishap takes everything with it. The blast radius has to be structural, not
+a lifecycle flag.
 
 ## Decision
 
@@ -37,7 +38,8 @@ in this repo runs destroy against the first two roots.
 
 ## Options considered
 
-1. **One root.** Rejected: destroy semantics are all or nothing.
-2. **Two roots, persistent plus CML.** Rejected: the persistent root needs
-   remote state, and something has to create that storage first.
-3. **Three roots.** Chosen.
+1. One root. Rejected, because destroy is all or nothing.
+2. Two roots, persistent plus CML. Rejected, because the persistent root
+   needs remote state and something has to create that storage first.
+3. Three roots. Chosen. It is one more directory than feels necessary, and
+   that is fine.

@@ -1,8 +1,9 @@
 # What you need to provide before the first CML build
 
-Written 2026-09-02. Everything in this list is something only you can do:
-buy, download, log in, or approve. Nothing here blocks building the repo.
-See section 5 for what gets built without any of it.
+Written 2026-09-02. Everything on this list is something only you can do:
+buy, download, log in, or approve. None of it blocked building the repo,
+and section 5 says what exists already. The quota request is the slow one,
+so start there.
 
 ## 1. Cisco license and software
 
@@ -35,8 +36,7 @@ software downloads in 1.3.
 4. Copy the token. It goes into `config/cml.tfvars` as `smartlicense_token`.
    That file is gitignored. Never paste it anywhere else in the repo.
 
-Tell me which flavor you bought. It goes into `config/cml.tfvars` as
-`license_flavor`.
+The flavor you bought goes into `config/cml.tfvars` as `license_flavor`.
 
 ### 1.3 Download the software
 
@@ -50,9 +50,9 @@ Download exactly these two items:
 | `cml2_2.9.x_amd64-N.pkg` | The "update package". Not the OVA, not the ISO installer. | about 1 GB |
 | `refplat-YYYYMMDD-fcs.iso` | Reference platform images, latest release | 15 to 40 GB |
 
-An older refplat from June 2025 sits in `~/Downloads/refplat-20250616-fcs-iso/`.
-Decision on 2026-09-02: do not use it, get the current one so the SD-WAN and
-Nexus images are recent.
+There is an older refplat from June 2025 in `~/Downloads`. Do not use it.
+Get the current one so the SD-WAN and Nexus images are recent, and note
+that the June 2025 ISO did not carry the SD-WAN controller images at all.
 
 ### 1.4 Where to put the files
 
@@ -80,11 +80,15 @@ Because the repo sits under OneDrive, a large ISO will sync. If OneDrive
 later turns it into an on-demand placeholder, right-click it in Finder and
 choose "Always Keep on This Device" before running the upload script.
 
-Tell me the exact `.pkg` filename and the ISO filename once they are there.
+Once the files are there, put the exact `.pkg` filename into
+`config/cml.tfvars` as `software_package`. The ISO is found by name pattern,
+so it needs no setting. Then check that the image names in
+`config/refplat.txt` match the folders on the new ISO; the upload script
+refuses to run if any of them do not.
 
-The refplat ISO gets mounted on the Mac and only the images the scenarios need
-get uploaded. The full ISO is too large for the four hour SAS window in the
-spec. The upload script in this repo handles the selection.
+Only the images the scenarios need get uploaded. The full ISO would not fit
+through the four hour SAS window the spec allows, and you would be paying to
+store images nothing uses.
 
 ISE is not a refplat image and stays outside CML per the spec, so no ISE
 download is needed for sub-project 1.
@@ -142,12 +146,12 @@ branch `azure-lab` created from tag `v2.9.0`, commit `b32edd5`.
 
 Installed 2026-09-02: azcopy 10.32.8, shellcheck 0.11.0, gitleaks 8.30.1.
 Already present: terraform 1.5.7, az 2.89, jq, uv, pre-commit, gh, python3.
-Terraform 1.5.7 is old enough that I will pin `required_version = ">= 1.5"`
-rather than assume newer syntax.
+Terraform 1.5.7 is old enough that every root pins `required_version =
+">= 1.5"` and avoids newer syntax, so do not upgrade it without a reason.
 
 ## 5. What has been built, and what still gates the first build
 
-The repo is built. What is true today:
+The repo is built. This is what is true today:
 
 - `terraform/bootstrap` is applied in Azure: resource group
   `rg-cml-lab-tfstate`, storage account `st792kcotfstate`. It costs cents.
@@ -165,7 +169,8 @@ The repo is built. What is true today:
 - An upload script for the `.pkg` and the selected refplat images, tested
   against an empty folder.
 - `00-preflight.sh` runs today and fails on the missing token, images, and
-  quota. That is the intended behaviour and a real test of the script.
+  quota. That is what it is for. Watching it go green one line at a time is
+  the checklist.
 - No CML VM has ever been built from this repo.
 
 What still gates the first build: sections 1 and 2 above, in full. Until

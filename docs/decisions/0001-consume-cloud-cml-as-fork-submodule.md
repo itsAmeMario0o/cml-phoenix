@@ -7,9 +7,10 @@ Status: accepted, 2026-09-02
 CiscoDevNet/cloud-cml is the supported way to run CML in Azure. Its Azure
 module creates its own VNet, subnet, and public IP, uses a Standard_LRS OS
 disk, has no data disk, no spot support, no IP forwarding, and a one hour
-SAS window for the image copy. Every one of those needs to change for an
-on-demand lab with persistence and routed connectivity. Upstream moves,
-and we want its fixes for new CML releases.
+SAS window for the image copy. Every one of those has to change for a lab
+that is rebuilt per session and routes to the VNet. At the same time,
+upstream keeps moving, and every new CML release lands there first. We want
+those fixes without re-deriving our patches each time.
 
 ## Decision
 
@@ -35,10 +36,10 @@ here. The tooling merge always precedes a CML software rebuild.
 
 ## Options considered
 
-1. **Use upstream unchanged and wrap it.** Cannot work: the module creates
-   the VNet and public IP itself, and the persistence hook needs a file in
-   its provisioning data directory.
-2. **Vendor a copy of the module into this repo.** Loses the upstream
-   history; merging a new CML release becomes a manual diff exercise.
-3. **Fork plus submodule.** Chosen. Small diff, upstream history kept,
-   explicit pin.
+1. Use upstream unchanged and wrap it. This cannot work. The module
+   creates the VNet and public IP itself, and the persistence hook needs a
+   file inside its provisioning data directory.
+2. Vendor a copy of the module into this repo. This loses the upstream
+   history, so every new CML release becomes a manual diff exercise.
+3. Fork plus submodule. Chosen. The diff stays small, the upstream history
+   stays intact, and the pin is explicit.

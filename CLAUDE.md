@@ -1,9 +1,9 @@
 # cml-azure-lab
 
-An on-demand Cisco Modeling Labs instance in Azure. Built and destroyed per
-session. The things that must survive a rebuild live in a separate,
-never-destroyed Terraform root. Claude Code runs on the Mac and drives CML
-through the cml-mcp server and SSH.
+A Cisco Modeling Labs server in Azure that is built and destroyed per
+session. Whatever must survive a rebuild lives in a separate Terraform root
+that is never destroyed. Claude Code runs on the Mac and drives CML through
+the cml-mcp server and SSH.
 
 Spec: `docs/superpowers/specs/2026-09-02-cml-azure-lab-design.md`.
 Prerequisites you must provide: `docs/PREREQUISITES.md`.

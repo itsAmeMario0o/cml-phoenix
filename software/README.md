@@ -1,11 +1,11 @@
 # software/
 
-Drop the Cisco downloads here. Nothing in this folder is committed. The
-`.gitignore` beside this file ignores everything except itself and this
-README, and the repo root `.gitignore` also blocks `*.iso`, `*.pkg`, and
-`*.qcow2` everywhere as a second guard.
+Drop the Cisco downloads here. Nothing in this folder is ever committed.
+The `.gitignore` beside this file ignores everything except itself and this
+README, and the root `.gitignore` blocks `*.iso`, `*.pkg`, and `*.qcow2`
+everywhere as a second guard.
 
-Expected contents:
+What belongs here:
 
 ```
 software/
@@ -15,14 +15,15 @@ software/
 └── refplat-YYYYMMDD-fcs.iso.README
 ```
 
-Keep the files as downloaded. Do not extract the ISO. The upload script mounts
-it read-only, copies the package plus only the node definitions and images the
-scenarios need into the `cml` blob container, and unmounts. Nothing is
-written back here.
+Keep the files as downloaded and do not extract the ISO. The upload script
+mounts it read-only, copies the package plus only the node definitions and
+images the scenarios need into the `cml` blob container, and unmounts.
+Nothing is written back here.
 
-Scripts find this folder through `CML_SOFTWARE_DIR`, default
+Scripts find this folder through `CML_SOFTWARE_DIR`, which defaults to
 `<repo root>/software`.
 
-OneDrive note: this repo lives under OneDrive, so large files here get synced.
-If OneDrive turns one into an on-demand placeholder, right-click it in Finder
-and choose "Always Keep on This Device" before running the upload script.
+One OneDrive caveat. This repo lives under OneDrive, so a large ISO here
+will sync. If OneDrive later swaps it for an on-demand placeholder, right
+click the file in Finder and choose "Always Keep on This Device" before
+running the upload script, or the mount will fail with a short read.

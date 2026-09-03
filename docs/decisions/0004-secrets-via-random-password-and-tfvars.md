@@ -6,8 +6,9 @@ Status: accepted, 2026-09-02
 
 Three secrets exist: the CML admin password, the sysadmin password, and
 the Smart License token. cloud-cml supports Vault, Conjur, or a dummy
-manager that takes raw values from its config file. This is a one-person
-lab; the cost of a secret store is real and the benefit is small.
+manager that takes raw values from its config file. This is a one person
+lab. A secret store would cost real setup time and an extra provider to
+guard three strings that already sit in a private state container.
 
 ## Decision
 
@@ -34,7 +35,9 @@ lab; the cost of a secret store is real and the benefit is small.
 
 ## Options considered
 
-1. **Azure Key Vault.** Rejected for now: more resources, RBAC, and a
-   provider dependency for three values. Revisit if a second person joins.
-2. **HashiCorp Vault or Conjur via cloud-cml.** Rejected: nothing to run it on.
-3. **random_password plus gitignored tfvars.** Chosen.
+1. Azure Key Vault. Rejected for now. It means more resources, RBAC, and
+   a provider dependency for three values. Worth revisiting if a second
+   person joins.
+2. HashiCorp Vault or Conjur through cloud-cml. Rejected, since there is
+   nothing to run either on.
+3. random_password plus a gitignored tfvars file. Chosen.

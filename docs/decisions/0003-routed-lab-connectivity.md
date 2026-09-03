@@ -42,7 +42,11 @@ bridge, the sysctl, and the C8000v are lab content for the TrustSec spec.
 
 ## Options considered
 
-1. **NAT mode, upstream default.** Rejected: breaks CoA and per-device identity.
-2. **Bridge mode.** Rejected: Azure does not deliver frames to unknown MACs.
-3. **Routed with a UDR.** Chosen. Two routes total, one in Azure, one on the host.
-4. **Overlay tunnel, C8000v to C8000v.** Kept as a documented fallback.
+1. NAT mode, the upstream default. Rejected. It breaks CoA and collapses
+   every switch into one identity.
+2. Bridge mode. Rejected. Azure does not deliver frames to MACs it does not
+   know about, and no amount of NIC configuration changes that.
+3. Routed with a UDR. Chosen. Two routes in total, one in Azure and one on
+   the host.
+4. An overlay tunnel, C8000v to C8000v. Kept as a documented fallback in
+   case the routed path surprises us.

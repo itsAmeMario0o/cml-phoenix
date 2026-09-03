@@ -1,8 +1,9 @@
 # Lessons learned
 
-Symptom, cause, fix. Add an entry the moment something bites, before the
-fix is forgotten. Entries from the design phase are here so they are not
-learned twice.
+Symptom, cause, fix. Add an entry the moment something bites, while the
+fix is still fresh. The first few came out of the design phase and the
+build's code reviews, before anything ran in Azure, which is the cheapest
+time to learn them.
 
 ## SSH to the CML host on port 22 gives a console menu, not a shell
 
@@ -43,8 +44,8 @@ learned twice.
 
 ## `terraform output -raw` on an empty state prints "No outputs found" and exits 0
 
-- Symptom: a helper reading a Terraform output treated an empty state as a
-  successful empty string instead of failing.
+- Symptom: a helper reading a Terraform output got a multi-line warning as
+  its value and carried on as if it were a real string.
 - Cause: `terraform output -raw <name>` against a state with no outputs
   prints "No outputs found" to stdout and exits 0, so a caller checking only
   the exit code never notices.
@@ -53,8 +54,8 @@ learned twice.
 
 ## A chained JMESPath filter on the quota query silently returns nothing
 
-- Symptom: the quota check always came back empty even when the family was
-  present in the raw `az` output.
+- Symptom: the quota check reported the VM size as not found even though it
+  was right there in the raw `az` output.
 - Cause: `[?a].b[?c]` does not flatten between the two filters, so the
   second `[?c]` is applied to a list of lists and never matches.
 - Fix: the quota query pipes the first filter's result to `[0]` before
@@ -62,8 +63,9 @@ learned twice.
 
 ## Teardown let a registered license through on the retry path
 
-- Symptom: the teardown's license check let a registered license slip past
-  the block and proceed to destroy the VM.
+- Symptom: in review, the teardown's license check would have let a still
+  registered license through and destroyed the VM anyway. Nobody got bitten
+  by this one; a reviewer traced it before the first run.
 - Cause: the retry path captured two lines of check output instead of one,
   and the blocking logic only matched a single-line `NOT_REGISTERED`.
 - Fix: `license_blocked` now blocks anything but a confirmed single-line
@@ -82,8 +84,8 @@ learned twice.
 
 ## First boot raced mkfs against mount-by-label
 
-- Symptom: the data disk mount occasionally failed on the very first boot,
-  succeeding on a retry or a reboot.
+- Symptom: mounting the data disk by label right after formatting it can
+  fail on first boot and succeed on a retry.
 - Cause: mounting by label right after `mkfs` can run before the kernel's
   udev database has registered the new filesystem's label, so the label
   does not resolve yet.
