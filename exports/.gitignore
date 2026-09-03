@@ -1,0 +1,4 @@
+# Local copies of lab exports pulled by scripts/30-export-labs.sh. The blob
+# container "exports" is the durable copy. Never committed.
+*
+!.gitignore

@@ -1,0 +1,36 @@
+title = "cml-azure-lab gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Examples and docs carry placeholders, never real values"
+paths = [
+  '''config/cml\.tfvars\.example''',
+  '''terraform/persistent/terraform\.tfvars\.example''',
+  '''config/tunnels\.conf\.example''',
+  '''docs/.*\.md''',
+  '''tests/.*''',
+]
+
+# Cisco Smart License tokens are long base64-like strings that usually end in
+# the URL-encoded newline "%0A". Match any assignment of one.
+[[rules]]
+id = "cisco-smart-license-token"
+description = "Cisco Smart License registration token"
+regex = '''(?i)(smart[-_]?licen[cs]e[-_]?token|CFG_LICENSE_TOKEN|LICENSE_TOKEN)\s*[=:]\s*['"]?[A-Za-z0-9+/=%_-]{40,}'''
+tags = ["cisco", "credential"]
+
+# Azure storage account keys are 88 characters of base64 ending in "==".
+[[rules]]
+id = "azure-storage-account-key"
+description = "Azure storage account access key"
+regex = '''(?i)(AccountKey|storage[-_]?account[-_]?key|ARM_ACCESS_KEY)\s*[=:]\s*['"]?[A-Za-z0-9+/]{86}=='''
+tags = ["azure", "credential"]
+
+# The persistent root generates these; they must never land in a file.
+[[rules]]
+id = "cml-admin-password"
+description = "CML admin or sysadmin password assignment"
+regex = '''(?i)(CML_PASSWORD|CFG_APP_PASS|CFG_SYS_PASS|raw_secret)\s*[=:]\s*['"]?[A-Za-z0-9]{16}['"]?\s*$'''
+tags = ["cml", "credential"]
