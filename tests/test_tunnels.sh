@@ -32,10 +32,17 @@ assert_eq "bad usage exits 1" "1" "${rc}"
 
 # shellcheck disable=SC2086
 out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" env ${common} bash "${SCRIPT}" up --dry-run 2>&1)"
-assert_contains "up plans the forward" "+ ssh -p 1122 -N -L 18443:10.20.2.10:443" "${out}"
+assert_contains "up plans the forward" "-o ExitOnForwardFailure=yes -N -L 18443:10.20.2.10:443 sysadmin@203.0.113.5" "${out}"
 
 rc=0; env TUNNELS_CONF="${TMP}/missing.conf" STATE_DIR="${TMP}/state" bash "${SCRIPT}" status >/dev/null 2>&1 || rc=$?
 assert_eq "missing conf exits 1" "1" "${rc}"
+
+printf 'cockpit 19090 127.0.0.1 9090\nise 18443 10.20.2.10\n' > "${TMP}/short.conf"
+rc=0
+out="$(env TUNNELS_CONF="${TMP}/short.conf" STATE_DIR="${TMP}/state" bash "${SCRIPT}" status 2>&1)" || rc=$?
+has_msg=0
+grep -qF "needs four fields" <<<"${out}" && has_msg=1
+assert_eq "short line makes status exit 1 with needs four fields" "1 1" "${rc} ${has_msg}"
 
 if [[ "${failures}" -gt 0 ]]; then echo "test_tunnels: ${failures} failure(s)"; exit 1; fi
 echo "test_tunnels: all passed"

@@ -20,14 +20,6 @@ STATE_DIR="${STATE_DIR:-${REPO_ROOT}/.cml-tunnels}"
 KEY_FILE="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
 DRY_RUN=0
 
-run() {
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ $*"
-  else
-    "$@"
-  fi
-}
-
 port_listening() {
   lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
 }
@@ -38,11 +30,13 @@ require_conf() {
 
 each_tunnel() {
   # Calls "$1 name local_port remote_host remote_port" per config line.
-  local callback="$1" name lport rhost rport
+  local callback="$1" name lport rhost rport failed=0
   while read -r name lport rhost rport || [[ -n "${name}" ]]; do
     [[ -z "${name}" || "${name}" == \#* ]] && continue
-    "${callback}" "${name}" "${lport}" "${rhost}" "${rport}"
+    [[ -n "${rport}" ]] || die "${TUNNELS_CONF}: line '${name} ${lport} ${rhost} ${rport}' needs four fields"
+    "${callback}" "${name}" "${lport}" "${rhost}" "${rport}" || failed=1
   done < "${TUNNELS_CONF}"
+  return "${failed}"
 }
 
 host_reachable() {
@@ -61,7 +55,7 @@ start_one() {
   fi
   mkdir -p "${STATE_DIR}"
   if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ ssh -p 1122 -N -L ${lport}:${rhost}:${rport} sysadmin@${ip}"
+    echo "+ ssh -p 1122 -i ${KEY_FILE} -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -N -L ${lport}:${rhost}:${rport} sysadmin@${ip}"
     return 0
   fi
   nohup ssh -p 1122 -i "${KEY_FILE}" -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes \
@@ -87,7 +81,8 @@ stop_one() {
   fi
   holder="$(lsof -nP -tiTCP:"${lport}" -sTCP:LISTEN 2>/dev/null || true)"
   if [[ -n "${holder}" ]]; then
-    kill "${holder}" 2>/dev/null || true
+    # shellcheck disable=SC2086 # holder may be several pids, one per line; want them as separate args
+    kill ${holder} 2>/dev/null || true
   fi
   echo "${name}: stopped"
 }
@@ -107,11 +102,12 @@ main() {
     DRY_RUN=1
   fi
   require_conf
+  require_cmd ssh lsof nc
   case "${cmd}" in
     up)
       CML_HOST_IP="$(cml_ip)"
       host_reachable "${CML_HOST_IP}" || die "CML host ${CML_HOST_IP} not reachable on 1122"
-      each_tunnel start_one
+      each_tunnel start_one || die "one or more tunnels did not come up, see ${STATE_DIR}/*.log"
       ;;
     down) each_tunnel stop_one ;;
     status) each_tunnel status_one ;;
