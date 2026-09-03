@@ -41,6 +41,38 @@ assert_eq "confirm returns 1 on n" "1" "${rc}"
 out="$(bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; echo \"\${REPO_ROOT}\"")"
 assert_eq "REPO_ROOT resolves" "${REPO_ROOT}" "${out}"
 
+# tf_out: stub terraform stands in for the real binary so we can exercise
+# the empty-state and present/absent-output cases without touching state.
+TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+trap 'rm -rf "${TMP}"' EXIT
+
+cat > "${TMP}/terraform" <<'EOF'
+#!/usr/bin/env bash
+echo '{}'
+EOF
+chmod +x "${TMP}/terraform"
+
+out=""; rc=0
+out="$(PATH="${TMP}:${PATH}" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; tf_out persistent x" 2>/dev/null)" || rc=$?
+assert_eq "tf_out empty state fails silently" "rc=1 out=" "rc=${rc} out=${out}"
+
+cat > "${TMP}/terraform" <<'EOF'
+#!/usr/bin/env bash
+echo '{"x":{"sensitive":false,"type":"string","value":"hello"}}'
+EOF
+chmod +x "${TMP}/terraform"
+
+out=""; rc=0
+out="$(PATH="${TMP}:${PATH}" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; tf_out persistent x")" || rc=$?
+assert_eq "tf_out present output" "rc=0 out=hello" "rc=${rc} out=${out}"
+
+rc=0
+PATH="${TMP}:${PATH}" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; tf_out persistent missing" >/dev/null 2>&1 || rc=$?
+assert_eq "tf_out missing output exit code" "1" "${rc}"
+
+rm -rf "${TMP}"
+trap - EXIT
+
 if [[ "${failures}" -gt 0 ]]; then
   echo "test_common: ${failures} failure(s)"
   exit 1

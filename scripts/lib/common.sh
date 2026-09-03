@@ -57,11 +57,16 @@ require_env() {
   done
 }
 
-# tf_out ROOT NAME: raw output from terraform/ROOT. ROOT is bootstrap or
-# persistent. The cloud-cml root has its own outputs and is read directly.
+# tf_out ROOT NAME: value of output NAME from terraform/ROOT. Uses -json
+# because "output -raw" prints a warning to stdout and exits 0 when the
+# state has no outputs yet. Returns 1 when the output is absent or empty,
+# so callers can fall back or die.
 tf_out() {
-  local root="$1" name="$2"
-  terraform -chdir="${REPO_ROOT}/terraform/${root}" output -raw "${name}"
+  local root="$1" name="$2" value
+  value="$(terraform -chdir="${REPO_ROOT}/terraform/${root}" output -json 2>/dev/null |
+    jq -r --arg n "${name}" 'if type == "object" and has($n) then .[$n].value else empty end')" || return 1
+  [[ -n "${value}" ]] || return 1
+  echo "${value}"
 }
 
 cml_ip() {
