@@ -60,6 +60,21 @@ def check_cidrs(values: dict[str, Any]) -> None:
             raise ValueError(f"{key} contains 0.0.0.0/0, which is never allowed")
 
 
+def check_secret_scalars(values: dict[str, Any], sets: dict[str, str]) -> None:
+    # These three values are rendered inside double-quoted YAML scalars
+    # (raw_secret: "${...}"). A double quote, backslash, or newline cannot
+    # appear verbatim in a double-quoted YAML scalar. Smart License tokens
+    # are base64 with %0A, and passwords are alphanumeric by construction,
+    # so this only guards against a pasted mistake.
+    candidates = {"smartlicense_token": str(values.get("smartlicense_token", ""))}
+    for key in ("APP_PASSWORD", "SYS_PASSWORD"):
+        if key in sets:
+            candidates[key] = sets[key]
+    for name, value in candidates.items():
+        if '"' in value or "\\" in value or "\n" in value:
+            raise ValueError(f"{name} contains a character that cannot appear in a quoted YAML scalar")
+
+
 def build_mapping(values: dict[str, Any], refplat: tuple[list[str], list[str]], sets: dict[str, str]) -> dict[str, str]:
     definitions, images = refplat
     mapping = dict(sets)
@@ -114,13 +129,15 @@ def main(argv: list[str]) -> int:
         if missing:
             raise ValueError(f"{args.tfvars}: missing keys: {', '.join(missing)}")
         check_cidrs(values)
-        mapping = build_mapping(values, read_refplat(args.refplat), parse_sets(args.set))
+        sets = parse_sets(args.set)
+        check_secret_scalars(values, sets)
+        mapping = build_mapping(values, read_refplat(args.refplat), sets)
         rendered = render(args.template.read_text(), mapping)
+        args.out.write_text(rendered)
+        os.chmod(args.out, 0o600)
     except (ValueError, KeyError, OSError) as exc:
         print(f"render_cml_config: {exc}", file=sys.stderr)
         return 1
-    args.out.write_text(rendered)
-    os.chmod(args.out, 0o600)
     print(f"rendered {args.out} ({len(mapping)} values)")
     return 0
 

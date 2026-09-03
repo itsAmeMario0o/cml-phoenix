@@ -68,7 +68,7 @@ class RenderTest(unittest.TestCase):
         self.assertIn('allowed_ipv4_subnets_cml2: ["203.0.113.10/32", "203.0.113.11/32"]', out)
         self.assertIn("    - alpine-base-3-21-3", out)
         self.assertIn("    - iosv\n", out)
-        self.assertIn("raw_secret: TOKENVALUE", out)
+        self.assertIn('raw_secret: "TOKENVALUE"', out)
         self.assertIn("software: cml2_2.9.0-3_amd64-3.pkg", out)
         self.assertIn("enabled: false", out)
         mode = oct(os.stat(self.tmp / "cml.yml").st_mode & 0o777)
@@ -85,6 +85,17 @@ class RenderTest(unittest.TestCase):
         proc = self.run_render(sets=sets)
         self.assertEqual(proc.returncode, 1)
         self.assertIn("DATA_DISK_ID", proc.stderr)
+
+    def test_token_with_colon_renders_quoted(self) -> None:
+        proc = self.run_render(TFVARS.replace('"TOKENVALUE"', '"AB: CD"'))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        out = (self.tmp / "cml.yml").read_text()
+        self.assertIn('raw_secret: "AB: CD"', out)
+
+    def test_token_with_double_quote_is_refused(self) -> None:
+        proc = self.run_render(TFVARS.replace('"TOKENVALUE"', '"AB\\"CD"'))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("smartlicense_token", proc.stderr)
 
 
 if __name__ == "__main__":

@@ -36,9 +36,13 @@ def _parse_value(raw: str, lineno: int) -> Any:
         if not body:
             return []
         items = _LIST_ITEM.findall(body)
-        leftover = _LIST_ITEM.sub("", body).replace(",", "").strip()
+        leftover = _LIST_ITEM.sub("", body)
+        comma_count = leftover.count(",")
+        leftover = leftover.replace(",", "").strip()
         if leftover:
             raise ValueError(f"line {lineno}: lists may hold only quoted strings")
+        if comma_count != len(items) - 1:
+            raise ValueError(f"line {lineno}: list items must be comma separated")
         return items
     raise ValueError(f"line {lineno}: unsupported value syntax: {raw!r}")
 

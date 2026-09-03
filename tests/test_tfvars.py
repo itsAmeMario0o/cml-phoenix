@@ -37,6 +37,11 @@ class ParseTfvarsTest(unittest.TestCase):
         result = tfvars.parse_tfvars('token = "abc#def"\n')
         self.assertEqual(result["token"], "abc#def")
 
+    def test_rejects_list_without_commas(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            tfvars.parse_tfvars('cidrs = ["a""b"]\n')
+        self.assertIn("line 1", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
