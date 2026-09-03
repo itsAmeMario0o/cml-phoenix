@@ -4098,3 +4098,706 @@ git commit -m "feat: add 20-up.sh with dry run and ordered applies"
 ```
 
 ---
+
+### Task 15: `30-export-labs.sh`
+
+**Files:**
+- Create: `scripts/30-export-labs.sh`
+- Create: `tests/stubs/terraform`
+- Create: `tests/test_export_dry_run.sh`
+
+**Interfaces:**
+- Consumes: `cml_ip`, `cml_ssh`, `scripts/lib/cml-remote.sh export-labs`, persistent output `storage_account_name`.
+- Produces: `/data/exports/<UTC timestamp>/` on the host, a copy under `exports/<timestamp>/` in the repo, and the same folder in blob container `exports`. Task 16 calls this script first.
+
+- [ ] **Step 1: Write the terraform stub and the failing test**
+
+`tests/stubs/terraform`:
+```bash
+#!/usr/bin/env bash
+# Stand-in for terraform in dry-run tests. Only "output -raw NAME" is used.
+if [[ "${TF_STUB_FAIL:-0}" == "1" ]]; then
+  echo "stub: no state" >&2; exit 1
+fi
+case "$*" in
+  *"output -raw public_ip_address"*) echo "203.0.113.5" ;;
+  *"output -raw storage_account_name"*) echo "stfake" ;;
+  *"output -raw resource_group_name"*) echo "rg-cml-lab" ;;
+  *"output -raw"*) echo "stub-value" ;;
+  *"output -json cml2info"*) echo '{"address":"203.0.113.5","url":"https://203.0.113.5","version":"2.9.0"}' ;;
+  *) echo "terraform stub: unhandled: $*" >&2; exit 1 ;;
+esac
+```
+
+`tests/test_export_dry_run.sh`:
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="${REPO_ROOT}/scripts/30-export-labs.sh"
+chmod +x "${REPO_ROOT}/tests/stubs/"*
+failures=0
+assert_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
+}
+line_of() { grep -nF -- "$1" <<<"$2" | head -1 | cut -d: -f1; }
+
+out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" bash "${SCRIPT}" --dry-run 2>&1)"
+assert_contains "remote export planned" "bash -s -- export-labs /data/exports/" "${out}"
+assert_contains "scp planned" "+ scp -P 1122" "${out}"
+assert_contains "blob upload planned" "https://stfake.blob.core.windows.net/exports/" "${out}"
+e="$(line_of "export-labs /data/exports/" "${out}")"; s="$(line_of "+ scp -P 1122" "${out}")"; u="$(line_of "blob.core.windows.net/exports/" "${out}")"
+if [[ "${e}" -lt "${s}" && "${s}" -lt "${u}" ]]; then echo "[OK]    order export < scp < upload"; else
+  echo "[FAIL]  order: ${e} ${s} ${u}"; failures=$((failures + 1)); fi
+
+if [[ "${failures}" -gt 0 ]]; then echo "test_export_dry_run: ${failures} failure(s)"; exit 1; fi
+echo "test_export_dry_run: all passed"
+```
+
+Run: `bash tests/test_export_dry_run.sh`. Expected: fails, script missing.
+
+- [ ] **Step 2: Write `scripts/30-export-labs.sh`**
+
+```bash
+#!/usr/bin/env bash
+# Export every lab to YAML and copy the folder to blob storage.
+#
+#   scripts/30-export-labs.sh [--dry-run]
+#
+# 1. Refuse if the CML API does not answer (nothing to export safely)
+# 2. On the host: cml-remote.sh export-labs /data/exports/<UTC timestamp>
+# 3. scp that folder to exports/<timestamp>/ in the repo (gitignored)
+# 4. azcopy the local copy to the exports container, same folder name
+#
+# The blob copy is the durable one. The host copy dies with the VM, the
+# local copy is a convenience for diffing. Reimport is by hand or via
+# cml-mcp create_full_lab_topology, on purpose (spec section 3).
+set -euo pipefail
+
+# shellcheck source=lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
+LOCAL_EXPORTS="${REPO_ROOT}/exports"
+DRY_RUN=0
+
+run() {
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ $*"
+  else
+    "$@"
+  fi
+}
+
+api_ready() {
+  local ip="$1"
+  [[ "$(curl -sk -m 10 "https://${ip}/api/v0/system_information" | jq -r .ready 2>/dev/null)" == "true" ]]
+}
+
+export_on_host() {
+  local ip="$1" stamp="$2" key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ ssh -p 1122 sysadmin@${ip} bash -s -- export-labs /data/exports/${stamp} < ${REMOTE_LIB}"
+  else
+    ssh -p 1122 -i "${key}" -o StrictHostKeyChecking=accept-new "sysadmin@${ip}" \
+      "bash -s -- export-labs /data/exports/${stamp}" < "${REMOTE_LIB}"
+  fi
+}
+
+pull_local_copy() {
+  local ip="$1" stamp="$2" key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
+  mkdir -p "${LOCAL_EXPORTS}"
+  run scp -P 1122 -i "${key}" -o StrictHostKeyChecking=accept-new -q -r \
+    "sysadmin@${ip}:/data/exports/${stamp}" "${LOCAL_EXPORTS}/${stamp}"
+}
+
+push_to_blob() {
+  local stamp="$1" sa
+  sa="$(tf_out persistent storage_account_name)"
+  export AZCOPY_AUTO_LOGIN_TYPE=AZCLI
+  export AZCOPY_LOG_LOCATION="${REPO_ROOT}/.azcopy" AZCOPY_JOB_PLAN_LOCATION="${REPO_ROOT}/.azcopy"
+  mkdir -p "${AZCOPY_LOG_LOCATION}"
+  run azcopy copy "${LOCAL_EXPORTS}/${stamp}" "https://${sa}.blob.core.windows.net/exports/" --recursive
+}
+
+main() {
+  local ip stamp
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    DRY_RUN=1
+  fi
+  require_cmd terraform ssh scp azcopy curl jq
+  ip="$(cml_ip)"
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  if [[ "${DRY_RUN}" != "1" ]] && ! api_ready "${ip}"; then
+    die "CML API at https://${ip} is not ready. Nothing exported."
+  fi
+  export_on_host "${ip}" "${stamp}"
+  pull_local_copy "${ip}" "${stamp}"
+  push_to_blob "${stamp}"
+  pass "exports in ${LOCAL_EXPORTS}/${stamp} and blob container exports/${stamp}"
+  summary_and_exit
+}
+
+main "$@"
+```
+
+- [ ] **Step 3: Run the tests, commit**
+
+Run: `chmod +x scripts/30-export-labs.sh && bash tests/test_export_dry_run.sh && tests/run.sh`
+Expected: all passed.
+
+```bash
+git add scripts/30-export-labs.sh tests/stubs/terraform tests/test_export_dry_run.sh
+git commit -m "feat: add lab export script with blob copy"
+```
+
+---
+
+### Task 16: `40-down.sh`
+
+**Files:**
+- Create: `scripts/40-down.sh`
+- Create: `tests/test_down_dry_run.sh`
+
+**Interfaces:**
+- Consumes: `30-export-labs.sh`, `cml-remote.sh stop-labs`, `license-status`, `deregister`, upstream `/provision/del.sh`, the cloud-cml root.
+- Produces: the CML VM, NIC, NSG, and disk attachment destroyed. Persistent and bootstrap untouched. License released, or a refusal.
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/test_down_dry_run.sh`:
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="${REPO_ROOT}/scripts/40-down.sh"
+chmod +x "${REPO_ROOT}/tests/stubs/"*
+failures=0
+assert_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
+}
+line_of() { grep -nF -- "$1" <<<"$2" | head -1 | cut -d: -f1; }
+
+out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x ASSUME_YES=1 bash "${SCRIPT}" --dry-run 2>&1)"
+assert_contains "export first" "30-export-labs.sh --dry-run" "${out}"
+assert_contains "stop labs" "bash -s -- stop-labs" "${out}"
+assert_contains "deregister via del.sh" "/provision/del.sh" "${out}"
+assert_contains "destroy cml root" "+ terraform -chdir=${REPO_ROOT}/vendor/cloud-cml destroy" "${out}"
+a="$(line_of "30-export-labs.sh" "${out}")"; b="$(line_of "stop-labs" "${out}")"; c="$(line_of "/provision/del.sh" "${out}")"; d="$(line_of "vendor/cloud-cml destroy" "${out}")"
+if [[ "${a}" -lt "${b}" && "${b}" -lt "${c}" && "${c}" -lt "${d}" ]]; then echo "[OK]    order export < stop < deregister < destroy"; else
+  echo "[FAIL]  order: ${a} ${b} ${c} ${d}"; failures=$((failures + 1)); fi
+
+# The script must never be able to destroy the other roots.
+if grep -qE 'chdir=[^ ]*(persistent|bootstrap)[^ ]* +destroy' "${SCRIPT}"; then
+  echo "[FAIL]  script references destroy on persistent or bootstrap"; failures=$((failures + 1))
+else
+  echo "[OK]    no destroy on persistent or bootstrap"
+fi
+
+if [[ "${failures}" -gt 0 ]]; then echo "test_down_dry_run: ${failures} failure(s)"; exit 1; fi
+echo "test_down_dry_run: all passed"
+```
+
+Run: `bash tests/test_down_dry_run.sh`. Expected: fails, script missing.
+
+- [ ] **Step 2: Write `scripts/40-down.sh`**
+
+```bash
+#!/usr/bin/env bash
+# Tear down the CML VM only. Persistent and bootstrap are never touched.
+#
+#   scripts/40-down.sh [--dry-run] [--force-license]
+#
+# 1. scripts/30-export-labs.sh (refuses if the API is down)
+# 2. Stop every lab
+# 3. /provision/del.sh on the host, then verify NOT_REGISTERED; retry with
+#    cml-remote.sh deregister. A stranded Smart License blocks the next
+#    build, so a failure here stops the teardown unless --force-license.
+# 4. terraform destroy in vendor/cloud-cml
+#
+# --dry-run prints the sequence. Prompts unless ASSUME_YES=1.
+set -euo pipefail
+
+# shellcheck source=lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
+CLOUD_CML="${REPO_ROOT}/vendor/cloud-cml"
+CML_YML="${REPO_ROOT}/config/cml.yml"
+DRY_RUN=0
+FORCE_LICENSE=0
+
+run() {
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ $*"
+  else
+    "$@"
+  fi
+}
+
+remote() {
+  local ip="$1"; shift
+  local key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ ssh -p 1122 sysadmin@${ip} bash -s -- $* < ${REMOTE_LIB}"
+  else
+    ssh -p 1122 -i "${key}" -o StrictHostKeyChecking=accept-new "sysadmin@${ip}" "bash -s -- $*" < "${REMOTE_LIB}"
+  fi
+}
+
+export_labs() {
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ ${REPO_ROOT}/scripts/30-export-labs.sh --dry-run"
+  else
+    "${REPO_ROOT}/scripts/30-export-labs.sh" || die "export failed, not destroying. Fix the export or run 30-export-labs.sh by hand."
+  fi
+}
+
+release_license() {
+  local ip="$1" status
+  run cml_ssh /provision/del.sh || true
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    return 0
+  fi
+  status="$(remote "${ip}" license-status || echo UNKNOWN)"
+  if [[ "${status}" == "REGISTERED" ]]; then
+    warn "del.sh left the license REGISTERED, retrying through the API"
+    status="$(remote "${ip}" deregister || echo REGISTERED)"
+  fi
+  if [[ "${status}" == "REGISTERED" ]]; then
+    if [[ "${FORCE_LICENSE}" == "1" ]]; then
+      warn "license still REGISTERED, continuing because of --force-license. Release it in Smart Software Manager."
+    else
+      die "license still REGISTERED. Fix it, or rerun with --force-license and release it in Smart Software Manager."
+    fi
+  else
+    pass "license ${status}"
+  fi
+}
+
+destroy_cml() {
+  local tenant
+  tenant="$(az account show --query tenantId -o tsv)"
+  export TF_VAR_cfg_file="${CML_YML}"
+  export TF_VAR_azure_subscription_id="${ARM_SUBSCRIPTION_ID}"
+  export TF_VAR_azure_tenant_id="${tenant}"
+  confirm "Destroy the CML VM (vendor/cloud-cml root only)?" || die "declined"
+  run terraform -chdir="${CLOUD_CML}" destroy -input=false -auto-approve
+}
+
+main() {
+  local ip arg
+  for arg in "$@"; do
+    case "${arg}" in
+      --dry-run) DRY_RUN=1 ;;
+      --force-license) FORCE_LICENSE=1 ;;
+      *) die "usage: 40-down.sh [--dry-run] [--force-license]" ;;
+    esac
+  done
+  require_env ARM_SUBSCRIPTION_ID
+  require_cmd terraform az ssh
+  ip="$(cml_ip)"
+  export_labs
+  remote "${ip}" stop-labs
+  release_license "${ip}"
+  destroy_cml
+  pass "CML VM destroyed. Persistent resources untouched. Next build: scripts/20-up.sh"
+  summary_and_exit
+}
+
+main "$@"
+```
+
+- [ ] **Step 3: Run the tests, commit**
+
+Run: `chmod +x scripts/40-down.sh && bash tests/test_down_dry_run.sh && tests/run.sh`
+Expected: all passed.
+
+```bash
+git add scripts/40-down.sh tests/test_down_dry_run.sh
+git commit -m "feat: add 40-down.sh with license release gate"
+```
+
+---
+
+### Task 17: `50-tunnels.sh`
+
+**Files:**
+- Create: `scripts/50-tunnels.sh`
+- Create: `config/tunnels.conf.example`
+- Create: `tests/test_tunnels.sh`
+
+**Interfaces:**
+- Consumes: `config/tunnels.conf` (or `TUNNELS_CONF`), lines `name local_port remote_host remote_port`; `cml_ip`; `keys/cml-lab`.
+- Produces: background `ssh -N -L` processes with pid and log files in `.cml-tunnels/`. Subcommands `up`, `down`, `status`.
+
+- [ ] **Step 1: Write the example config and the failing test**
+
+`config/tunnels.conf.example`:
+```text
+# name  local_port  remote_host   remote_port
+# Copy to config/tunnels.conf (gitignored). One forward per line, through
+# the CML host on SSH 1122. Cockpit is reachable directly, this is an
+# example. The ISE and FTD spec adds their entries.
+cockpit 9090 127.0.0.1 9090
+```
+
+`tests/test_tunnels.sh`:
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="${REPO_ROOT}/scripts/50-tunnels.sh"
+TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+trap 'rm -rf "${TMP}"' EXIT
+chmod +x "${REPO_ROOT}/tests/stubs/"*
+failures=0
+assert_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
+}
+assert_eq() {
+  local label="$1" expected="$2" actual="$3"
+  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
+}
+
+printf 'cockpit 19090 127.0.0.1 9090\nise 18443 10.20.2.10 443\n' > "${TMP}/tunnels.conf"
+common="TUNNELS_CONF=${TMP}/tunnels.conf STATE_DIR=${TMP}/state"
+
+out="$(env ${common} bash "${SCRIPT}" status 2>&1)"
+assert_contains "status lists cockpit down" "cockpit: DOWN (localhost:19090)" "${out}"
+assert_contains "status lists ise down" "ise: DOWN (localhost:18443)" "${out}"
+
+rc=0; env ${common} bash "${SCRIPT}" bogus >/dev/null 2>&1 || rc=$?
+assert_eq "bad usage exits 1" "1" "${rc}"
+
+out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" env ${common} bash "${SCRIPT}" up --dry-run 2>&1)"
+assert_contains "up plans the forward" "+ ssh -p 1122 -N -L 18443:10.20.2.10:443" "${out}"
+
+rc=0; env TUNNELS_CONF="${TMP}/missing.conf" STATE_DIR="${TMP}/state" bash "${SCRIPT}" status >/dev/null 2>&1 || rc=$?
+assert_eq "missing conf exits 1" "1" "${rc}"
+
+if [[ "${failures}" -gt 0 ]]; then echo "test_tunnels: ${failures} failure(s)"; exit 1; fi
+echo "test_tunnels: all passed"
+```
+
+Run: `bash tests/test_tunnels.sh`. Expected: fails, script missing.
+
+- [ ] **Step 2: Write `scripts/50-tunnels.sh`**
+
+```bash
+#!/usr/bin/env bash
+# SSH port forwards through the CML host, detached with pid files.
+#
+#   scripts/50-tunnels.sh up [--dry-run] | down | status
+#
+# Forwards come from config/tunnels.conf: "name local_port remote_host
+# remote_port". Each runs as its own ssh -N -L on port 1122. State lives in
+# .cml-tunnels/ inside the repo (pid and log per tunnel). "up" is idempotent:
+# a tunnel that already listens is left alone. Refuses "up" when the host
+# does not answer on 1122.
+#
+# Overrides: TUNNELS_CONF, STATE_DIR.
+set -euo pipefail
+
+# shellcheck source=lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+TUNNELS_CONF="${TUNNELS_CONF:-${REPO_ROOT}/config/tunnels.conf}"
+STATE_DIR="${STATE_DIR:-${REPO_ROOT}/.cml-tunnels}"
+KEY_FILE="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
+DRY_RUN=0
+
+run() {
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ $*"
+  else
+    "$@"
+  fi
+}
+
+port_listening() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+require_conf() {
+  [[ -f "${TUNNELS_CONF}" ]] || die "${TUNNELS_CONF} missing. Copy config/tunnels.conf.example."
+}
+
+each_tunnel() {
+  # Calls "$1 name local_port remote_host remote_port" per config line.
+  local callback="$1" name lport rhost rport
+  while read -r name lport rhost rport; do
+    [[ -z "${name}" || "${name}" == \#* ]] && continue
+    "${callback}" "${name}" "${lport}" "${rhost}" "${rport}"
+  done < "${TUNNELS_CONF}"
+}
+
+host_reachable() {
+  local ip="$1"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    return 0
+  fi
+  nc -z -w 5 "${ip}" 1122 >/dev/null 2>&1
+}
+
+start_one() {
+  local name="$1" lport="$2" rhost="$3" rport="$4" ip="${CML_HOST_IP}" tries
+  if port_listening "${lport}"; then
+    echo "${name}: already listening on ${lport}"
+    return 0
+  fi
+  mkdir -p "${STATE_DIR}"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ ssh -p 1122 -N -L ${lport}:${rhost}:${rport} sysadmin@${ip}"
+    return 0
+  fi
+  nohup ssh -p 1122 -i "${KEY_FILE}" -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes \
+    -N -L "${lport}:${rhost}:${rport}" "sysadmin@${ip}" >> "${STATE_DIR}/${name}.log" 2>&1 &
+  echo "$!" > "${STATE_DIR}/${name}.pid"
+  for tries in 1 2 3 4 5 6 7 8 9 10; do
+    if port_listening "${lport}"; then
+      echo "${name}: up on localhost:${lport} -> ${rhost}:${rport}"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "${name}: did not come up, see ${STATE_DIR}/${name}.log" >&2
+  return 1
+}
+
+stop_one() {
+  local name="$1" lport="$2" pid_file="${STATE_DIR}/$1.pid" holder
+  if [[ -f "${pid_file}" ]]; then
+    kill "$(cat "${pid_file}")" 2>/dev/null || true
+    rm -f "${pid_file}"
+  fi
+  holder="$(lsof -nP -tiTCP:"${lport}" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "${holder}" ]]; then
+    kill "${holder}" 2>/dev/null || true
+  fi
+  echo "${name}: stopped"
+}
+
+status_one() {
+  local name="$1" lport="$2" rhost="$3" rport="$4"
+  if port_listening "${lport}"; then
+    echo "${name}: up (localhost:${lport} -> ${rhost}:${rport})"
+  else
+    echo "${name}: DOWN (localhost:${lport})"
+  fi
+}
+
+main() {
+  local cmd="${1:-}"
+  if [[ "${2:-}" == "--dry-run" ]]; then
+    DRY_RUN=1
+  fi
+  require_conf
+  case "${cmd}" in
+    up)
+      CML_HOST_IP="$(cml_ip)"
+      host_reachable "${CML_HOST_IP}" || die "CML host ${CML_HOST_IP} not reachable on 1122"
+      each_tunnel start_one
+      ;;
+    down) each_tunnel stop_one ;;
+    status) each_tunnel status_one ;;
+    *) echo "usage: $0 up [--dry-run]|down|status" >&2; exit 1 ;;
+  esac
+}
+
+main "$@"
+```
+
+- [ ] **Step 3: Run the tests, commit**
+
+Run: `chmod +x scripts/50-tunnels.sh && bash tests/test_tunnels.sh && tests/run.sh`
+Expected: all passed.
+
+```bash
+git add scripts/50-tunnels.sh config/tunnels.conf.example tests/test_tunnels.sh
+git commit -m "feat: add SSH tunnel manager with in-repo state"
+```
+
+---
+
+### Task 18: `90-smoke-test.sh`
+
+**Files:**
+- Create: `scripts/90-smoke-test.sh`
+- Create: `tests/test_smoke.sh`
+
+**Interfaces:**
+- Consumes: persistent outputs, cloud-cml output `cml2info`, `cml_ssh`, `cml-remote.sh license-status`, `az vm show`, `mcp_call.py` with `scripts/mcp-cml.sh`.
+- Produces: pass or fail per spec check, exit 1 on any fail.
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/test_smoke.sh`:
+```bash
+#!/usr/bin/env bash
+# The smoke test needs a live host. Here we only prove it fails cleanly when
+# there is no state, and that it never crashes past the first check.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="${REPO_ROOT}/scripts/90-smoke-test.sh"
+chmod +x "${REPO_ROOT}/tests/stubs/"*
+failures=0
+assert_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
+}
+assert_eq() {
+  local label="$1" expected="$2" actual="$3"
+  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
+}
+
+rc=0; out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" TF_STUB_FAIL=1 bash "${SCRIPT}" 2>&1)" || rc=$?
+assert_eq "no state exits 1" "1" "${rc}"
+assert_contains "explains" "persistent output public_ip_address" "${out}"
+assert_contains "summary printed" "summary:" "${out}"
+
+if [[ "${failures}" -gt 0 ]]; then echo "test_smoke: ${failures} failure(s)"; exit 1; fi
+echo "test_smoke: all passed"
+```
+
+Run: `bash tests/test_smoke.sh`. Expected: fails, script missing.
+
+- [ ] **Step 2: Write `scripts/90-smoke-test.sh`**
+
+```bash
+#!/usr/bin/env bash
+# Post-build checks, read-only. Run after scripts/20-up.sh.
+#
+#   1. persistent output public_ip_address readable
+#   2. CML API answers and reports ready
+#   3. cloud-cml output address equals the persistent public IP
+#   4. License registered
+#   5. /data mounted on the host
+#   6. /data/images populated and bind-mounted on /var/lib/libvirt/images
+#   7. Data disk attached at LUN 0 (az)
+#   8. cml-mcp on the Mac lists labs through scripts/mcp-cml.sh
+#
+# Exit 1 on any FAIL. Overrides: none needed; CML_SSH_KEY for the key path.
+set -euo pipefail
+
+# shellcheck source=lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
+CLOUD_CML="${REPO_ROOT}/vendor/cloud-cml"
+
+check_outputs() {
+  if ! IP="$(cml_ip 2>/dev/null)" || [[ -z "${IP}" ]]; then
+    miss "persistent output public_ip_address unreadable. Has 20-up.sh run?"
+    summary_and_exit
+  fi
+  pass "public IP ${IP}"
+}
+
+check_api() {
+  local ready
+  ready="$(curl -sk -m 10 "https://${IP}/api/v0/system_information" | jq -r .ready 2>/dev/null || true)"
+  if [[ "${ready}" == "true" ]]; then
+    pass "CML API ready at https://${IP}"
+  else
+    miss "CML API at https://${IP} not ready (got '${ready:-no answer}')"
+  fi
+}
+
+check_ip_matches() {
+  local addr
+  addr="$(terraform -chdir="${CLOUD_CML}" output -json cml2info 2>/dev/null | jq -r .address 2>/dev/null || true)"
+  if [[ "${addr}" == "${IP}" ]]; then
+    pass "cloud-cml address matches persistent public IP"
+  else
+    miss "cloud-cml address '${addr}' differs from persistent public IP ${IP}"
+  fi
+}
+
+check_license() {
+  local status
+  status="$(cml_ssh "bash -s -- license-status" < "${REMOTE_LIB}" 2>/dev/null || echo UNREACHABLE)"
+  if [[ "${status}" == "REGISTERED" ]]; then
+    pass "license REGISTERED"
+  else
+    miss "license status '${status}'"
+  fi
+}
+
+check_data_disk_on_host() {
+  local mounted bound count
+  mounted="$(cml_ssh "findmnt -n -o SOURCE /data" 2>/dev/null || true)"
+  if [[ -n "${mounted}" ]]; then
+    pass "/data mounted from ${mounted}"
+  else
+    miss "/data not mounted. See /var/log/provision/05-persist-pre.log on the host"
+  fi
+  bound="$(cml_ssh "findmnt -n -o TARGET --target /var/lib/libvirt/images" 2>/dev/null || true)"
+  if [[ "${bound}" == "/var/lib/libvirt/images" ]]; then
+    pass "/var/lib/libvirt/images is a bind mount"
+  else
+    miss "/var/lib/libvirt/images is not a bind mount (findmnt says '${bound}')"
+  fi
+  count="$(cml_ssh "find /data/images -type f 2>/dev/null | wc -l" 2>/dev/null | tr -d ' ' || echo 0)"
+  if [[ "${count:-0}" -gt 0 ]]; then
+    pass "/data/images holds ${count} files"
+  else
+    miss "/data/images is empty"
+  fi
+}
+
+check_lun0() {
+  local rg name
+  rg="$(tf_out persistent resource_group_name)"
+  name="$(az vm show -g "${rg}" -n cml-controller --query "storageProfile.dataDisks[?lun==\`0\`].name | [0]" -o tsv 2>/dev/null || true)"
+  if [[ "${name}" == "disk-cml-lab-data" ]]; then
+    pass "data disk disk-cml-lab-data at LUN 0"
+  else
+    miss "LUN 0 holds '${name:-nothing}', expected disk-cml-lab-data"
+  fi
+}
+
+check_mcp() {
+  local out
+  if out="$(python3 "${REPO_ROOT}/scripts/lib/mcp_call.py" --cmd "bash ${REPO_ROOT}/scripts/mcp-cml.sh" --tool get_cml_labs 2>&1)"; then
+    pass "cml-mcp get_cml_labs answered ($(echo "${out}" | wc -c | tr -d ' ') bytes)"
+  else
+    miss "cml-mcp failed: $(echo "${out}" | tail -1)"
+  fi
+}
+
+main() {
+  require_cmd terraform az curl jq ssh python3 uvx
+  check_outputs
+  check_api
+  check_ip_matches
+  check_license
+  check_data_disk_on_host
+  check_lun0
+  check_mcp
+  summary_and_exit
+}
+
+main "$@"
+```
+
+- [ ] **Step 3: Run the tests, commit**
+
+Run: `chmod +x scripts/90-smoke-test.sh && bash tests/test_smoke.sh && tests/run.sh && pre-commit run --all-files`
+Expected: all passed.
+
+```bash
+git add scripts/90-smoke-test.sh tests/test_smoke.sh
+git commit -m "feat: add post-build smoke test"
+```
+
+---
