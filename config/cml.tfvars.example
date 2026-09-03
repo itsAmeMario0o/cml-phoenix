@@ -1,0 +1,29 @@
+# Copy to config/cml.tfvars (gitignored) and fill in. Parsed by
+# scripts/lib/tfvars.py: only "string", numbers, true/false, and ["lists"]
+# of strings are supported. One key per line.
+
+# From Smart Software Manager. See docs/PREREQUISITES.md section 1.2.
+smartlicense_token = "PASTE-TOKEN-HERE"
+
+# CML_Personal, CML_Personal40, CML_Education, or CML_Enterprise.
+license_flavor = "CML_Personal"
+
+# Your public IP as /32. `curl -4 ifconfig.me`. Never 0.0.0.0/0.
+allowed_ipv4_subnets_mgmt = ["203.0.113.10/32"]
+allowed_ipv4_subnets_cml2 = ["203.0.113.10/32"]
+
+# Needs Edsv5 quota in eastus2. See docs/PREREQUISITES.md section 2.1.
+vm_size = "Standard_E16ds_v5"
+
+# OS disk holds CML itself and node overlay disks. Images are on /data.
+os_disk_size_gb = 200
+
+# Spot: false for the first build. -1 bids up to the on-demand price.
+spot_enabled = false
+spot_max_bid_price = -1
+
+# How long the image copy SAS stays valid. Preflight warns if too short.
+sas_validity = "4h"
+
+# Exact filename of the package in software/ and in the cml container.
+software_package = "cml2_2.9.0-3_amd64-3.pkg"

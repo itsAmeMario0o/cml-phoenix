@@ -1,0 +1,89 @@
+# Rendered by scripts/20-up.sh from this template. Do not edit config/cml.yml.
+# Schema is upstream cloud-cml v2.9.0 config.yml. Keys under azure: that
+# upstream does not know are read by the azure-lab fork, ADR 0001.
+target: azure
+
+aws:
+  region: unused
+  availability_zone: unused
+  bucket: unused
+  flavor: unused
+  flavor_compute: unused
+  profile: unused
+  subnet_id: ""
+  sg_id: ""
+  public_vpc_ipv4_cidr: 10.0.0.0/16
+  enable_ebs_encryption: false
+  vpc_id: ""
+  gw_id: ""
+  spot_instances:
+    use_spot_for_controller: false
+    use_spot_for_computes: false
+
+azure:
+  resource_group: ${RESOURCE_GROUP}
+  size: ${VM_SIZE}
+  size_compute: unused_at_the_moment
+  storage_account: ${STORAGE_ACCOUNT}
+  container_name: ${CONTAINER_NAME}
+  # azure-lab fork keys
+  vnet_name: ${VNET_NAME}
+  subnet_name: ${SUBNET_NAME}
+  private_ip: ${PRIVATE_IP}
+  public_ip_name: ${PUBLIC_IP_NAME}
+  data_disk_id: ${DATA_DISK_ID}
+  os_disk_type: ${OS_DISK_TYPE}
+  sas_validity: ${SAS_VALIDITY}
+  spot:
+    enabled: ${SPOT_ENABLED}
+    max_bid_price: ${SPOT_MAX_BID_PRICE}
+  apps_subnet_cidr: ${APPS_SUBNET_CIDR}
+  lab_summary_cidr: ${LAB_SUMMARY_CIDR}
+
+common:
+  disk_size: ${OS_DISK_SIZE_GB}
+  controller_hostname: cml-controller
+  key_name: ${SSH_KEY_NAME}
+  allowed_ipv4_subnets_mgmt: ${ALLOWED_MGMT}
+  allowed_ipv4_subnets_cml2: ${ALLOWED_CML2}
+  enable_patty: false
+
+cluster:
+  enable_cluster: false
+  allow_vms_on_controller: true
+  number_of_compute_nodes: 0
+  compute_hostname_prefix: cml-compute
+  compute_disk_size: 32
+
+secret:
+  manager: dummy
+  conjur:
+  vault:
+    kv_secret_v2_mount: secret
+    skip_child_token: true
+  secrets:
+    app:
+      username: admin
+      raw_secret: ${APP_PASSWORD}
+    sys:
+      username: sysadmin
+      raw_secret: ${SYS_PASSWORD}
+    smartlicense_token:
+      raw_secret: ${LICENSE_TOKEN}
+    cluster:
+
+app:
+  software: ${SOFTWARE_PACKAGE}
+  customize:
+    - 05-persist.sh
+    - 99-dummy.sh
+
+license:
+  flavor: ${LICENSE_FLAVOR}
+  nodes: 0
+
+refplat:
+  definitions:
+${REFPLAT_DEFINITIONS}
+  images:
+${REFPLAT_IMAGES}

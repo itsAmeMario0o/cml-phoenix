@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cml": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["scripts/mcp-cml.sh"]
+    }
+  }
+}
