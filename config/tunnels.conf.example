@@ -1,0 +1,5 @@
+# name  local_port  remote_host   remote_port
+# Copy to config/tunnels.conf (gitignored). One forward per line, through
+# the CML host on SSH 1122. Cockpit is reachable directly, this is an
+# example. The ISE and FTD spec adds their entries.
+cockpit 9090 127.0.0.1 9090
