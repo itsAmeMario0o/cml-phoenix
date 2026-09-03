@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Dry-run test for scripts/20-up.sh: proves the order of operations and that
+# nothing is executed. az is stubbed through PATH; terraform is never called
+# because every state change goes through run().
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="${REPO_ROOT}/scripts/20-up.sh"
+chmod +x "${REPO_ROOT}/tests/stubs/az"
+failures=0
+
+assert_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
+}
+assert_eq() {
+  local label="$1" expected="$2" actual="$3"
+  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
+}
+line_of() { grep -nF -- "$1" <<<"$2" | head -1 | cut -d: -f1; }
+
+out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 ASSUME_YES=1 bash "${SCRIPT}" --dry-run 2>&1)"; rc=$?
+assert_eq "dry run exits 0" "0" "${rc}"
+assert_contains "bootstrap apply planned" "+ terraform -chdir=${REPO_ROOT}/terraform/bootstrap apply" "${out}"
+assert_contains "persistent apply planned" "+ terraform -chdir=${REPO_ROOT}/terraform/persistent apply" "${out}"
+assert_contains "render planned" "+ python3 ${REPO_ROOT}/scripts/lib/render_cml_config.py" "${out}"
+assert_contains "cml apply planned" "+ terraform -chdir=${REPO_ROOT}/vendor/cloud-cml apply" "${out}"
+assert_contains "env file planned" "+ write ${REPO_ROOT}/config/mcp-env/cml.env" "${out}"
+
+b="$(line_of "terraform/bootstrap apply" "${out}")"; p="$(line_of "terraform/persistent apply" "${out}")"
+r="$(line_of "render_cml_config.py" "${out}")"; c="$(line_of "vendor/cloud-cml apply" "${out}")"
+if [[ "${b}" -lt "${p}" && "${p}" -lt "${r}" && "${r}" -lt "${c}" ]]; then
+  echo "[OK]    order bootstrap < persistent < render < cml"
+else
+  echo "[FAIL]  order wrong: ${b} ${p} ${r} ${c}"; failures=$((failures + 1))
+fi
+
+# Without the preflight marker, a real run refuses before doing anything.
+rm -f "${REPO_ROOT}/.preflight-ok"
+rc=0; out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x bash "${SCRIPT}" 2>&1)" || rc=$?
+assert_eq "refuses without marker" "1" "${rc}"
+assert_contains "names the remedy" "scripts/00-preflight.sh" "${out}"
+
+if [[ "${failures}" -gt 0 ]]; then echo "test_up_dry_run: ${failures} failure(s)"; exit 1; fi
+echo "test_up_dry_run: all passed"
