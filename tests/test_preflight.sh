@@ -13,6 +13,26 @@ assert_contains() {
     echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
 }
 
+assert_eq() {
+  local label="$1" expected="$2" actual="$3"
+  if [[ "${expected}" == "${actual}" ]]; then
+    echo "[OK]    ${label}"
+  else
+    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"
+    failures=$((failures + 1))
+  fi
+}
+
+# sas_seconds is a pure parser; source the script (common.sh's counters are
+# harmless here) to unit test it directly without touching Azure.
+sas_of() { bash -c "source '${SCRIPT}'; sas_seconds '$1'"; }
+assert_eq "sas_seconds 4h" "14400" "$(sas_of 4h)"
+assert_eq "sas_seconds 4h30m" "16200" "$(sas_of 4h30m)"
+assert_eq "sas_seconds 30m" "1800" "$(sas_of 30m)"
+assert_eq "sas_seconds 240" "240" "$(sas_of 240)"
+assert_eq "sas_seconds abc" "0" "$(sas_of abc)"
+assert_eq "sas_seconds 4h30 (missing trailing m)" "0" "$(sas_of 4h30)"
+
 # Missing tfvars must be a FAIL line, not a crash, and the marker must not exist.
 rm -f "${REPO_ROOT}/.preflight-ok"
 out="$(CML_TFVARS="${REPO_ROOT}/does-not-exist.tfvars" bash "${SCRIPT}" 2>&1 || true)"

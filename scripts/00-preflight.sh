@@ -131,8 +131,8 @@ check_quota() {
   local size family vcpus limit total
   size="$(tfvar vm_size)"
   [[ -n "${size}" ]] || return 0
-  family="$(az vm list-skus -l "${LOCATION}" --size "${size}" --query "[0].family" -o tsv 2>/dev/null || true)"
-  vcpus="$(az vm list-skus -l "${LOCATION}" --size "${size}" --query "[0].capabilities[?name=='vCPUs'].value | [0]" -o tsv 2>/dev/null || true)"
+  family="$(az vm list-skus -l "${LOCATION}" --size "${size}" --query "[?name=='${size}'].family | [0]" -o tsv 2>/dev/null || true)"
+  vcpus="$(az vm list-skus -l "${LOCATION}" --size "${size}" --query "[?name=='${size}'].capabilities[?name=='vCPUs'].value | [0][0]" -o tsv 2>/dev/null || true)"
   if [[ -z "${family}" || -z "${vcpus}" ]]; then
     miss "quota: size ${size} not found in ${LOCATION}"
     return 0
@@ -151,13 +151,21 @@ check_quota() {
   fi
 }
 
+# sas_seconds VALUE: Go-style duration to seconds. Accepts 4h, 30m, 4h30m,
+# or a bare number of seconds. Prints 0 when it cannot parse.
 sas_seconds() {
-  local v="$1"
+  local v="$1" h=0 m=0 s=0
   case "${v}" in
-    *h) echo $(( ${v%h} * 3600 )) ;;
-    *m) echo $(( ${v%m} * 60 )) ;;
-    *) echo 0 ;;
+    *h*m) h="${v%%h*}"; m="${v#*h}"; m="${m%m}" ;;
+    *h) h="${v%h}" ;;
+    *m) m="${v%m}" ;;
+    *) s="${v}" ;;
   esac
+  if [[ "${h}" =~ ^[0-9]+$ && "${m}" =~ ^[0-9]+$ && "${s}" =~ ^[0-9]+$ ]]; then
+    echo $(( h * 3600 + m * 60 + s ))
+  else
+    echo 0
+  fi
 }
 
 check_blobs() {
@@ -172,7 +180,7 @@ check_blobs() {
   else
     miss "blob ${pkg} missing in container cml. Run: scripts/10-upload-images.sh"
   fi
-  while read -r def img; do
+  while read -r def img || [[ -n "${def}" ]]; do
     [[ -z "${def}" || "${def}" == \#* ]] && continue
     if az storage blob show --auth-mode login --account-name "${sa}" -c cml -n "refplat/node-definitions/${def}.yaml" -o none 2>/dev/null; then
       pass "blob node definition ${def}"
@@ -190,7 +198,9 @@ check_blobs() {
   done < "${REFPLAT_FILE}"
   validity="$(sas_seconds "$(tfvar sas_validity)")"
   est=$(( total_bytes / (ASSUMED_MBPS * 1048576) ))
-  if [[ "${validity}" -gt 0 && "${est}" -gt $(( validity * 8 / 10 )) ]]; then
+  if [[ "${validity}" -eq 0 ]]; then
+    miss "cml.tfvars sas_validity '$(tfvar sas_validity)' is not a duration like 4h or 4h30m"
+  elif [[ "${est}" -gt $(( validity * 8 / 10 )) ]]; then
     warn "image copy estimate ${est}s at ${ASSUMED_MBPS} MB/s is close to SAS validity ${validity}s. Raise sas_validity"
   else
     pass "image copy estimate ${est}s within SAS validity ${validity}s"
@@ -216,4 +226,6 @@ main() {
   summary_and_exit
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
