@@ -875,9 +875,10 @@ resource "azurerm_storage_account" "tfstate" {
   min_tls_version                 = "TLS1_2"
   https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
-  # The persistent root authenticates to this account with Azure AD
-  # (use_azuread_auth in backend.tf), so shared keys are not needed.
-  shared_access_key_enabled = false
+  # The persistent root authenticates with Azure AD (use_azuread_auth in
+  # backend.tf). Shared keys stay on only because the azurerm provider still
+  # reads them when managing blob properties; nothing in this repo uses them.
+  shared_access_key_enabled = true
   tags                      = local.common_tags
 
   blob_properties {
@@ -3234,7 +3235,8 @@ def main(argv: list[str]) -> int:
     except TimeoutError as exc:
         print(f"mcp_call: {exc}", file=sys.stderr)
         return 2
-    except RuntimeError as exc:
+    except (RuntimeError, OSError) as exc:
+        # OSError covers a server that died before reading (broken pipe).
         print(f"mcp_call: {exc}", file=sys.stderr)
         return 1
     finally:
@@ -3385,7 +3387,7 @@ Run: `bash tests/test_preflight.sh`. Expected: `[FAIL]` lines, script missing.
 # Overrides: LOCATION (eastus2), CML_TFVARS, REFPLAT_FILE, ASSUMED_MBPS (50).
 set -euo pipefail
 
-# shellcheck source=lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 LOCATION="${LOCATION:-eastus2}"
@@ -3686,7 +3688,7 @@ Run: `bash tests/test_upload_dry_run.sh`. Expected: fails, script missing.
 # CML_TFVARS, STORAGE_ACCOUNT (persistent output), CONTAINER (cml).
 set -euo pipefail
 
-# shellcheck source=lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 CML_SOFTWARE_DIR="${CML_SOFTWARE_DIR:-${REPO_ROOT}/software}"
@@ -3923,7 +3925,7 @@ Run: `bash tests/test_up_dry_run.sh`. Expected: fails, script missing.
 # Never runs destroy. Never touches bootstrap or persistent with destroy.
 set -euo pipefail
 
-# shellcheck source=lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 PREFLIGHT_MAX_AGE_MIN="${PREFLIGHT_MAX_AGE_MIN:-240}"
@@ -4176,7 +4178,7 @@ Run: `bash tests/test_export_dry_run.sh`. Expected: fails, script missing.
 # cml-mcp create_full_lab_topology, on purpose (spec section 3).
 set -euo pipefail
 
-# shellcheck source=lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
@@ -4322,7 +4324,7 @@ Run: `bash tests/test_down_dry_run.sh`. Expected: fails, script missing.
 # --dry-run prints the sequence. Prompts unless ASSUME_YES=1.
 set -euo pipefail
 
-# shellcheck source=lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
@@ -4506,7 +4508,7 @@ Run: `bash tests/test_tunnels.sh`. Expected: fails, script missing.
 # Overrides: TUNNELS_CONF, STATE_DIR.
 set -euo pipefail
 
-# shellcheck source=lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 TUNNELS_CONF="${TUNNELS_CONF:-${REPO_ROOT}/config/tunnels.conf}"
@@ -4689,7 +4691,7 @@ Run: `bash tests/test_smoke.sh`. Expected: fails, script missing.
 # Exit 1 on any FAIL. Overrides: none needed; CML_SSH_KEY for the key path.
 set -euo pipefail
 
-# shellcheck source=lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
