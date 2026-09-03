@@ -114,7 +114,7 @@ check_config() {
     list="$(tfvar "${key}")"
     if [[ -z "${list}" ]]; then
       miss "cml.tfvars ${key}: empty"
-    elif grep -q "0.0.0.0/0" <<<"${list}"; then
+    elif grep -qF "0.0.0.0/0" <<<"${list}"; then
       miss "cml.tfvars ${key} contains 0.0.0.0/0"
     else
       pass "cml.tfvars ${key}: ${list}"

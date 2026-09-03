@@ -44,6 +44,15 @@ api() {
   curl -sf -X "${method}" -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/json" "${CML_API}${path}"
 }
 
+# api_raw METHOD PATH: like api(), but sends only the Authorization header.
+# The lab download endpoint returns YAML, not JSON, and some CML versions
+# answer an Accept: application/json request with an error instead of the
+# topology.
+api_raw() {
+  local method="$1" path="$2"
+  curl -sf -X "${method}" -H "Authorization: Bearer ${TOKEN}" "${CML_API}${path}"
+}
+
 lab_ids() {
   api GET /labs | jq -r '.[]'
 }
@@ -65,11 +74,17 @@ cmd_list_labs() {
 }
 
 cmd_export_labs() {
-  local dir="$1" id title count=0
+  local dir="$1" id title file count=0
   mkdir -p "${dir}"
   for id in $(lab_ids); do
     title="$(api GET "/labs/${id}" | jq -r .lab_title)"
-    api GET "/labs/${id}/download" > "${dir}/$(slugify "${title}")-${id}.yaml"
+    file="${dir}/$(slugify "${title}")-${id}.yaml"
+    api_raw GET "/labs/${id}/download" > "${file}"
+    if [[ "$(head -1 "${file}")" != lab:* ]]; then
+      rm -f "${file}"
+      echo "export of ${id} did not look like a topology" >&2
+      exit 1
+    fi
     count=$((count + 1))
   done
   echo "exported ${count} labs to ${dir}"

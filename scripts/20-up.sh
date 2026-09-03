@@ -99,11 +99,15 @@ apply_persistent() {
 
 refuse_if_vm_exists() {
   local rg stderr_output
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "dry run: skipping VM existence check"
+    return 0
+  fi
   rg="$(out_or_placeholder resource_group_name)"
   if stderr_output="$(az vm show -g "${rg}" -n cml-controller -o none 2>&1 >/dev/null)"; then
     die "VM cml-controller already exists in ${rg}. Run scripts/40-down.sh first."
   fi
-  if grep -qE "ResourceNotFound|was not found" <<<"${stderr_output}"; then
+  if grep -qE "ResourceNotFound|ResourceGroupNotFound|was not found|could not be found" <<<"${stderr_output}"; then
     pass "no existing CML VM in ${rg}"
   else
     die "cannot query VM state: $(head -1 <<<"${stderr_output}")"
@@ -152,8 +156,7 @@ write_env_and_report() {
     echo "+ write ${ENV_FILE}"
   else
     mkdir -p "$(dirname "${ENV_FILE}")"
-    umask 077
-    printf 'CML_URL=https://%s\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${ip}" "${pw}" > "${ENV_FILE}"
+    ( umask 077; printf 'CML_URL=https://%s\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${ip}" "${pw}" > "${ENV_FILE}" )
     pass "wrote ${ENV_FILE}"
   fi
   echo
@@ -180,4 +183,6 @@ main() {
   write_env_and_report
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

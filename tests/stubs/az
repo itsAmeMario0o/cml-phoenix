@@ -9,6 +9,10 @@ case "$*" in
       echo "ERROR: Please run 'az login' to setup account." >&2
       exit 1
     fi
+    if [[ "${AZ_STUB_RG_MISSING:-0}" == "1" ]]; then
+      echo "ERROR: (ResourceGroupNotFound) Resource group 'x' could not be found." >&2
+      exit 3
+    fi
     echo "ERROR: (ResourceNotFound) The Resource 'Microsoft.Compute/virtualMachines/cml-controller' under resource group 'rg-cml-lab' was not found." >&2
     exit 3
     ;;

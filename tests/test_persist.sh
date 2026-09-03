@@ -64,10 +64,13 @@ rc=0
 env ${common_env} PRETEND_BOUND=0 bash "${SCRIPT}" post >/dev/null 2>&1 || rc=$?
 assert_eq "post fails without bind mount" "1" "${rc}"
 
-# 4. Post phase passes when bound.
+# 4. Post phase passes when bound. Also makes /data/exports writable by
+#    sysadmin. source /provision/vars.sh will not exist here; the -r guard
+#    in the script falls back to "sysadmin".
 # shellcheck disable=SC2086
 out="$(env ${common_env} PRETEND_BOUND=1 PRETEND_IMAGE_FILES=12 bash "${SCRIPT}" post 2>&1)"; rc=$?
 assert_contains "post confirms bind" "bind mount active" "${out}"
+assert_contains "post makes exports writable by sysadmin" "+ install -d -m 0775 -o sysadmin -g sysadmin ${TMP}/data/exports" "${out}"
 
 # 5. Unknown phase is an error.
 rc=0

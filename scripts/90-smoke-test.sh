@@ -7,8 +7,9 @@
 #   4. License registered
 #   5. /data mounted on the host
 #   6. /data/images populated and bind-mounted on /var/lib/libvirt/images
-#   7. Data disk attached at LUN 0 (az)
-#   8. cml-mcp on the Mac lists labs through scripts/mcp-cml.sh
+#   7. /data/exports writable by sysadmin
+#   8. Data disk attached at LUN 0 (az)
+#   9. cml-mcp on the Mac lists labs through scripts/mcp-cml.sh
 #
 # Exit 1 on any FAIL. Overrides: none needed; CML_SSH_KEY for the key path.
 set -euo pipefail
@@ -50,11 +51,10 @@ check_ip_matches() {
 check_license() {
   local status
   status="$(cml_ssh "bash -s -- license-status" < "${REMOTE_LIB}" 2>/dev/null || echo UNREACHABLE)"
-  if [[ "${status}" == "REGISTERED" ]]; then
-    pass "license REGISTERED"
-  else
-    miss "license status '${status}'"
-  fi
+  case "${status}" in
+    REGISTERED | COMPLETED) pass "license ${status}" ;;
+    *) miss "license status '${status}'" ;;
+  esac
 }
 
 check_data_disk_on_host() {
@@ -76,6 +76,14 @@ check_data_disk_on_host() {
     pass "/data/images holds ${count} files"
   else
     miss "/data/images is empty"
+  fi
+}
+
+check_exports_writable() {
+  if cml_ssh "test -w /data/exports" 2>/dev/null; then
+    pass "/data/exports is writable"
+  else
+    miss "/data/exports is not writable. See /var/log/provision/05-persist-post.log on the host"
   fi
 }
 
@@ -109,6 +117,7 @@ main() {
   check_ip_matches
   check_license
   check_data_disk_on_host
+  check_exports_writable
   check_lun0
   check_mcp
   summary_and_exit

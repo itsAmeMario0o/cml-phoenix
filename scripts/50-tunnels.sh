@@ -7,7 +7,9 @@
 # remote_port". Each runs as its own ssh -N -L on port 1122. State lives in
 # .cml-tunnels/ inside the repo (pid and log per tunnel). "up" is idempotent:
 # a tunnel that already listens is left alone. Refuses "up" when the host
-# does not answer on 1122.
+# does not answer on 1122. "down" kills only the pid it started; if some
+# other process still holds the port afterward, it is left alone with a
+# warning rather than killed.
 #
 # Overrides: TUNNELS_CONF, STATE_DIR.
 set -euo pipefail
@@ -30,10 +32,11 @@ require_conf() {
 
 each_tunnel() {
   # Calls "$1 name local_port remote_host remote_port" per config line.
-  local callback="$1" name lport rhost rport failed=0
-  while read -r name lport rhost rport || [[ -n "${name}" ]]; do
+  local callback="$1" name lport rhost rport extra failed=0
+  while read -r name lport rhost rport extra || [[ -n "${name}" ]]; do
     [[ -z "${name}" || "${name}" == \#* ]] && continue
     [[ -n "${rport}" ]] || die "${TUNNELS_CONF}: line '${name} ${lport} ${rhost} ${rport}' needs four fields"
+    [[ -z "${extra}" ]] || die "${TUNNELS_CONF}: line '${name} ${lport} ${rhost} ${rport} ${extra}' needs exactly four fields"
     "${callback}" "${name}" "${lport}" "${rhost}" "${rport}" || failed=1
   done < "${TUNNELS_CONF}"
   return "${failed}"
@@ -79,10 +82,11 @@ stop_one() {
     kill "$(cat "${pid_file}")" 2>/dev/null || true
     rm -f "${pid_file}"
   fi
+  # Only the pid we started is ours to kill. If something else still holds
+  # the port after that, it is not our tunnel; warn and leave it alone.
   holder="$(lsof -nP -tiTCP:"${lport}" -sTCP:LISTEN 2>/dev/null || true)"
   if [[ -n "${holder}" ]]; then
-    # shellcheck disable=SC2086 # holder may be several pids, one per line; want them as separate args
-    kill ${holder} 2>/dev/null || true
+    echo "${name}: port ${lport} still held by pid $(tr '\n' ' ' <<<"${holder}" | sed 's/ *$//'), not ours, left alone"
   fi
   echo "${name}: stopped"
 }

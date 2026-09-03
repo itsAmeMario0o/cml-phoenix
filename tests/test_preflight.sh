@@ -7,6 +7,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/00-preflight.sh"
 failures=0
 
+# Never destroy an operator's real preflight marker. Save it aside and
+# restore it no matter how this test exits.
+MARKER="${REPO_ROOT}/.preflight-ok"
+if [[ -f "${MARKER}" ]]; then
+  mv "${MARKER}" "${MARKER}.saved"
+  trap 'mv "${MARKER}.saved" "${MARKER}" 2>/dev/null || true' EXIT
+fi
+
 assert_contains() {
   local label="$1" needle="$2" haystack="$3"
   if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
