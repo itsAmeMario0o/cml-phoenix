@@ -1,0 +1,4 @@
+owner   = "your-name"
+expires = "2027-03-01"
+# Everything else has a default matching the spec. Override only with intent.
+# data_disk_size_gb = 512
