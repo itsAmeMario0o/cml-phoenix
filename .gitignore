@@ -40,3 +40,6 @@ keys/*
 exports/*
 !exports/.gitignore
 config/tunnels.conf
+
+# Python bytecode from the test suite
+__pycache__/
