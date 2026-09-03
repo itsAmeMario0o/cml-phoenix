@@ -81,7 +81,10 @@ check_data_disk_on_host() {
 
 check_lun0() {
   local rg name
-  rg="$(tf_out persistent resource_group_name)"
+  if ! rg="$(tf_out persistent resource_group_name)"; then
+    miss "persistent output resource_group_name unreadable"
+    return 0
+  fi
   name="$(az vm show -g "${rg}" -n cml-controller --query "storageProfile.dataDisks[?lun==\`0\`].name | [0]" -o tsv 2>/dev/null || true)"
   if [[ "${name}" == "disk-cml-lab-data" ]]; then
     pass "data disk disk-cml-lab-data at LUN 0"
