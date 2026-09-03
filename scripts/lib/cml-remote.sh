@@ -32,7 +32,7 @@ load_credentials() {
 
 authenticate() {
   TOKEN="$(printf '{"username":"%s","password":"%s"}' "${CFG_APP_USER}" "${CFG_APP_PASS}" |
-    curl -sf -H "Content-Type: application/json" -d @- "${CML_API}/authenticate" | jq -r .)"
+    curl -sf -H "Content-Type: application/json" -d @- "${CML_API}/authenticate" | jq -r .)" || TOKEN=""
   if [[ -z "${TOKEN}" || "${TOKEN}" == "null" ]]; then
     echo "cml-remote: authentication failed" >&2
     exit 1
@@ -54,7 +54,7 @@ lab_row() {
 }
 
 slugify() {
-  echo "$1" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]+/-/g' -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
 cmd_list_labs() {
@@ -102,6 +102,10 @@ cmd_deregister() {
 main() {
   local sub="${1:-}"
   shift || true
+  case "${sub}" in
+    list-labs | export-labs | stop-labs | license-status | deregister) ;;
+    *) echo "usage: cml-remote.sh list-labs|export-labs DIR|stop-labs|license-status|deregister" >&2; exit 2 ;;
+  esac
   load_credentials
   authenticate
   case "${sub}" in
@@ -110,7 +114,6 @@ main() {
     stop-labs) cmd_stop_labs ;;
     license-status) cmd_license_status ;;
     deregister) cmd_deregister ;;
-    *) echo "usage: cml-remote.sh list-labs|export-labs DIR|stop-labs|license-status|deregister" >&2; exit 2 ;;
   esac
 }
 

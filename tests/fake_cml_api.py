@@ -2,20 +2,33 @@
 """Minimal stand-in for the CML controller API, for tests of cml-remote.sh.
 
 Serves on 127.0.0.1 at the port given as argv[1]. State lives in memory:
-two labs, one started, one stopped, and a registered license.
+three labs (one started, two stopped) and a registered license, unless
+overridden by environment variables read at startup:
+
+- FAKE_LABS=0 starts with no labs (default: labs present).
+- FAKE_DEREGISTER_FAILS=1 makes DELETE /licensing/deregistration respond
+  202 but leave the registration state unchanged (default: it succeeds).
 """
 from __future__ import annotations
 
 import json
+import os
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-STATE: dict = {
-    "labs": {
+
+def _default_labs() -> dict:
+    return {
         "lab-1": {"lab_title": "Spine Leaf", "state": "STARTED"},
         "lab-2": {"lab_title": "TrustSec Demo", "state": "STOPPED"},
-    },
+        "lab-3": {"lab_title": "VLAN/Trunk Demo", "state": "STOPPED"},
+    }
+
+
+STATE: dict = {
+    "labs": _default_labs() if os.environ.get("FAKE_LABS") != "0" else {},
     "registration": "REGISTERED",
+    "deregister_fails": os.environ.get("FAKE_DEREGISTER_FAILS") == "1",
 }
 
 
@@ -74,7 +87,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(401, {})
             return
         if self.path == "/api/v0/licensing/deregistration":
-            STATE["registration"] = "NOT_REGISTERED"
+            if not STATE["deregister_fails"]:
+                STATE["registration"] = "NOT_REGISTERED"
             self._send(202, {})
         else:
             self._send(404, {})
