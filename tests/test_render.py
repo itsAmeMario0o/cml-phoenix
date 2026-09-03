@@ -97,6 +97,23 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn("smartlicense_token", proc.stderr)
 
+    def test_passwords_from_environment(self) -> None:
+        sets = dict(SETS)
+        del sets["APP_PASSWORD"]
+        del sets["SYS_PASSWORD"]
+        cmd = [sys.executable, str(RENDER), "--template", str(TEMPLATE),
+               "--tfvars", str(self.tmp / "cml.tfvars"), "--refplat", str(self.tmp / "refplat.txt"),
+               "--out", str(self.tmp / "cml.yml")]
+        for k, v in sets.items():
+            cmd += ["--set", f"{k}={v}"]
+        env = dict(os.environ)
+        env["APP_PASSWORD"] = SETS["APP_PASSWORD"]
+        env["SYS_PASSWORD"] = SETS["SYS_PASSWORD"]
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        out = (self.tmp / "cml.yml").read_text()
+        self.assertIn('raw_secret: "AppPass1234567890"', out)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,6 +37,12 @@ else
   echo "[FAIL]  order wrong: ${b} ${p} ${r} ${c}"; failures=$((failures + 1))
 fi
 
+# An az auth failure (not a missing VM) must not be treated as "VM absent".
+rc=0
+out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 ASSUME_YES=1 AZ_STUB_AUTH_FAIL=1 bash "${SCRIPT}" --dry-run 2>&1)" || rc=$?
+assert_eq "az auth failure exits 1" "1" "${rc}"
+assert_contains "az auth failure names the problem" "cannot query VM state" "${out}"
+
 # Without the preflight marker, a real run refuses before doing anything.
 rm -f "${REPO_ROOT}/.preflight-ok"
 rc=0; out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x bash "${SCRIPT}" 2>&1)" || rc=$?

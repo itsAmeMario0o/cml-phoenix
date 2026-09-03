@@ -5,6 +5,8 @@ values passed as --set NAME=VALUE (the persistent Terraform outputs).
 Exit 0 on success. Exit 1 with a message on stderr naming every missing
 placeholder, an open CIDR, or a malformed input. Never touches Terraform so
 the fork stays unaware of this repo. ADR 0004 for why secrets pass this way.
+APP_PASSWORD and SYS_PASSWORD may be passed through the environment instead
+of --set so they never appear in a process listing.
 """
 from __future__ import annotations
 
@@ -130,6 +132,9 @@ def main(argv: list[str]) -> int:
             raise ValueError(f"{args.tfvars}: missing keys: {', '.join(missing)}")
         check_cidrs(values)
         sets = parse_sets(args.set)
+        for env_name in ("APP_PASSWORD", "SYS_PASSWORD"):
+            if env_name not in sets and env_name in os.environ:
+                sets[env_name] = os.environ[env_name]
         check_secret_scalars(values, sets)
         mapping = build_mapping(values, read_refplat(args.refplat), sets)
         rendered = render(args.template.read_text(), mapping)

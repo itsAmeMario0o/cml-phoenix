@@ -85,7 +85,7 @@ apply_bootstrap() {
   fi
   if [[ "${DRY_RUN}" != "1" ]]; then
     local sa
-    sa="$(tf_out bootstrap storage_account_name)"
+    sa="$(tf_out bootstrap storage_account_name)" || die "bootstrap output storage_account_name unavailable"
     grep -q "storage_account_name *= *\"${sa}\"" "${PERSISTENT}/backend.tf" ||
       die "terraform/persistent/backend.tf does not name ${sa}. Fix it and commit (plan Task 5)."
   fi
@@ -98,19 +98,25 @@ apply_persistent() {
 }
 
 refuse_if_vm_exists() {
-  local rg
+  local rg stderr_output
   rg="$(out_or_placeholder resource_group_name)"
-  if az vm show -g "${rg}" -n cml-controller -o none 2>/dev/null; then
+  if stderr_output="$(az vm show -g "${rg}" -n cml-controller -o none 2>&1 >/dev/null)"; then
     die "VM cml-controller already exists in ${rg}. Run scripts/40-down.sh first."
   fi
-  pass "no existing CML VM in ${rg}"
+  if grep -qE "ResourceNotFound|was not found" <<<"${stderr_output}"; then
+    pass "no existing CML VM in ${rg}"
+  else
+    die "cannot query VM state: $(head -1 <<<"${stderr_output}")"
+  fi
 }
 
 render_config() {
   local app_pw sys_pw
   app_pw="$(out_or_placeholder app_admin_password)"
   sys_pw="$(out_or_placeholder sys_admin_password)"
-  run python3 "${REPO_ROOT}/scripts/lib/render_cml_config.py" \
+  # Passwords go through the environment, not --set, so they never appear
+  # in a process listing.
+  APP_PASSWORD="${app_pw}" SYS_PASSWORD="${sys_pw}" run python3 "${REPO_ROOT}/scripts/lib/render_cml_config.py" \
     --template "${REPO_ROOT}/config/cml.yml.tftpl" \
     --tfvars "${CML_TFVARS}" --refplat "${REFPLAT_FILE}" --out "${CML_YML}" \
     --set "RESOURCE_GROUP=$(out_or_placeholder resource_group_name)" \
@@ -124,9 +130,7 @@ render_config() {
     --set "OS_DISK_TYPE=${OS_DISK_TYPE:-Premium_LRS}" \
     --set "APPS_SUBNET_CIDR=$(out_or_placeholder apps_subnet_cidr)" \
     --set "LAB_SUMMARY_CIDR=$(out_or_placeholder lab_summary_cidr)" \
-    --set "SSH_KEY_NAME=$(out_or_placeholder ssh_key_name)" \
-    --set "APP_PASSWORD=${app_pw}" \
-    --set "SYS_PASSWORD=${sys_pw}"
+    --set "SSH_KEY_NAME=$(out_or_placeholder ssh_key_name)"
 }
 
 apply_cml() {
@@ -165,7 +169,7 @@ main() {
     DRY_RUN=1
   fi
   require_env ARM_SUBSCRIPTION_ID
-  require_cmd terraform az python3 ssh-keygen
+  require_cmd terraform az python3 ssh-keygen jq
   check_preflight_marker
   ensure_ssh_key
   apply_bootstrap
