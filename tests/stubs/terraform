@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Stand-in for terraform in dry-run tests. tf_out (scripts/lib/common.sh)
+# uses "output -json"; a few direct callers still use "output -raw NAME".
+if [[ "${TF_STUB_FAIL:-0}" == "1" ]]; then
+  echo "stub: no state" >&2; exit 1
+fi
+case "$*" in
+  *"output -raw public_ip_address"*) echo "203.0.113.5" ;;
+  *"output -raw storage_account_name"*) echo "stfake" ;;
+  *"output -raw resource_group_name"*) echo "rg-cml-lab" ;;
+  *"output -raw"*) echo "stub-value" ;;
+  *"output -json cml2info"*) echo '{"address":"203.0.113.5","url":"https://203.0.113.5","version":"2.9.0"}' ;;
+  *"output -json"*) echo '{"public_ip_address":{"value":"203.0.113.5"},"storage_account_name":{"value":"stfake"},"resource_group_name":{"value":"rg-cml-lab"}}' ;;
+  *) echo "terraform stub: unhandled: $*" >&2; exit 1 ;;
+esac
