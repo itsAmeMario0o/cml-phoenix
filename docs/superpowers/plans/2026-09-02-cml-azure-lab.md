@@ -4801,3 +4801,488 @@ git commit -m "feat: add post-build smoke test"
 ```
 
 ---
+
+### Task 19: Architecture decision records
+
+**Files:**
+- Create: `docs/decisions/0001-consume-cloud-cml-as-fork-submodule.md`
+- Create: `docs/decisions/0002-three-terraform-roots-by-lifetime.md`
+- Create: `docs/decisions/0003-routed-lab-connectivity.md`
+- Create: `docs/decisions/0004-secrets-via-random-password-and-tfvars.md`
+
+**Interfaces:**
+- Consumes: spec section 2 and the design notes.
+- Produces: the four files every code comment cites. Shape: Status, Context, Decision, Consequences, Options considered.
+
+- [ ] **Step 1: Check the gate**
+
+Run: `ls docs/decisions/ 2>/dev/null | wc -l`. Expected: `0` or a missing-directory error.
+
+- [ ] **Step 2: Write `0001-consume-cloud-cml-as-fork-submodule.md`**
+
+```markdown
+# 0001: Consume cloud-cml as a fork pinned as a git submodule
+
+Status: accepted, 2026-09-02
+
+## Context
+
+CiscoDevNet/cloud-cml is the supported way to run CML in Azure. Its Azure
+module creates its own VNet, subnet, and public IP, uses a Standard_LRS OS
+disk, has no data disk, no spot support, no IP forwarding, and a one hour
+SAS window for the image copy. Every one of those needs to change for an
+on-demand lab with persistence and routed connectivity. Upstream moves,
+and we want its fixes for new CML releases.
+
+## Decision
+
+Fork cloud-cml on GitHub, keep every change on a branch named `azure-lab`
+as one small commit per concern, and pin the fork into this repo as a git
+submodule at `vendor/cloud-cml`. New behaviour is driven by keys under
+`azure:` in the config file, read with `try()` where a default exists, so
+upstream's own config still validates. The AWS path is not touched.
+
+Upstream updates: `git fetch upstream && git merge <tag>` on the fork,
+resolve conflicts patch by patch, push, then bump the submodule pointer
+here. The tooling merge always precedes a CML software rebuild.
+
+## Consequences
+
+- Patches stay reviewable and mergeable because each is a few lines with a
+  comment naming this ADR.
+- The module keeps upstream's structure: it does its own data-source lookups
+  rather than receiving IDs. Accepted deviation from terraform-patterns to
+  keep merges small.
+- Anything that lands under `vendor/` requires a human, per CLAUDE.md.
+- The fork is public. It carries no secrets by construction.
+
+## Options considered
+
+1. **Use upstream unchanged and wrap it.** Cannot work: the module creates
+   the VNet and public IP itself, and the persistence hook needs a file in
+   its provisioning data directory.
+2. **Vendor a copy of the module into this repo.** Loses the upstream
+   history; merging a new CML release becomes a manual diff exercise.
+3. **Fork plus submodule.** Chosen. Small diff, upstream history kept,
+   explicit pin.
+```
+
+- [ ] **Step 3: Write `0002-three-terraform-roots-by-lifetime.md`**
+
+```markdown
+# 0002: Three Terraform roots split by lifetime
+
+Status: accepted, 2026-09-02
+
+## Context
+
+The CML VM is rebuilt per session. The refplat images, the lab exports, the
+static public IP, the SSH key, the VNet, and the Terraform state itself must
+not be rebuilt. One root with `prevent_destroy` on the precious resources is
+tempting but a single `terraform destroy` still tries, and a state mishap
+takes everything with it.
+
+## Decision
+
+Three roots, each with the lifetime of what it holds:
+
+| Root | State | Holds | Destroyed |
+|---|---|---|---|
+| `terraform/bootstrap` | local | `rg-cml-lab-tfstate`, the state storage account | never |
+| `terraform/persistent` | blob, in the bootstrap account | everything under `rg-cml-lab` that survives | never |
+| `vendor/cloud-cml` | local, inside the submodule | the CML VM, NIC, NSG, disk attachment | every session |
+
+Region `eastus2`, subscription from `ARM_SUBSCRIPTION_ID`, never committed.
+`prevent_destroy` on the state storage account and the data disk. No script
+in this repo runs destroy against the first two roots.
+
+## Consequences
+
+- `scripts/40-down.sh` can only ever destroy the CML root.
+- The bootstrap root's local state file is the one precious local file. It
+  holds a random suffix and nothing secret; back it up by keeping the repo
+  folder intact.
+- Two applies run before the CML build on a clean subscription, which
+  `scripts/20-up.sh` sequences.
+- The 512 GB Premium disk bills from creation regardless of the VM, about
+  75 USD a month. It is the price of not copying 30 GB of images per build.
+
+## Options considered
+
+1. **One root.** Rejected: destroy semantics are all or nothing.
+2. **Two roots, persistent plus CML.** Rejected: the persistent root needs
+   remote state, and something has to create that storage first.
+3. **Three roots.** Chosen.
+```
+
+- [ ] **Step 4: Write `0003-routed-lab-connectivity.md`**
+
+```markdown
+# 0003: Routed connectivity between lab nodes and the VNet, no NAT
+
+Status: accepted, 2026-09-02
+
+## Context
+
+ISE and FTD will run as Azure VMs in the same VNet as the CML host. TrustSec
+needs ISE to see each switch at its own address and to send Change of
+Authorization back to it. Through NAT every switch looks like the CML host
+and CoA has no return path. Bridging is impossible: the Azure fabric only
+delivers frames to the IP and MAC pairs registered on a NIC.
+
+## Decision
+
+The CML host is a layer 3 hop. Lab nodes sit on a transit network on a
+local bridge on the host, `10.100.0.0/24`, host at `10.100.0.1`. A C8000v
+lab edge at `10.100.0.2` routes the rest of `10.100.0.0/16`. In Azure:
+
+- The CML NIC has IP forwarding on and a static private IP, `10.20.1.10`.
+- A route table on the apps subnet sends `10.100.0.0/16` to `10.20.1.10`
+  as a virtual appliance next hop. Azure's fabric, not the guest routing
+  table, makes this decision, so it must be a UDR.
+- An NSG rule on the CML NIC allows the apps subnet to the lab summary on
+  any port.
+
+Claude Code runs on the Mac only and reaches the controller API on the
+static public IP through cml-mcp. Reaching ISE and FTD is by SSH forwards
+through the CML host on port 1122, which doubles as the jump host.
+
+This spec reserves the addresses and creates the route and NSG rule. The
+bridge, the sysctl, and the C8000v are lab content for the TrustSec spec.
+
+## Consequences
+
+- No NAT anywhere in the path. CoA works, per-device identity works.
+- Inline SGT tagging cannot cross the VNet. External FTD enforces on
+  SGT-to-IP mappings from ISE via pxGrid or SXP, which is the normal cloud
+  firewall pattern.
+- The public IP is a persistent resource so the MCP config never changes.
+- Port 1122 is the host shell on a CML machine, 22 is the console server.
+  Every script uses 1122.
+
+## Options considered
+
+1. **NAT mode, upstream default.** Rejected: breaks CoA and per-device identity.
+2. **Bridge mode.** Rejected: Azure does not deliver frames to unknown MACs.
+3. **Routed with a UDR.** Chosen. Two routes total, one in Azure, one on the host.
+4. **Overlay tunnel, C8000v to C8000v.** Kept as a documented fallback.
+```
+
+- [ ] **Step 5: Write `0004-secrets-via-random-password-and-tfvars.md`**
+
+```markdown
+# 0004: Secrets from random_password and a gitignored tfvars file
+
+Status: accepted, 2026-09-02
+
+## Context
+
+Three secrets exist: the CML admin password, the sysadmin password, and
+the Smart License token. cloud-cml supports Vault, Conjur, or a dummy
+manager that takes raw values from its config file. This is a one-person
+lab; the cost of a secret store is real and the benefit is small.
+
+## Decision
+
+- The two passwords are `random_password` resources in the persistent root,
+  16 characters, no specials, so they match cloud-cml's dummy manager and
+  need no YAML escaping. They live in blob state and are read back with
+  `terraform output -raw`.
+- The license token lives only in `config/cml.tfvars`, gitignored.
+- `scripts/20-up.sh` renders both into `config/cml.yml`, gitignored, mode
+  600, with a Python step. Terraform never sees this repo's files.
+- cml-mcp credentials are written to `config/mcp-env/cml.env`, in a
+  self-ignoring directory, and read by `scripts/mcp-cml.sh`.
+- gitleaks runs in pre-commit with custom rules for the token and for
+  Azure storage keys.
+
+## Consequences
+
+- The blob state container holds the passwords. It is private, Azure AD
+  authenticated, versioned, and soft deleted. Acceptable for a lab.
+- Rotating a password means tainting the resource and rebuilding the CML
+  VM, since cloud-cml sets it at install time.
+- A stranded token is the main risk; `scripts/40-down.sh` refuses to
+  destroy while the license is registered.
+
+## Options considered
+
+1. **Azure Key Vault.** Rejected for now: more resources, RBAC, and a
+   provider dependency for three values. Revisit if a second person joins.
+2. **HashiCorp Vault or Conjur via cloud-cml.** Rejected: nothing to run it on.
+3. **random_password plus gitignored tfvars.** Chosen.
+```
+
+- [ ] **Step 6: Run the gate, commit**
+
+Run: `pre-commit run --all-files`. Expected: passes (gitleaks allowlists `docs/`).
+
+```bash
+git add docs/decisions/
+git commit -m "docs: add ADRs 0001 to 0004"
+```
+
+---
+
+### Task 20: Status, lessons, README, and prerequisites sync
+
+**Files:**
+- Create: `docs/STATUS.md`
+- Create: `docs/LESSONS-LEARNED.md`
+- Modify: `README.md` (expand)
+- Modify: `docs/PREREQUISITES.md` (section 5 now reflects what exists)
+
+**Interfaces:**
+- Consumes: everything built in Tasks 1 to 19.
+- Produces: the handoff a fresh session reads first.
+
+- [ ] **Step 1: Write `docs/STATUS.md`**
+
+```markdown
+# Status
+
+Dated handoff. Newest entry first. Read this before doing anything.
+
+## 2026-09-DD (fill in the date this task runs)
+
+### Where things stand
+
+Repo skeleton, both durable Terraform roots, the fork with ten patches, and
+all six operator scripts exist and pass `tests/run.sh` and pre-commit.
+Bootstrap has been applied (Task 5). Persistent has been planned, not
+applied. No CML VM has ever been built from this repo.
+
+### Done
+
+- CLAUDE.md, settings allowlist, pre-commit, gitleaks with custom rules
+- `terraform/bootstrap` applied, `terraform/persistent` validated and planned
+- Fork `itsAmeMario0o/cloud-cml` branch `azure-lab`, patches 0 to 10, pinned
+- Scripts 00, 10, 20, 30, 40, 50, 90 with dry-run tests
+- ADRs 0001 to 0004
+
+### Deferred on purpose
+
+- Persistent apply: waits for images and quota, because the disk bills from creation
+- The first real CML build and the seven verification steps (plan Task 21)
+- Lab topologies, ISE, FTD, the host bridge and C8000v edge: later specs
+
+### Watch out for
+
+- Quota in eastus2 for Edsv5 was 0 on 2026-09-02. Preflight fails until the request is approved.
+- `config/refplat.txt` names images from the June 2025 ISO. Update from the newer ISO before uploading.
+- azurerm is pinned to 4.x in all three roots. Do not let init pick 5.x.
+
+### Next
+
+1. Human: license, token, downloads into `software/`, quota, `ARM_SUBSCRIPTION_ID`.
+2. `scripts/00-preflight.sh` until green except blobs.
+3. `scripts/20-up.sh` through the persistent apply, then `scripts/10-upload-images.sh`.
+4. `scripts/00-preflight.sh` fully green, then `scripts/20-up.sh` to the CML build.
+5. Plan Task 21.
+```
+
+- [ ] **Step 2: Write `docs/LESSONS-LEARNED.md`**
+
+```markdown
+# Lessons learned
+
+Symptom, cause, fix. Add an entry the moment something bites, before the
+fix is forgotten. Entries from the design phase are here so they are not
+learned twice.
+
+## SSH to the CML host on port 22 gives a console menu, not a shell
+
+- Symptom: `ssh sysadmin@host` connects but shows the CML console server.
+- Cause: on a CML host, port 22 is the breakout console server. The system
+  shell listens on 1122.
+- Fix: every script uses `-p 1122`. cloud-cml's own `del.sh` hint says so.
+
+## Image copy fails partway with an authentication error
+
+- Symptom: cloud-init log shows azcopy 403 midway through the refplat copy.
+- Cause: the SAS token cloud-cml builds at plan time expires. Upstream gives
+  one hour.
+- Fix: fork patch 6, `azure.sas_validity`, default 4h. Preflight estimates
+  the copy time and warns. Keep `config/refplat.txt` small.
+
+## A large file in the repo folder becomes unreadable
+
+- Symptom: `hdiutil attach` or `azcopy` fails on the ISO with a short read.
+- Cause: the repo lives under OneDrive, which can replace a synced file with
+  an on-demand placeholder.
+- Fix: right-click the file in Finder, choose "Always Keep on This Device".
+  `software/README.md` says the same.
+
+## terraform init selects azurerm 5.x and validate breaks
+
+- Symptom: unknown argument errors in the fork or a root after a fresh init.
+- Cause: upstream's `>= 3.82.0` bound. azurerm 5.0 shipped in 2026.
+- Fix: `~> 4.0` in all three roots (fork patch 0). Root lock files are committed.
+
+## First boot copies every image again even though /data has them
+
+- Symptom: second build takes as long as the first.
+- Cause: a symlinked images directory looks empty to `find` in cml.sh, and
+  the disk attachment races cloud-init.
+- Fix: `05-persist.sh pre` waits for LUN 0, bind-mounts, and empties the
+  image list. See plan deviations 1 to 3.
+```
+
+- [ ] **Step 3: Expand `README.md`**
+
+Replace the file with:
+
+```markdown
+# cml-phoenix
+
+An on-demand Cisco Modeling Labs instance in Azure that is built and
+destroyed per session. Reference platform images and lab exports survive on
+a persistent data disk and blob storage, so a rebuild costs minutes.
+
+## How it fits together
+
+Three Terraform roots by lifetime: bootstrap (state storage, never
+destroyed), persistent (network, static IP, 512 GB data disk, blob
+containers, never destroyed), and the CML VM itself from a lightly patched
+fork of [CiscoDevNet/cloud-cml](https://github.com/CiscoDevNet/cloud-cml),
+destroyed at the end of every session. Bash scripts on the Mac sequence the
+three and talk to the host over SSH. Claude Code drives the controller
+through [cml-mcp](https://github.com/xorrkaz/cml-mcp).
+
+## Daily use
+
+    scripts/00-preflight.sh      # green before anything else
+    scripts/20-up.sh             # build, prompts before each apply
+    scripts/90-smoke-test.sh     # prove it
+    ...work...
+    scripts/40-down.sh           # export labs, release license, destroy VM
+
+## Read next
+
+- `docs/PREREQUISITES.md`: what only you can provide
+- `docs/STATUS.md`: where things stand today
+- `CLAUDE.md`: rules for working in this repo
+- `docs/superpowers/specs/`: the design
+- `docs/decisions/`: why it is built this way
+```
+
+- [ ] **Step 4: Sync `docs/PREREQUISITES.md` section 5**
+
+Replace the body of section 5 with the current truth: the repo is built, bootstrap applied, persistent held, and the CML build waits on sections 1 and 2. Keep the checklist in section 6.
+
+- [ ] **Step 5: Run the full gate and commit**
+
+```bash
+tests/run.sh && pre-commit run --all-files
+git add docs/STATUS.md docs/LESSONS-LEARNED.md README.md docs/PREREQUISITES.md
+git commit -m "docs: add status handoff, lessons learned, expand README"
+git push
+```
+
+---
+
+### Task 21: Live verification, the seven spec steps
+
+Gated on `docs/PREREQUISITES.md` sections 1 and 2 being complete. Every apply prompts. A human is present for this task. Anything that bites goes into `docs/LESSONS-LEARNED.md` before the task is marked done.
+
+**Files:**
+- Modify: `docs/STATUS.md`, `docs/LESSONS-LEARNED.md`
+
+- [ ] **Step 1: Spec step 1, preflight passes**
+
+```bash
+export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+scripts/00-preflight.sh
+```
+Expected: 0 FAIL. Blob checks WARN until step 3 below.
+
+- [ ] **Step 2: Persistent apply and image upload**
+
+```bash
+scripts/20-up.sh       # answer y to bootstrap (already applied, skipped) and persistent; answer n at the CML prompt
+scripts/10-upload-images.sh --dry-run
+scripts/10-upload-images.sh
+scripts/00-preflight.sh
+```
+Expected: persistent apply 20 added. Upload completes. Preflight fully green and writes `.preflight-ok`.
+
+- [ ] **Step 3: Spec step 2, full build**
+
+```bash
+scripts/20-up.sh
+```
+Expected: CML apply completes in 15 to 30 minutes; the readiness module waits for the API. The script prints the URL, IP, and del.sh command, and writes `config/mcp-env/cml.env`.
+
+- [ ] **Step 4: Spec step 3, smoke test and cml-mcp**
+
+```bash
+scripts/90-smoke-test.sh
+```
+Expected: 0 FAIL, including `cml-mcp get_cml_labs answered`. In Claude Code, `/mcp` shows server `cml` connected.
+
+- [ ] **Step 5: Spec step 4, a throwaway lab exported**
+
+Create a lab with two alpine nodes through cml-mcp (`create_empty_lab`, `add_node_to_cml_lab`) or the UI. Then:
+
+```bash
+scripts/30-export-labs.sh
+ls exports/*/
+az storage blob list --auth-mode login --account-name "$(terraform -chdir=terraform/persistent output -raw storage_account_name)" -c exports -o table
+```
+Expected: one YAML per lab locally and in the container.
+
+- [ ] **Step 6: Spec step 5, down with license released**
+
+```bash
+scripts/40-down.sh
+az vm list -g rg-cml-lab -o table
+az disk show -g rg-cml-lab -n disk-cml-lab-data --query diskState -o tsv
+```
+Expected: no VM listed, disk state `Unattached`, script reported the license `NOT_REGISTERED`.
+
+- [ ] **Step 7: Spec step 6, second build reuses images**
+
+```bash
+scripts/00-preflight.sh && scripts/20-up.sh
+ssh -p 1122 -i keys/cml-lab sysadmin@"$(terraform -chdir=terraform/persistent output -raw public_ip_address)" cat /var/log/provision/05-persist-pre.log
+scripts/90-smoke-test.sh
+```
+Expected: the pre log says `reusing N image files` and `partition already formatted as ext4`. Build time noticeably shorter. Reimport one exported YAML through cml-mcp `create_full_lab_topology` and start it.
+
+- [ ] **Step 8: Spec step 7, persistent shows zero diff**
+
+```bash
+terraform -chdir=terraform/persistent plan -detailed-exitcode; echo "exit $?"
+```
+Expected: `No changes.` and exit 0. Run this after step 4 and again now.
+
+- [ ] **Step 9: Record and commit**
+
+Update `docs/STATUS.md` with a new dated entry (build times, sizes used, anything deferred) and add every surprise to `docs/LESSONS-LEARNED.md`.
+
+```bash
+git add docs/STATUS.md docs/LESSONS-LEARNED.md
+git commit -m "docs: record first full build and verification"
+git push
+```
+
+---
+
+## Self-review notes
+
+Spec coverage, section by section:
+
+- Section 1 success steps 1 to 7: Task 21 steps 1 to 8, with the scripts from Tasks 12 to 18.
+- Section 2 decisions: ADRs in Task 19; region and subscription in Tasks 3, 4, and the `ARM_SUBSCRIPTION_ID` checks.
+- Section 3.1 tiers and names: Tasks 3 and 4 use the spec names verbatim; the CML tier naming stays upstream's (`cml-nic-<rand>`, `cml-sg-<rand>`).
+- Section 3.2 repo layout: file structure table above. Additions beyond the spec, all small: `tests/`, `scripts/lib/`, `scripts/10-upload-images.sh`, `scripts/mcp-cml.sh`, `.mcp.json`, `config/refplat.txt`, `config/tunnels.conf.example`, `exports/`, `keys/.gitignore`.
+- Section 4 roots: Tasks 3, 4, 5, 6.
+- Section 5 fork changes 1 to 10: Tasks 6, 7, 8. Items 9 and 10 changed shape, see deviations 1 to 3.
+- Section 6 config and secrets flow: Task 9 and Task 14.
+- Section 7 scripts: Tasks 12 to 18. Refusal conditions implemented as `die` calls with remediation text.
+- Section 8 conventions: Task 1 and Task 19.
+- Section 9 error handling: `die` with remediation everywhere; `05-persist.sh` exits nonzero and logs; preflight SAS warning; `prevent_destroy` in Tasks 3 and 4; `40-down.sh` license gate.
+- Section 10 verification: Task 21.
+- Section 11 out of scope: nothing in this plan builds ISE, FTD, the bridge, the edge router, a topology, Key Vault, CI, Bastion, or clusters.
+
+Name consistency checked: `tf_out`, `cml_ip`, `cml_ssh`, `confirm`, `die`, `pass`, `warn`, `miss`, `summary_and_exit` match between Task 2 and every consumer. Persistent output names match between Task 4 outputs, Task 14 `--set` lines, and Task 18. Template placeholder names match between Task 9's template and renderer. `cml-remote.sh` subcommands match between Task 10 and Tasks 15, 16, 18. Fork config keys match between Task 7 and Task 9's template.
