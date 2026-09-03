@@ -1,0 +1,4 @@
+[submodule "vendor/cloud-cml"]
+	path = vendor/cloud-cml
+	url = https://github.com/itsAmeMario0o/cloud-cml
+	branch = azure-lab
