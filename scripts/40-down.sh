@@ -22,6 +22,13 @@ CML_YML="${REPO_ROOT}/config/cml.yml"
 DRY_RUN=0
 FORCE_LICENSE=0
 
+# license_blocked STATUS: 0 when the teardown must stop. Anything other than
+# a confirmed NOT_REGISTERED blocks, including UNKNOWN, because an
+# unverified license is a stranded license until proven otherwise.
+license_blocked() {
+  [[ "$1" != "NOT_REGISTERED" ]]
+}
+
 run() {
   if [[ "${DRY_RUN}" == "1" ]]; then
     echo "+ $*"
@@ -52,18 +59,20 @@ release_license() {
   local ip="$1" status
   run cml_ssh /provision/del.sh || true
   if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ license gate (status from host)"
     return 0
   fi
-  status="$(remote "${ip}" license-status || echo UNKNOWN)"
-  if [[ "${status}" == "REGISTERED" ]]; then
-    warn "del.sh left the license REGISTERED, retrying through the API"
-    status="$(remote "${ip}" deregister || echo REGISTERED)"
+  status="$( (remote "${ip}" license-status || echo UNKNOWN) | tail -n 1)"
+  if license_blocked "${status}"; then
+    warn "del.sh left the license ${status}, retrying through the API"
+    status="$( (remote "${ip}" deregister || true) | tail -n 1)"
+    [[ -n "${status}" ]] || status="UNKNOWN"
   fi
-  if [[ "${status}" == "REGISTERED" ]]; then
+  if license_blocked "${status}"; then
     if [[ "${FORCE_LICENSE}" == "1" ]]; then
-      warn "license still REGISTERED, continuing because of --force-license. Release it in Smart Software Manager."
+      warn "license still ${status}, continuing because of --force-license. Release it in Smart Software Manager."
     else
-      die "license still REGISTERED. Fix it, or rerun with --force-license and release it in Smart Software Manager."
+      die "license still ${status}. Fix it, or rerun with --force-license and release it in Smart Software Manager."
     fi
   else
     pass "license ${status}"
@@ -72,11 +81,17 @@ release_license() {
 
 destroy_cml() {
   local tenant
-  tenant="$(az account show --query tenantId -o tsv)"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    tenant="<tenant>"
+  else
+    tenant="$(az account show --query tenantId -o tsv)"
+  fi
   export TF_VAR_cfg_file="${CML_YML}"
   export TF_VAR_azure_subscription_id="${ARM_SUBSCRIPTION_ID}"
   export TF_VAR_azure_tenant_id="${tenant}"
-  confirm "Destroy the CML VM (vendor/cloud-cml root only)?" || die "declined"
+  if [[ "${DRY_RUN}" != "1" ]]; then
+    confirm "Destroy the CML VM (vendor/cloud-cml root only)?" || die "declined"
+  fi
   run terraform -chdir="${CLOUD_CML}" destroy -input=false -auto-approve
 }
 
@@ -100,4 +115,4 @@ main() {
   summary_and_exit
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

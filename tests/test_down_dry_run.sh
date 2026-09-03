@@ -21,11 +21,30 @@ if [[ "${a}" -lt "${b}" && "${b}" -lt "${c}" && "${c}" -lt "${d}" ]]; then echo 
   echo "[FAIL]  order: ${a} ${b} ${c} ${d}"; failures=$((failures + 1)); fi
 
 # The script must never be able to destroy the other roots.
-if grep -qE 'chdir=[^ ]*(persistent|bootstrap)[^ ]* +destroy' "${SCRIPT}"; then
+if grep -qiE '(persistent|bootstrap)[^ ]* +\bdestroy\b|\bdestroy\b[^\n]*(persistent|bootstrap)' "${SCRIPT}"; then
   echo "[FAIL]  script references destroy on persistent or bootstrap"; failures=$((failures + 1))
 else
   echo "[OK]    no destroy on persistent or bootstrap"
 fi
+
+# license_blocked: 0 (blocked) for anything but a confirmed NOT_REGISTERED.
+# shellcheck source=scripts/40-down.sh
+source "${SCRIPT}"
+assert_license_blocked() {
+  local label="$1" status="$2" expected="$3" actual
+  if license_blocked "${status}"; then actual=0; else actual=1; fi
+  if [[ "${actual}" == "${expected}" ]]; then
+    echo "[OK]    license_blocked ${label}"
+  else
+    echo "[FAIL]  license_blocked ${label}: expected ${expected}, got ${actual}"
+    failures=$((failures + 1))
+  fi
+}
+assert_license_blocked "REGISTERED blocks" "REGISTERED" 0
+assert_license_blocked "UNKNOWN blocks" "UNKNOWN" 0
+assert_license_blocked "empty blocks" "" 0
+assert_license_blocked "two-line value blocks" "$(printf 'REGISTERED\nREGISTERED')" 0
+assert_license_blocked "NOT_REGISTERED does not block" "NOT_REGISTERED" 1
 
 if [[ "${failures}" -gt 0 ]]; then echo "test_down_dry_run: ${failures} failure(s)"; exit 1; fi
 echo "test_down_dry_run: all passed"
