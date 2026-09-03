@@ -4,7 +4,7 @@
 terraform {
   backend "azurerm" {
     resource_group_name  = "rg-cml-lab-tfstate"
-    storage_account_name = "REPLACE_AFTER_BOOTSTRAP_APPLY"
+    storage_account_name = "st792kcotfstate"
     container_name       = "tfstate"
     key                  = "persistent.tfstate"
     use_azuread_auth     = true
