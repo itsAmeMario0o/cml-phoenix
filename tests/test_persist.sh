@@ -46,6 +46,8 @@ assert_contains "first boot binds images" "+ mount --bind ${TMP}/data/images ${T
 assert_contains "first boot fstab data line" "LABEL=cmldata ${TMP}/data ext4" "${out}"
 assert_contains "first boot fstab bind line" "${TMP}/data/images ${TMP}/images none bind" "${out}"
 assert_not_contains "first boot keeps image list" "images = []" "${out}"
+settle_count="$(grep -c -- "+ udevadm settle" <<<"${out}")"
+assert_eq "first boot settles udev twice" "2" "${settle_count}"
 
 # 2. Rebuild: formatted disk with images. Must not format, must bind, and
 #    must empty the image list so cml.sh skips the copy.
@@ -73,7 +75,13 @@ rc=0
 env ${common_env} bash "${SCRIPT}" bogus >/dev/null 2>&1 || rc=$?
 assert_eq "unknown phase exits 2" "2" "${rc}"
 
-# 6. The script is shellcheck clean (it is outside the pre-commit scope).
+# 6. No phase argument defaults to post, matching production's
+#    `bash "$patch" || true` call in cml.sh's postprocess.
+# shellcheck disable=SC2086
+out="$(env ${common_env} PRETEND_BOUND=1 bash "${SCRIPT}" 2>&1)"
+assert_contains "no phase arg defaults to post" "[05-persist:post]" "${out}"
+
+# 7. The script is shellcheck clean (it is outside the pre-commit scope).
 if command -v shellcheck >/dev/null 2>&1; then
   if shellcheck --severity=warning "${SCRIPT}"; then echo "[OK]    shellcheck"; else
     echo "[FAIL]  shellcheck"; failures=$((failures + 1)); fi
