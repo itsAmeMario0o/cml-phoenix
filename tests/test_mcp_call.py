@@ -30,6 +30,11 @@ class McpCallTest(unittest.TestCase):
                               capture_output=True, text=True, timeout=30)
         self.assertEqual(proc.returncode, 1)
 
+    def test_tool_error_exits_1(self) -> None:
+        proc = call("--tool", "boom")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("boom failed", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

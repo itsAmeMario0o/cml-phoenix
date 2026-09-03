@@ -27,6 +27,7 @@ class McpClient:
                                      stderr=subprocess.PIPE, text=True, bufsize=1)
         self.timeout = timeout
         self.next_id = 1
+        self._reader: threading.Thread | None = None
 
     def _write(self, msg: dict[str, Any]) -> None:
         assert self.proc.stdin is not None
@@ -35,6 +36,8 @@ class McpClient:
 
     def _read_response(self, msg_id: int) -> dict[str, Any]:
         assert self.proc.stdout is not None
+        if self._reader is not None and self._reader.is_alive():
+            raise RuntimeError("previous request still pending")
         result: dict[str, Any] = {}
 
         def reader() -> None:
@@ -46,11 +49,14 @@ class McpClient:
                     msg = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(msg, dict):
+                    continue
                 if msg.get("id") == msg_id:
                     result.update(msg)
                     return
 
         t = threading.Thread(target=reader, daemon=True)
+        self._reader = t
         t.start()
         t.join(self.timeout)
         if t.is_alive():
@@ -61,6 +67,8 @@ class McpClient:
 
     def _stderr_tail(self) -> str:
         assert self.proc.stderr is not None
+        if self.proc.poll() is None:
+            return "server still running, stdout closed"
         try:
             return self.proc.stderr.read()[-2000:]
         except ValueError:
@@ -86,6 +94,10 @@ class McpClient:
             self.proc.wait(timeout=5)
         except (OSError, subprocess.TimeoutExpired):
             self.proc.kill()
+            try:
+                self.proc.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
 
 
 def parse_args_kv(pairs: list[str]) -> dict[str, Any]:

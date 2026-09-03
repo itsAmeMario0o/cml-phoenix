@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tiny MCP stdio server: answers initialize, tools/list, and tools/call for
-one tool, get_cml_labs. Newline-delimited JSON-RPC, like real servers."""
+two tools, get_cml_labs and boom (which always errors). Newline-delimited
+JSON-RPC, like real servers."""
 from __future__ import annotations
 
 import json
@@ -9,6 +10,12 @@ import sys
 
 def reply(msg_id: object, result: object) -> None:
     sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": msg_id, "result": result}) + "\n")
+    sys.stdout.flush()
+
+
+def reply_error(msg_id: object, code: int, message: str) -> None:
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": msg_id,
+                                 "error": {"code": code, "message": message}}) + "\n")
     sys.stdout.flush()
 
 
@@ -22,14 +29,18 @@ def main() -> None:
         elif method == "notifications/initialized":
             continue
         elif method == "tools/list":
-            reply(msg["id"], {"tools": [{"name": "get_cml_labs", "description": "labs", "inputSchema": {"type": "object"}}]})
+            reply(msg["id"], {"tools": [
+                {"name": "get_cml_labs", "description": "labs", "inputSchema": {"type": "object"}},
+                {"name": "boom", "description": "always errors", "inputSchema": {"type": "object"}},
+            ]})
         elif method == "tools/call":
-            if msg["params"]["name"] == "get_cml_labs":
+            name = msg["params"]["name"]
+            if name == "get_cml_labs":
                 reply(msg["id"], {"content": [{"type": "text", "text": '[{"id": "lab-1", "title": "Spine Leaf"}]'}]})
+            elif name == "boom":
+                reply_error(msg["id"], -32000, "boom failed")
             else:
-                sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": msg["id"],
-                                             "error": {"code": -32601, "message": "unknown tool"}}) + "\n")
-                sys.stdout.flush()
+                reply_error(msg["id"], -32601, "unknown tool")
 
 
 if __name__ == "__main__":
