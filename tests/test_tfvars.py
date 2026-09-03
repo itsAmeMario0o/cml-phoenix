@@ -42,6 +42,19 @@ class ParseTfvarsTest(unittest.TestCase):
             tfvars.parse_tfvars('cidrs = ["a""b"]\n')
         self.assertIn("line 1", str(ctx.exception))
 
+    def test_cli_prints_list_space_separated(self) -> None:
+        import subprocess, tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".tfvars", dir=Path(__file__).parent, delete=False) as fh:
+            fh.write('cidrs = ["a/32", "b/32"]\nflag = true\n')
+            name = fh.name
+        try:
+            out = subprocess.run([sys.executable, str(Path(tfvars.__file__)), name, "cidrs"], capture_output=True, text=True)
+            self.assertEqual(out.stdout.strip(), "a/32 b/32")
+            out = subprocess.run([sys.executable, str(Path(tfvars.__file__)), name, "flag"], capture_output=True, text=True)
+            self.assertEqual(out.stdout.strip(), "true")
+        finally:
+            Path(name).unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

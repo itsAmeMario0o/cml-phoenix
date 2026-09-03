@@ -13,6 +13,7 @@ Anything else raises ValueError naming the line. Stdlib only.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -64,3 +65,26 @@ def parse_tfvars(text: str) -> dict[str, Any]:
 def load(path: Path) -> dict[str, Any]:
     """Parse the file at *path*."""
     return parse_tfvars(path.read_text())
+
+
+def _cli(argv: list[str]) -> int:
+    """tfvars.py FILE KEY: print the value of KEY. Lists print space separated."""
+    if len(argv) != 2:
+        print("usage: tfvars.py FILE KEY", file=sys.stderr)
+        return 2
+    try:
+        value = load(Path(argv[0]))[argv[1]]
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"tfvars: {exc}", file=sys.stderr)
+        return 1
+    if isinstance(value, list):
+        print(" ".join(value))
+    elif isinstance(value, bool):
+        print("true" if value else "false")
+    else:
+        print(value)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(_cli(sys.argv[1:]))
