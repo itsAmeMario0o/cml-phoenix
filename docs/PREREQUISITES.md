@@ -1,9 +1,9 @@
 # What you need to provide before the first CML build
 
-Written 2026-09-02. Everything on this list is something only you can do:
-buy, download, log in, or approve. None of it blocked building the repo,
-and section 5 says what exists already. The quota request is the slow one,
-so start there.
+Written 2026-09-02, updated 2026-09-04. Everything on this list is
+something only you can do: buy, download, log in, or approve. None of it
+blocked building the repo, and section 5 says what exists already. The
+quota is done. The downloads are the slow part now.
 
 ## 1. Cisco license and software
 
@@ -40,19 +40,32 @@ The flavor you bought goes into `config/cml.tfvars` as `license_flavor`.
 
 ### 1.3 Download the software
 
-From https://software.cisco.com/download/home, product "Cisco Modeling Labs",
-version 2.9.x. cml-mcp needs 2.9 or newer, so do not pick 2.8.
+From https://software.cisco.com/download/home, product "Cisco Modeling Labs".
+On 2026-09-04 the only version offered was 2.10, so that is what we use.
+cml-mcp needs 2.9 or newer.
 
-Download exactly these two items:
+Download these three:
 
 | File | What it is | Size |
 |---|---|---|
-| `cml2_2.9.x_amd64-N.pkg` | The "update package". Not the OVA, not the ISO installer. | about 1 GB |
-| `refplat-YYYYMMDD-fcs.iso` | Reference platform images, latest release | 15 to 40 GB |
+| `cml2_2.10.0-13_amd64-17.pkg` | The CML package. Not the `.iso` or `.ova` installer with the same name. | about 1 GB |
+| `refplat-20260409-fcs.iso` | The full base reference platform set. Not the `-free` subset. | 15 to 40 GB |
+| `checksum.txt` | Verify both files against it before doing anything else. | tiny |
+
+Skip the `-ise`, `-supplemental`, `-proprietary`, and `-wireless` ISOs for
+now. The supplemental one holds the SD-WAN controllers and FirePower, and
+the first build does not use them. It also would match the upload script's
+`refplat-*.iso` pattern and make it refuse to run with two candidates. Get
+it when the SD-WAN scenario has its own spec.
+
+One caveat on the version. The fork tracks cloud-cml v2.9.0, and upstream
+has published nothing for 2.10 as of today; its main branch is two
+documentation commits past v2.9.0. The installer is a Debian package on
+the same Ubuntu 24.04 base, so the pairing should work, but the first build
+is the first test of it.
 
 There is an older refplat from June 2025 in `~/Downloads`. Do not use it.
-Get the current one so the SD-WAN and Nexus images are recent, and note
-that the June 2025 ISO did not carry the SD-WAN controller images at all.
+It did not carry the SD-WAN controller images at all.
 
 ### 1.4 Where to put the files
 
@@ -81,10 +94,11 @@ later turns it into an on-demand placeholder, right-click it in Finder and
 choose "Always Keep on This Device" before running the upload script.
 
 Once the files are there, put the exact `.pkg` filename into
-`config/cml.tfvars` as `software_package`. The ISO is found by name pattern,
-so it needs no setting. Then check that the image names in
-`config/refplat.txt` match the folders on the new ISO; the upload script
-refuses to run if any of them do not.
+`config/cml.tfvars` as `software_package`. Today that is
+`cml2_2.10.0-13_amd64-17.pkg`, and the example file already carries it. The
+ISO is found by name pattern, so it needs no setting. Then check that the
+image names in `config/refplat.txt` match the folders on the new ISO; the
+upload script refuses to run if any of them do not.
 
 Only the images the scenarios need get uploaded. The full ISO would not fit
 through the four hour SAS window the spec allows, and you would be paying to
@@ -155,12 +169,14 @@ The repo is built. This is what is true today:
 - `terraform/bootstrap` is applied in Azure: resource group
   `rg-cml-lab-tfstate`, storage account `st792kcotfstate`. It costs cents.
 - `terraform/persistent` is validated and planned, 19 to add, but not
-  applied. It is held until images exist and quota is approved, because the
-  512 GB Premium data disk bills about 75 USD a month from the moment it is
+  applied. It is held until the images are on the Mac, because the 512 GB
+  Premium data disk bills about 75 USD a month from the moment it is
   created.
-- The fork branch `azure-lab` carries patches 0 to 10 plus one fix commit,
-  pinned as the submodule. `validate` passes against the rendered config
-  template with placeholder values.
+- The fork branch `azure-lab` carries patches 0 to 10 plus three fix
+  commits, pinned as the submodule. The last one teaches the persistence
+  hook to find the data disk on NVMe sizes, which the default v6 size is.
+  `validate` passes against the rendered config template with placeholder
+  values.
 - All seven scripts (00, 10, 20, 30, 40, 50, 90), `CLAUDE.md`,
   `.claude/settings.json`, pre-commit, gitleaks rules, four ADRs,
   `STATUS.md`, `LESSONS-LEARNED.md`, and the `tests/run.sh` gate all exist
@@ -181,7 +197,9 @@ reach. Those are spec success steps 2 through 7.
 
 - [ ] License bought, flavor known
 - [ ] Smart License token generated, pasted into `config/cml.tfvars`
-- [ ] Latest `.pkg` and refplat ISO placed in `software/`, exact filenames shared
+- [ ] `cml2_2.10.0-13_amd64-17.pkg`, `refplat-20260409-fcs.iso`, and
+      `checksum.txt` in `software/`, checksums verified. Downloading as of
+      2026-09-04.
 - [x] Quota approved: Edsv6 family 64 and regional 118 in eastus2
 - [ ] `ARM_SUBSCRIPTION_ID` exported in shell profile
 - [ ] Public IP known for the two allowed-subnet lists

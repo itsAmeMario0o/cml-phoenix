@@ -27,4 +27,4 @@ spot_max_bid_price = -1
 sas_validity = "4h"
 
 # Exact filename of the package in software/ and in the cml container.
-software_package = "cml2_2.9.0-3_amd64-3.pkg"
+software_package = "cml2_2.10.0-13_amd64-17.pkg"

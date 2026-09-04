@@ -38,8 +38,8 @@ just promised in a comment.
 
 ## Read next
 
-Start with `docs/PREREQUISITES.md`. It lists what only you can provide: a
-license, two downloads, and a quota increase. `docs/STATUS.md` says where
+Start with `docs/PREREQUISITES.md`. It lists what only you can provide,
+mostly a license and two Cisco downloads. `docs/STATUS.md` says where
 things stand today. `CLAUDE.md` has the rules for working in the repo,
 `docs/superpowers/specs/` has the design, and `docs/decisions/` explains
 why it is built this way.

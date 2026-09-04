@@ -9,10 +9,11 @@ What belongs here:
 
 ```
 software/
-├── cml2_2.9.x_amd64-N.pkg          CML update package, about 1 GB
-├── refplat-YYYYMMDD-fcs.iso        reference platform images, 15 to 40 GB
-├── refplat-YYYYMMDD-fcs.iso.signature
-└── refplat-YYYYMMDD-fcs.iso.README
+├── cml2_2.10.0-13_amd64-17.pkg     CML package, about 1 GB
+├── refplat-20260409-fcs.iso        reference platform images, 15 to 40 GB
+├── refplat-20260409-fcs.iso.signature
+├── refplat-20260409-fcs.iso.README
+└── checksum.txt                    from the same download page
 ```
 
 Keep the files as downloaded and do not extract the ISO. The upload script
