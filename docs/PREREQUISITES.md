@@ -97,18 +97,17 @@ download is needed for sub-project 1.
 
 ### 2.1 Raise the vCPU quota
 
-Current quota in `eastus2` is zero for every v5 family and 24 total regional
-cores. The floor size `Standard_E16ds_v5` needs 16, `E32ds_v5` needs 32.
+Done 2026-09-04. `Standard Edsv6 Family vCPUs` in `eastus2` is 64 and
+`Total Regional vCPUs` is 118. The floor size `Standard_E16ds_v6` needs 16,
+`E32ds_v6` needs 32.
 
-1. Azure portal, search "Quotas", Compute, filter region `East US 2`.
-2. Request `Standard EDSv5 Family vCPUs`: 32 minimum, 64 if you want the
-   E32ds_v5 option for the TrustSec scenario.
-3. Request `Total Regional vCPUs` to the same number or higher.
-4. Pay-as-you-go subscriptions often get an automatic approval for small
-   numbers and a support case for larger ones. Start the request today. It can
-   take one to three business days.
-
-Spot instances draw from the same family quota, so this is needed either way.
+For the record, in case it has to be repeated on another subscription: the
+portal's Quotas page, Compute, region East US 2, tick the family, New Quota
+Request. The automatic approver refused every v5 family outright on this
+subscription, at 64 and again at 32, and refused Edsv6 once at 32 before the
+increase to 64 went through. Ask for the family and the regional total
+together. Spot instances draw from the same family quota, so the request is
+needed either way.
 
 ### 2.2 Shell environment
 
@@ -131,7 +130,7 @@ Copy `config/cml.tfvars.example` to `config/cml.tfvars` and fill in:
 | `license_flavor` | From 1.1: `CML_Personal`, `CML_Personal40`, `CML_Education`, or `CML_Enterprise` |
 | `allowed_ipv4_subnets_mgmt` | Your public IP as `/32`. Get it with `curl -4 ifconfig.me`. SSH and Cockpit. |
 | `allowed_ipv4_subnets_cml2` | Same `/32`. The CML UI and API, which is what cml-mcp uses. |
-| `vm_size` | `Standard_E16ds_v5` to start |
+| `vm_size` | `Standard_E16ds_v6` to start. Any size with nested virtualization works; v6 and v7 attach disks over NVMe and the fork handles both. ADR 0005. |
 | `spot_enabled` | `false` for the first build. Turn on once the persist path is proven. |
 
 Also for the persistent root's `terraform.tfvars`: `owner` (your name or
@@ -183,7 +182,7 @@ reach. Those are spec success steps 2 through 7.
 - [ ] License bought, flavor known
 - [ ] Smart License token generated, pasted into `config/cml.tfvars`
 - [ ] Latest `.pkg` and refplat ISO placed in `software/`, exact filenames shared
-- [ ] Quota request submitted for EDSv5 and regional cores in eastus2
+- [x] Quota approved: Edsv6 family 64 and regional 118 in eastus2
 - [ ] `ARM_SUBSCRIPTION_ID` exported in shell profile
 - [ ] Public IP known for the two allowed-subnet lists
 - [x] Fork created, branch `azure-lab` at v2.9.0

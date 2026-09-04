@@ -3,6 +3,38 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
+## 2026-09-04
+
+### Where things stand
+
+Quota is solved and the default VM size moved from `Standard_E16ds_v5` to
+`Standard_E16ds_v6`. The Edsv5 family could not be raised above zero by the
+automatic approver; Edsv6 was approved at 64 and the regional total at 118
+in eastus2. The v6 sizes attach disks over NVMe, so the fork's persistence
+hook now looks for the LUN 0 disk on the NVMe link first and the SCSI link
+second. ADR 0005. Nothing applied in Azure changed.
+
+### Done
+
+- Fork: `05-persist.sh` finds the data disk on either link; the Terraform
+  comment updated. Submodule pointer bumped.
+- Default size, prerequisites, spec, ADR 0005, and a lessons entry.
+- Quota approved: Edsv6 64, regional 118.
+
+### Still gating the first build
+
+License and Smart License token, the two Cisco downloads into `software/`,
+`ARM_SUBSCRIPTION_ID` in the shell profile, public IP in the tfvars file.
+Then the persistent apply, which is a human decision because the disk bills
+from creation.
+
+### Watch out for
+
+- The NVMe by-lun link has never been seen on a real boot from this repo.
+  If the persistence log says no data disk appeared on either path, set
+  `DATA_DEV` to `/dev/nvme0n2` in the fork's cloud-config and rebuild.
+- The v6 local temp disk is raw and unmounted. Nothing should care.
+
 ## 2026-09-02
 
 ### Where things stand

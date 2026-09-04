@@ -48,6 +48,12 @@ assert_contains "first boot fstab bind line" "${TMP}/data/images ${TMP}/images n
 assert_not_contains "first boot keeps image list" "images = []" "${out}"
 settle_count="$(grep -c -- "+ udevadm settle" <<<"${out}")"
 assert_eq "first boot settles udev twice" "2" "${settle_count}"
+assert_contains "first boot prefers the NVMe by-lun link" "+ parted -s /dev/disk/azure/data/by-lun/0" "${out}"
+
+# 1b. DATA_DEV pins the device and skips the candidate search.
+# shellcheck disable=SC2086
+out="$(env ${common_env} DATA_DEV=/dev/disk/azure/scsi1/lun0 PRETEND_FS= bash "${SCRIPT}" pre 2>&1)"
+assert_contains "DATA_DEV override is honored" "+ parted -s /dev/disk/azure/scsi1/lun0" "${out}"
 
 # 2. Rebuild: formatted disk with images. Must not format, must bind, and
 #    must empty the image list so cml.sh skips the copy.

@@ -12,8 +12,9 @@ license_flavor = "CML_Personal"
 allowed_ipv4_subnets_mgmt = ["203.0.113.10/32"]
 allowed_ipv4_subnets_cml2 = ["203.0.113.10/32"]
 
-# Needs Edsv5 quota in eastus2. See docs/PREREQUISITES.md section 2.1.
-vm_size = "Standard_E16ds_v5"
+# Needs Edsv6 quota in eastus2. See docs/PREREQUISITES.md section 2.1 and
+# ADR 0005 for why v6 and not v5.
+vm_size = "Standard_E16ds_v6"
 
 # OS disk holds CML itself and node overlay disks. Images are on /data.
 os_disk_size_gb = 200

@@ -167,7 +167,7 @@ One commit per item, Conventional Commits, scoped `infra(azure)`. All in
 | 6 | SAS validity from config, default `4h` | `azure.sas_validity` |
 | 7 | Optional spot: `priority`, `eviction_policy = "Deallocate"`, `max_bid_price` | `azure.spot.enabled`, `azure.spot.max_bid_price` |
 | 8 | NSG rule `lab-transit-in`: source `azure.apps_subnet_cidr`, destination lab summary, any port | `azure.apps_subnet_cidr`, `azure.lab_summary_cidr` |
-| 9 | `modules/deploy/data/cloud-config.txt`: `disk_setup`, `fs_setup`, `mounts` for `/dev/disk/azure/scsi1/lun0` at `/data`, ext4, format only when blank | none |
+| 9 | `modules/deploy/data/cloud-config.txt`: `disk_setup`, `fs_setup`, `mounts` for the LUN 0 data disk at `/data`, ext4, format only when blank (implemented as `05-persist.sh`, which finds the disk on the NVMe or SCSI link, ADR 0005) | none |
 | 10 | New `modules/deploy/data/05-persist.sh`: if `/data/images` is populated, replace `/var/lib/libvirt/images` with a symlink to it, otherwise move the freshly copied images there and symlink; create `/data/exports`; log to `/var/log/provision/`; exit nonzero on any failure | listed in `app.customize` |
 
 Every change carries a comment explaining why and naming ADR 0001. Upstream
@@ -211,7 +211,7 @@ Output lines `[OK]`, `[WARN]`, `[FAIL]` with counts; nonzero exit on any FAIL.
 
 | Script | Does | Refuses when |
 |---|---|---|
-| `00-preflight.sh` | az login valid; `ARM_SUBSCRIPTION_ID` set; Edsv5 quota in region covers requested size; terraform, az, azcopy, jq, uv present; `terraform fmt -check` and `validate` on all three roots; submodule at pinned commit; `config/cml.tfvars` present, no `0.0.0.0/0`; package and listed refplat images present in the `cml` container; sum of image sizes versus SAS validity warning | Any FAIL |
+| `00-preflight.sh` | az login valid; `ARM_SUBSCRIPTION_ID` set; the requested size's family quota in region covers it; terraform, az, azcopy, jq, uv present; `terraform fmt -check` and `validate` on all three roots; submodule at pinned commit; `config/cml.tfvars` present, no `0.0.0.0/0`; package and listed refplat images present in the `cml` container; sum of image sizes versus SAS validity warning | Any FAIL |
 | `20-up.sh` | Bootstrap apply if no local state; persistent apply; render `cml.yml`; CML apply; wait for readiness; write `mcp-env/cml.env`; print URL, IP, and the `del.sh` command | Preflight marker older than this shell session; CML VM already exists |
 | `30-export-labs.sh` | Export every lab to YAML under `/data/exports/<UTC timestamp>/` via the CML API over SSH, copy that folder to the `exports` container with azcopy | API unreachable |
 | `40-down.sh` | Run export; stop all labs; run `/provision/del.sh` over SSH; `terraform destroy` in the submodule only | Deregistration fails, unless `--force-license` |

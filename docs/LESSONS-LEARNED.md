@@ -101,3 +101,15 @@ time to learn them.
 - Fix: `check_license` accepts both `REGISTERED` and `COMPLETED`. Record the
   real value on the first build (Task 21 step 4) and tighten the check once
   it is known.
+
+## The v5 family quota could not be raised above zero
+
+- Symptom: every quota request for `Standard EDSv5 Family vCPUs` in eastus2
+  came back "unsuccessful" from the portal's automatic approver, at 64 and
+  at 32, while the regional total was approved on the spot.
+- Cause: the subscription had every v5 family capped at zero in every
+  region checked, and newer families defaulted to 10. The automatic
+  approver will not lift a family from zero.
+- Fix: moved the default size to `Standard_E16ds_v6`, whose family started
+  at 10 and was approved to 64. That meant teaching the persistence hook
+  to find the data disk on the NVMe link as well as the SCSI one. ADR 0005.
