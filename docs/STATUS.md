@@ -60,7 +60,8 @@ paths work.
 4. Nexus is not on the server. The refplat selection is five small
    images on purpose. Adding `nxosv9000` means upload and a down and up
    cycle, which is item 3 anyway.
-5. Pick the certificate shape in `docs/ROADMAP.md` item 5 and spec it.
+5. Pick the certificate shape in `docs/ROADMAP.md` item 6 and spec it.
+   Leaning tunnel.
 
 ### Watch out for
 
