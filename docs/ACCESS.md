@@ -10,13 +10,14 @@ asks who you are, then forwards to the local nginx.
 Nothing in this repo needs any of this. The scripts, cml-mcp, the smoke
 test, and Terraform's readiness check all talk to the persistent public IP
 over 443 with certificate checks off, and they keep doing so after this
-procedure. This is a second front door for a browser.
+procedure. What you get here is a second way in, for a browser.
 
 ## When you want it
 
 - The browser warning bothers you. The controller serves a self-signed
   certificate and CML regenerates it on a timer, so installing a real one
-  on the box is fiddly. The front door sidesteps it.
+  on the box is fiddly. Going through the provider means you never have
+  to.
 - You are on a VPN whose exit addresses change. The NSG allow-list is
   still needed for SSH and for the scripts, but the browser path no
   longer depends on it. See LESSONS-LEARNED, "SSH to the host times out".
@@ -30,12 +31,13 @@ admits your own addresses.
 ## What runs where
 
 The Cloudflare connector, `cloudflared`, runs on the controller as a
-systemd service from Cloudflare's Debian package. It is outbound only, so
-no NSG rule and no firewalld rule change. It is not run as a container.
-CML 2.10 installs Docker for its own container-based lab nodes and
-manages that daemon through its docker shim, and a foreign container
-there would live inside CML's housekeeping. A systemd unit shares nothing
-with it.
+systemd service from Cloudflare's Debian package. It only ever dials
+out, so nothing changes in the NSG or in firewalld. It does not run as a
+container, even though Cloudflare offers one and the host has Docker. CML
+2.10 installs that Docker for its own container-based lab nodes and
+manages the daemon through its docker shim, so a foreign container would
+be living inside CML's housekeeping. A systemd unit has nothing to do
+with any of that.
 
 The controller is rebuilt every session, so the connector is reinstalled
 after each build. The tunnel itself, its hostname, and the Access policy
@@ -87,8 +89,9 @@ default and needs no identity provider. Save.
 
 ### 4. Install the connector on the controller
 
-Open a shell on the host. The sudo password is the sysadmin password from
-the persistent root; print it when the prompt asks, never anywhere else.
+Open a shell on the host. When sudo asks for a password, it wants the
+sysadmin password from the persistent root. Print that one only at the
+prompt.
 
     ssh -p 1122 -i keys/cml-lab sysadmin@<public ip>
 
@@ -102,13 +105,14 @@ install:
     sudo cloudflared service install "${CLOUDFLARE_TUNNEL_TOKEN}"
     systemctl is-active cloudflared
 
-The service holds the token in its unit file on the disposable VM. That
-is fine; the VM is gone at teardown.
+The service keeps the token in its unit file. That is on the disposable
+VM, which is gone at teardown, so it is fine.
 
 ### 5. Verify
 
 - The tunnel shows Healthy in the dashboard within a minute.
-- `dig +short lab.<zone>` returns Cloudflare addresses, not the lab IP.
+- `dig +short lab.<zone>` returns Cloudflare addresses. If it returns the
+  lab IP, the old A record is still there.
 - The browser gets the Access one-time PIN page, then the CML login, with
   a valid padlock and no warning.
 - Open a node console once a lab is running. Consoles use websockets and
@@ -121,17 +125,17 @@ repeat step 4 with the same token. Nothing in Cloudflare changes.
 
 ## Limits and what stays on the IP
 
-- Requests through Cloudflare's free plan are capped at 100 MB. Uploading
-  an image through the web UI goes over the IP, or over SCP, not through
-  the name.
+- The free plan caps a request at 100 MB, and a reference platform image
+  is several times that. Upload images over the IP or with SCP. The name
+  is for driving the lab, not for feeding it.
 - Keep `config/mcp-env/cml.env` pointing at the IP. Access would block
   cml-mcp at the name unless it carried a service token, and there is no
   reason to route it that way.
 - SSH on 1122 and Cockpit on 9090 stay on the IP behind the NSG. Cockpit
   can be published as a second hostname later if you want it behind
   Access too.
-- The NSG allow-list still gates SSH and the scripts. This procedure
-  removes the browser's dependence on it, not the scripts'.
+- The NSG allow-list still gates SSH and the scripts. Only the browser
+  stops caring about it.
 
 ## Undo
 
