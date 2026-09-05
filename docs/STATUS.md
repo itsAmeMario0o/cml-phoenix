@@ -3,12 +3,54 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
-## 2026-09-05
+## 2026-09-05, end of day
 
 ### Where things stand
 
-The controller has now been built, torn down, and rebuilt, and the smoke
-test is all green on the second host, 10 OK. Teardown released the
+No CML VM exists. The second teardown of the day finished at 23:30 UTC
+with the license released and thirteen resources destroyed. Only the
+persistent root is billing: the 512 GB data disk with six images on it,
+the static IP, and the storage account. The tunnel shows Down in
+Cloudflare until a connector runs again.
+
+Everything that was uncommitted an hour ago is committed. The fork carries
+the image copy fix at `fdf539c`, pushed to `azure-lab`, and this repo
+points at it from `00c83b1` together with the test that proves the logic
+on the Mac. That fix has never run on a real host. Proving it is the next
+command.
+
+### Pick up here
+
+1. `scripts/00-preflight.sh`. The marker from tonight will have expired.
+   Expect 45 OK. It also confirms the six images in blob.
+2. `ASSUME_YES=1 scripts/20-up.sh`. About ten minutes. Two things to
+   look for on the new host: the persistence log at
+   `/var/log/provision/05-persist-pre.log` should say "5 of 6 listed
+   images already there, copying: nxosv9300-10-6-2-f", and SSH should
+   just work, because the up script now forgets the old host key from
+   `keys/known_hosts` before it builds. If the persistence line still
+   says "emptying refplat image list", the build used a stale fork
+   checkout; check `git -C vendor/cloud-cml log -1` says `fdf539c`.
+3. `scripts/90-smoke-test.sh`, expect 10 OK, and the image count should
+   read 18 files.
+4. Reinstall the tunnel connector, step 4 of `docs/ACCESS.md`, token in
+   `config/mcp-env/cloudflare-tunnel.env`. Then refresh that token in the
+   Cloudflare dashboard, since it passed through a Claude session, update
+   the file, and run the install once more.
+5. Close the lesson "The rebuild keeps the images, but a new image never
+   arrives" with the real log line, and move Nexus on the roadmap to Done.
+6. A node console through the tunnel: create a one-router lab, start it,
+   open the console at `lab.rooez.com`. Last path never tried.
+7. Task 21, the seven verification steps. Most are done by the day's
+   events; tick them against the plan rather than repeating them.
+
+VPN on or off no longer matters for any of this. Both addresses are in
+tfvars and the build renders them.
+
+### Earlier the same day
+
+The controller was built, torn down, and rebuilt, and the smoke test was
+all green on the second host, 10 OK. Teardown released the
 license and the status went to `NOT_REGISTERED`, which is what the
 down script gates on. The rebuild found the data disk formatted,
 reused the 15 image files, and reached a ready API in under five
@@ -84,20 +126,6 @@ paths work.
 - First teardown and rebuild, VPN on for the teardown and off for the
   rebuild. Both worked. Host key handling fixed in the scripts with
   tests. The tunnel connector was reinstalled on the new host by hand.
-
-### Next, in order
-
-1. Land Nexus. The hook patch is written and tested in the fork's
-   working tree. Commit it there, push to `azure-lab`, bump the
-   submodule pointer with `tests/test_persist.sh`, then a down and up
-   cycle. The persistence log should say "5 of 6 listed images already
-   there, copying: nxosv9300-10-6-2-f".
-2. A node console through the tunnel, the one path never tried.
-3. Spec the post-build script, roadmap item 6, so the connector comes
-   back without hands.
-4. Task 21, the seven verification steps. Several are now done by
-   accident of today; tick them off against the plan.
-5. Refresh the tunnel token in Cloudflare and rerun the install.
 
 ### Watch out for
 
