@@ -211,3 +211,46 @@ time to learn them.
   memory that alone blew the 60 second MCP check. The second run is fast.
 - `git show` and `git log -p` open a pager. From an agent shell that pager
   waits forever on a terminal that is never coming. Use `--no-pager`.
+
+## After a rebuild every script that uses SSH fails with a changed host key
+
+- Symptom: the first teardown and rebuild on 2026-09-05 came up healthy,
+  but the smoke test lost every SSH check and a plain `ssh` printed the
+  "remote host identification has changed" banner.
+- Cause: a rebuilt controller generates new SSH host keys. The scripts
+  used `StrictHostKeyChecking=accept-new` against `~/.ssh/known_hosts`,
+  which trusts an unknown host but refuses a changed one. That is the
+  right instinct and the wrong file: the entry from the previous VM sat
+  there under the same address and port.
+- Fix: every SSH and SCP call shares `CML_SSH_OPTS` from `common.sh`,
+  which points at `keys/known_hosts`, gitignored beside the key pair.
+  `20-up.sh` runs `ssh-keygen -R` on that file before the CML apply, so
+  the first contact after a build pins the new key. Your own
+  `~/.ssh/known_hosts` still holds the old entry; clear it with
+  `ssh-keygen -R '[<ip>]:1122'` before you ssh by hand. Persisting the
+  host keys on the data disk would keep one identity across rebuilds and
+  is a fork patch for another day.
+
+## The rebuild keeps the images, but a new image never arrives
+
+- Symptom: `nxosv9000` was added to `config/refplat.txt` and uploaded
+  before the rebuild. The new host had the node definition and not the
+  image. The persistence log said "reusing 15 image files, emptying
+  refplat image list".
+- Cause: the fork's persistence hook is all or nothing. If the data disk
+  holds any images it empties the whole copy list, so cloud-cml copies
+  nothing. Definitions are a separate list and still copied, which is
+  why the yaml arrived alone.
+- Fix: pending, and it is a fork patch. The hook should drop only the
+  images whose directory already exists under `/data/images` and leave
+  the rest for cloud-cml to copy. Until then a new image needs either a
+  manual copy from blob onto the data disk or a wipe of the disk.
+
+## NVMe device names move between boots
+
+- Symptom: `/data` was `/dev/nvme0n2p1` on one boot and `/dev/nvme0n1p1`
+  on the next, on the same VM size with the same disk.
+- Cause: on v6 sizes the OS disk and the data disk both attach over NVMe
+  and the kernel numbers them in the order they answer.
+- Fix: nothing to do. The hook mounts through `/dev/disk/azure/data/by-lun/0`,
+  which followed the disk both times. Never hardcode an `nvme` path.

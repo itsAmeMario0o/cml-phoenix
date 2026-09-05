@@ -7,7 +7,21 @@ a new session.
 
 ### Where things stand
 
-The first CML controller from this repo is running and the smoke test is
+The controller has now been built, torn down, and rebuilt, and the smoke
+test is all green on the second host, 10 OK. Teardown released the
+license and the status went to `NOT_REGISTERED`, which is what the
+down script gates on. The rebuild found the data disk formatted,
+reused the 15 image files, and reached a ready API in under five
+minutes instead of thirteen. The NSG came back from tfvars with both
+address entries and the fork's plan is quiet. The persistent plan shows
+no changes. That is the persistence design proven end to end.
+
+Two things the cycle exposed, both in LESSONS-LEARNED. Host keys change
+on every rebuild and the scripts now keep them in a repo-local file.
+And the persistence hook skips every image when any exist, so Nexus
+did not land; that fix is a fork patch and still open.
+
+Earlier the same day, the first build. The smoke test was
 all green, 10 OK. `scripts/20-up.sh` took about 20 minutes and created 13
 resources. CML 2.10.0 build 13 sits at the persistent public IP, the API
 answers, cml-mcp lists labs, and the MCP env file is written. The 2.10
@@ -65,27 +79,25 @@ paths work.
 - Nexus 9300v 10.6.2 uploaded to blob, 2.8 GB, sixth line in
   `config/refplat.txt`. The upload script now ignores the add-on ISOs
   beside the base one, so the supplemental ISO can stay in `software/`.
+- First teardown and rebuild, VPN on for the teardown and off for the
+  rebuild. Both worked. Host key handling fixed in the scripts with
+  tests. The tunnel connector was reinstalled on the new host by hand.
 
 ### Next, in order
 
-1. The first teardown and rebuild, `40-down.sh` then `20-up.sh`. It
-   proves four things at once: teardown releases the license and shows
-   what the status string says afterwards; the new host keeps the 15
-   files on `/data` and pulls only Nexus from blob; the NSG comes back
-   from tfvars with both address entries; and the fork's plan goes quiet.
-   Check the home address first, it is a residential dynamic IP.
-2. Reinstall the tunnel connector on the new host, step 4 of
-   `docs/ACCESS.md`, same token. The tunnel shows Down until then.
-3. A node console through the tunnel, the one path never tried. Needs a
-   lab to exist, so it comes right after the rebuild.
-4. Spec the post-build script, roadmap item 6, so step 2 stops being a
-   thing anyone types.
-5. Task 21, the seven verification steps.
+1. Fork patch: the persistence hook copies only the images missing from
+   the data disk. Then a down and up cycle to land Nexus. Needs a human
+   for the vendor edit and the submodule bump.
+2. A node console through the tunnel, the one path never tried.
+3. Spec the post-build script, roadmap item 6, so the connector comes
+   back without hands.
+4. Task 21, the seven verification steps. Several are now done by
+   accident of today; tick them off against the plan.
+5. Refresh the tunnel token in Cloudflare and rerun the install.
 
 ### Watch out for
 
-- The NSG dies with the VM. The CLI patch is gone after the first
-  teardown; tfvars is what comes back.
+- The NSG dies with the VM and comes back from tfvars. Proven today.
 - The exit pool inside `151.186.182.0/24` rotates per connection. Never
   narrow that entry to a /32.
 - The home address is a residential dynamic IP and will change.
