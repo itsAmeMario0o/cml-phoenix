@@ -71,9 +71,11 @@ paths work.
    `20-up.sh` cycle doubles as the persistence test if `/data` keeps its
    15 files and the second boot skips the copy. It also shows what the
    license reports after deregistration.
-4. Nexus is not on the server. The refplat selection is five small
-   images on purpose. Adding `nxosv9000` means upload and a down and up
-   cycle, which is item 3 anyway.
+4. Nexus 9300v 10.6.2 is in blob as of the evening of 2026-09-05, 2.8 GB,
+   sixth line in `config/refplat.txt`. It reaches the server at the next
+   build, which is item 3. The upload script now ignores the add-on
+   ISOs beside the base one, so the supplemental ISO can stay in
+   `software/`.
 5. Done by hand on 2026-09-05. Spec the post-build script, roadmap
    item 6, so the next rebuild does not need step 4 typed in.
 
