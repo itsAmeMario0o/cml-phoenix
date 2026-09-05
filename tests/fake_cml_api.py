@@ -27,7 +27,7 @@ def _default_labs() -> dict:
 
 STATE: dict = {
     "labs": _default_labs() if os.environ.get("FAKE_LABS") != "0" else {},
-    "registration": "REGISTERED",
+    "registration": os.environ.get("FAKE_REGISTRATION", "REGISTERED"),
     "deregister_fails": os.environ.get("FAKE_DEREGISTER_FAILS") == "1",
 }
 

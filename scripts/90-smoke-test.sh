@@ -71,7 +71,9 @@ check_data_disk_on_host() {
   else
     miss "/var/lib/libvirt/images is not a bind mount (findmnt says '${bound}')"
   fi
-  count="$(cml_ssh "find /data/images -type f 2>/dev/null | wc -l" 2>/dev/null | tr -d ' ' || echo 0)"
+  # /data/images itself is virl2 0711, so sysadmin cannot list it. The two
+  # directories below it are 0755, so count there.
+  count="$(cml_ssh "find /data/images/virl-base-images /data/images/node-definitions -type f 2>/dev/null | wc -l" 2>/dev/null | tr -d ' ' || echo 0)"
   if [[ "${count:-0}" -gt 0 ]]; then
     pass "/data/images holds ${count} files"
   else

@@ -8,6 +8,7 @@ TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
 PORT=18001
 PORT_DEREGISTER_FAILS=18002
 PORT_NO_LABS=18003
+PORT_COMPLETED=18004
 failures=0
 
 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT}" &
@@ -16,7 +17,9 @@ FAKE_DEREGISTER_FAILS=1 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT_DER
 API_PID_DEREGISTER_FAILS=$!
 FAKE_LABS=0 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT_NO_LABS}" &
 API_PID_NO_LABS=$!
-trap 'kill "${API_PID}" "${API_PID_DEREGISTER_FAILS}" "${API_PID_NO_LABS}" 2>/dev/null || true; rm -rf "${TMP}"' EXIT
+FAKE_REGISTRATION=COMPLETED FAKE_DEREGISTER_FAILS=1 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT_COMPLETED}" &
+API_PID_COMPLETED=$!
+trap 'kill "${API_PID}" "${API_PID_DEREGISTER_FAILS}" "${API_PID_NO_LABS}" "${API_PID_COMPLETED}" 2>/dev/null || true; rm -rf "${TMP}"' EXIT
 sleep 1
 
 printf 'CFG_APP_USER="admin"\nCFG_APP_PASS="secret"\n' > "${TMP}/vars.sh"
@@ -54,6 +57,12 @@ rc=0
 out="$(CML_API="http://127.0.0.1:${PORT_DEREGISTER_FAILS}/api/v0" bash "${SCRIPT}" deregister)" || rc=$?
 assert_eq "deregister failure exits 1" "1" "${rc}"
 assert_eq "deregister failure prints REGISTERED" "REGISTERED" "${out}"
+
+# A real 2.10 controller reports COMPLETED once licensed, seen 2026-09-05.
+rc=0
+out="$(CML_API="http://127.0.0.1:${PORT_COMPLETED}/api/v0" bash "${SCRIPT}" deregister)" || rc=$?
+assert_eq "still COMPLETED after deregister exits 1" "1" "${rc}"
+assert_eq "still COMPLETED prints COMPLETED" "COMPLETED" "${out}"
 
 out="$(CML_API="http://127.0.0.1:${PORT_NO_LABS}/api/v0" bash "${SCRIPT}" list-labs)"
 assert_eq "list-labs with no labs is empty" "" "${out}"

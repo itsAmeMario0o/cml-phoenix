@@ -10,7 +10,7 @@
 #   export-labs DIR    writes <slug>-<id>.yaml, prints "exported N labs to DIR"
 #   stop-labs          stops labs not STOPPED, prints "stopped N labs"
 #   license-status     prints registration.status
-#   deregister         deregisters, prints new status, exit 1 if still REGISTERED
+#   deregister         deregisters, prints new status, exit 1 if still REGISTERED or COMPLETED
 #
 # Overrides for tests: CML_API, VARS_FILE. Needs curl and jq, both present on
 # a cloud-cml host. Stays bash 3.2 compatible so tests run on the Mac.
@@ -111,7 +111,9 @@ cmd_deregister() {
   api DELETE /licensing/deregistration > /dev/null || true
   status="$(cmd_license_status)"
   echo "${status}"
-  [[ "${status}" != "REGISTERED" ]]
+  # A real controller says COMPLETED once licensed, not REGISTERED.
+  # Both mean the license is still held. Seen on 2026-09-05.
+  [[ "${status}" != "REGISTERED" && "${status}" != "COMPLETED" ]]
 }
 
 main() {
