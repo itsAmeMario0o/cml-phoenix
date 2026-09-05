@@ -45,5 +45,17 @@ out="$(env ${common} bash "${SCRIPT}" --dry-run 2>&1)" || rc=$?
 assert_eq "missing image exits 1" "1" "${rc}"
 assert_contains "missing image reported" "[FAIL]  image nxosv9300-10-5-3-f not on the ISO" "${out}"
 
+# Real mode with a stub azcopy that reads stdin, as the real one does. The
+# upload loop reads refplat.txt on stdin, so an azcopy that consumes it ends
+# the loop after the first image. Two images plus the package is five calls.
+printf 'alpine alpine-base-3-21-3\niosv iosv-159-3-m10\n' > "${TMP}/refplat.txt"
+mkdir -p "${TMP}/bin"
+printf '#!/bin/sh\ncat >/dev/null\necho "stub azcopy $*"\n' > "${TMP}/bin/azcopy"
+chmod +x "${TMP}/bin/azcopy"
+# shellcheck disable=SC2086
+out="$(PATH="${TMP}/bin:${PATH}" env ${common} bash "${SCRIPT}" 2>&1)"; rc=$?
+assert_eq "real mode exits 0" "0" "${rc}"
+assert_eq "every image is uploaded even though azcopy reads stdin" "5" "$(grep -c '^stub azcopy' <<<"${out}")"
+
 if [[ "${failures}" -gt 0 ]]; then echo "test_upload_dry_run: ${failures} failure(s)"; exit 1; fi
 echo "test_upload_dry_run: all passed"

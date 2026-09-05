@@ -102,10 +102,13 @@ upload_all() {
     return 0
   fi
   run azcopy copy "${CML_SOFTWARE_DIR}/${pkg}" "${base}/${pkg}" --overwrite=false
+  # azcopy reads stdin, and this loop's stdin is the refplat file. Without the
+  # redirect the first azcopy call swallows the rest of the list and the loop
+  # ends after one image while the script still reports success.
   while read -r def img || [[ -n "${def}" ]]; do
     [[ -z "${def}" || "${def}" == \#* ]] && continue
-    run azcopy copy "${REFPLAT_DIR}/node-definitions/${def}.yaml" "${base}/refplat/node-definitions/${def}.yaml" --overwrite=false
-    run azcopy copy "${REFPLAT_DIR}/virl-base-images/${img}" "${base}/refplat/virl-base-images/" --recursive --overwrite=false
+    run azcopy copy "${REFPLAT_DIR}/node-definitions/${def}.yaml" "${base}/refplat/node-definitions/${def}.yaml" --overwrite=false </dev/null
+    run azcopy copy "${REFPLAT_DIR}/virl-base-images/${img}" "${base}/refplat/virl-base-images/" --recursive --overwrite=false </dev/null
   done < "${REFPLAT_FILE}"
   pass "uploads issued to ${base}"
 }

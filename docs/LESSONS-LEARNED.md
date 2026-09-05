@@ -130,3 +130,18 @@ time to learn them.
   it, per CLAUDE.md), then plan, which showed only the three resources that
   never ran, then apply. The random suffix was already in state, so the
   name matched. Total cost: five minutes.
+
+## The upload script stopped after the first image and reported success
+
+- Symptom: `10-upload-images.sh` printed 11 OK and exited 0, but the blob
+  container held the package, alpine, and nothing else. Preflight then
+  failed on eight missing blobs.
+- Cause: the upload loop is `while read ... done < refplat.txt`, and azcopy
+  reads standard input. The first azcopy call inherited the loop's stdin
+  and consumed the rest of the file, so the loop ended after one image.
+  The dry run never hit it because the echo stand-in ignores stdin, and
+  the dry-run tests were the only tests.
+- Fix: `</dev/null` on both azcopy calls inside the loop, and a real-mode
+  test with a stub azcopy that drains stdin, asserting five calls for two
+  images. Any command run inside a `while read` loop over a file needs the
+  same redirect unless it is known not to touch stdin.
