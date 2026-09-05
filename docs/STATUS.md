@@ -50,6 +50,9 @@ paths work.
   Decision: Debian package as a systemd unit, not a container, because
   CML runs Docker for its own container nodes. Linked from the
   prerequisites, the README, and the roadmap.
+- cloudflared 2026.8.3 installed on the controller from the Mac over
+  SSH, token from the gitignored env file. Four connections registered.
+  The Cloudflare side, hostname and Access, was still open at handoff.
 
 ### Next, in order
 

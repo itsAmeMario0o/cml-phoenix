@@ -105,12 +105,16 @@ install:
     sudo cloudflared service install "${CLOUDFLARE_TUNNEL_TOKEN}"
     systemctl is-active cloudflared
 
-The service keeps the token in its unit file. That is on the disposable
-VM, which is gone at teardown, so it is fine.
+The service keeps the token in `/etc/cloudflared/token`, root only. That
+is on the disposable VM, which is gone at teardown, so it is fine. The
+journal shows two warnings about ping groups and an ICMP proxy at
+start. Ignore them; the tunnel carries HTTPS, not ping. The line to
+look for is "Registered tunnel connection", four times.
 
 ### 5. Verify
 
-- The tunnel shows Healthy in the dashboard within a minute.
+- The tunnel shows Healthy in the dashboard within a minute. If the
+  journal says "No ingress rules were defined", step 2 was not saved.
 - `dig +short lab.<zone>` returns Cloudflare addresses. If it returns the
   lab IP, the old A record is still there.
 - The browser gets the Access one-time PIN page, then the CML login, with
