@@ -51,8 +51,11 @@ free plan. Both are attached to the same Cloudflare login.
 
 ### 1. Create the tunnel
 
-In the Zero Trust dashboard go to Networks, Tunnels, Create a tunnel,
-choose Cloudflared, and name it, for example `cml-lab`. On the install
+In the Zero Trust dashboard go to Networks, then Tunnels & Mesh, and
+create a tunnel of type cloudflared named, for example, `cml-lab`.
+Cloudflare renames these menus now and then; in September 2026 the
+tunnel page has tabs Overview, CIDR routes, Hostname routes, Published
+application routes, and Live logs. On the install
 page pick Debian, 64-bit. The command it shows ends in a long token after
 `service install`. Copy only the token.
 
@@ -66,7 +69,8 @@ into a tracked file, a commit message, or a chat.
 
 ### 2. Point the tunnel at CML
 
-Still in the tunnel, open Public Hostname and add one:
+Still in the tunnel, open the Published application routes tab, which
+older layouts called Public Hostname, and add one:
 
 | Field | Value |
 |---|---|
@@ -82,7 +86,8 @@ with that name already exists, delete it first, or the save fails.
 
 ### 3. Put a login in front
 
-Zero Trust, Access, Applications, Add an application, Self-hosted. Name
+Zero Trust, Access controls, Applications, Add an application,
+Self-hosted. Name
 it, set the domain to the same name, and add an Allow policy whose
 include rule is your email address. One-time PIN to that address is on by
 default and needs no identity provider. Save.
@@ -113,7 +118,8 @@ look for is "Registered tunnel connection", four times.
 
 ### 5. Verify
 
-- The tunnel shows Healthy in the dashboard within a minute. If the
+- The tunnel Overview shows Healthy, and its Connectors list shows
+  `cml-controller` as Connected with the lab's public IP as origin. If the
   journal says "No ingress rules were defined", step 2 was not saved.
 - `dig +short lab.<zone>` returns Cloudflare addresses. If it returns the
   lab IP, the old A record is still there.
