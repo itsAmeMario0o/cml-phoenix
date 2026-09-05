@@ -79,15 +79,19 @@ paths work.
 - Nexus 9300v 10.6.2 uploaded to blob, 2.8 GB, sixth line in
   `config/refplat.txt`. The upload script now ignores the add-on ISOs
   beside the base one, so the supplemental ISO can stay in `software/`.
+- Fork patch for the image copy, 21 lines in the persistence hook plus
+  one test case. Tested on the Mac, shellcheck clean, awaiting the commit.
 - First teardown and rebuild, VPN on for the teardown and off for the
   rebuild. Both worked. Host key handling fixed in the scripts with
   tests. The tunnel connector was reinstalled on the new host by hand.
 
 ### Next, in order
 
-1. Fork patch: the persistence hook copies only the images missing from
-   the data disk. Then a down and up cycle to land Nexus. Needs a human
-   for the vendor edit and the submodule bump.
+1. Land Nexus. The hook patch is written and tested in the fork's
+   working tree. Commit it there, push to `azure-lab`, bump the
+   submodule pointer with `tests/test_persist.sh`, then a down and up
+   cycle. The persistence log should say "5 of 6 listed images already
+   there, copying: nxosv9300-10-6-2-f".
 2. A node console through the tunnel, the one path never tried.
 3. Spec the post-build script, roadmap item 6, so the connector comes
    back without hands.

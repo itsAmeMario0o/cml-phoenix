@@ -241,10 +241,11 @@ time to learn them.
   holds any images it empties the whole copy list, so cloud-cml copies
   nothing. Definitions are a separate list and still copied, which is
   why the yaml arrived alone.
-- Fix: pending, and it is a fork patch. The hook should drop only the
-  images whose directory already exists under `/data/images` and leave
-  the rest for cloud-cml to copy. Until then a new image needs either a
-  manual copy from blob onto the data disk or a wipe of the disk.
+- Fix: the hook now drops only the images whose directory already exists
+  under `/data/images` and leaves the rest on the list for cloud-cml to
+  copy. It logs how many were there and which ones it is fetching.
+  Written and tested on 2026-09-05; the fork commit and pointer bump
+  are a human's step and the log line on the next build is the proof.
 
 ## NVMe device names move between boots
 
