@@ -101,7 +101,7 @@ upload_all() {
     miss "package ${CML_SOFTWARE_DIR}/${pkg} missing"
     return 0
   fi
-  run azcopy copy "${CML_SOFTWARE_DIR}/${pkg}" "${base}/${pkg}" --overwrite=false
+  run azcopy copy "${CML_SOFTWARE_DIR}/${pkg}" "${base}/${pkg}" --overwrite=false </dev/null
   # azcopy reads stdin, and this loop's stdin is the refplat file. Without the
   # redirect the first azcopy call swallows the rest of the list and the loop
   # ends after one image while the script still reports success.
