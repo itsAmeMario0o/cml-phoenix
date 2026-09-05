@@ -14,10 +14,10 @@ license_flavor = "CML_Personal"
 license_nodes = 0
 
 # Your public IP as /32. `curl -4 ifconfig.me`. Never 0.0.0.0/0.
-# On a VPN with a web proxy the Mac can have two addresses: the proxy
-# one for 80 and 443, and a NAT one for SSH and everything else. Compare
-# `curl -4 ifconfig.me` with `dig +short myip.opendns.com
-# @resolver1.opendns.com`. If they differ, list both. See LESSONS-LEARNED.
+# Turn the VPN off before you run that, or the answer is the VPN's web
+# proxy and SSH will never get in. If the lab must be reached from the
+# VPN, add its exit block as well, for example 151.186.182.0/24 for
+# Cisco Secure Client. See LESSONS-LEARNED, "SSH to the host times out".
 allowed_ipv4_subnets_mgmt = ["203.0.113.10/32"]
 allowed_ipv4_subnets_cml2 = ["203.0.113.10/32"]
 

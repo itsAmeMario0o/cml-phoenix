@@ -96,11 +96,12 @@ time to learn them.
 
 - Symptom: the smoke test may fail on a healthy build.
 - Cause: the exact `registration.status` value a real CML controller reports
-  once licensed has never been observed; the design assumed `REGISTERED`,
-  but a real build may report `COMPLETED` instead.
-- Fix: `check_license` accepts both `REGISTERED` and `COMPLETED`. Record the
-  real value on the first build (Task 21 step 4) and tighten the check once
-  it is known.
+  once licensed had never been observed; the design assumed `REGISTERED`.
+- Fix: seen on 2026-09-05 on a real 2.10 controller: `COMPLETED`. The smoke
+  test accepts it, and the remote library's deregister now treats
+  `COMPLETED` as still licensed too. What a controller reports after a
+  successful deregister is still unobserved; the down script gates on
+  `NOT_REGISTERED` and the first teardown will confirm or correct that.
 
 ## The v5 family quota could not be raised above zero
 
@@ -153,22 +154,26 @@ time to learn them.
   test failed. Ports 22, 1122, and 9090 timed out from the Mac. The host
   was listening on 1122, firewalld allowed it, and sshd logged no
   connection attempts at all, so the drop was at the NSG.
-- Cause: the Mac was on a corporate VPN with a web proxy. Ports 80 and 443
-  leave through the proxy and show one public address. Everything else,
-  SSH and DNS included, leaves through plain NAT and shows a different
-  one. `curl -4 ifconfig.me` only reports the proxy address, and that is
-  the one that went into the allow-lists. With the VPN off there is a
-  single address and none of this happens.
-- Fix: put both addresses in `allowed_ipv4_subnets_mgmt` and
-  `allowed_ipv4_subnets_cml2`. Find the NAT address with
-  `dig +short myip.opendns.com @resolver1.opendns.com` and the proxy
-  address with `curl -4 ifconfig.me`. If they differ, the VPN is doing
-  this. The allow-lists are baked into the VM's cloud-init data, so
-  changing them through Terraform replaces the VM. On a running host, patch
-  the two NSG rules with `az network nsg rule update` and let the next
-  rebuild catch up. Decide before the build whether the lab needs to be
-  reached from the VPN, for example to pair it with VPN-only resources, and
-  fill the lists accordingly.
+- Cause: the Mac was on Cisco Secure Client. That VPN splits traffic three
+  ways and each way shows Azure a different address. Ports 80 and 443 go
+  through the Umbrella web gateway and arrive from one address, which is
+  the only one `curl -4 ifconfig.me` can ever report, because it is a web
+  request. DNS goes through the Umbrella agent straight from the Mac and
+  shows the home address, so `dig myip.opendns.com` measures nothing
+  useful. Everything else, SSH included, rides the AnyConnect tunnel to a
+  headend in AWS and leaves from a pool of exit addresses inside
+  151.186.182.0/24 that changes per connection. Four different addresses
+  turned up in one afternoon. The allow-lists had only the web gateway
+  address, so the browser got in and SSH did not. With the VPN off there
+  is a single home address and none of this happens.
+- Fix: for VPN use, the allow-lists carry the whole exit block
+  `151.186.182.0/24` plus the home address as a /32. A single /32 from
+  the pool breaks on the next connection. The only reliable way to see
+  which address SSH arrives from is to let one connection through and
+  read `$SSH_CONNECTION` on the host, or the sshd journal. Decide before
+  the build whether the lab must be reachable from the VPN, for example to
+  pair it with VPN-only resources, and fill the lists accordingly. If the
+  VPN is off, the home /32 alone is enough.
 
 ## tests/run.sh hangs forever in the upload test
 
@@ -181,3 +186,28 @@ time to learn them.
   runner that keeps stdin open and idle, `cat` waits forever.
 - Fix: the package copy gets `</dev/null` like the other two. Anything that
   runs azcopy should never inherit stdin.
+
+## Small things the first build taught, none of them fatal
+
+- The NSG belongs to the disposable root. It is created by the fork with
+  the VM and destroyed with it. A rule patched by hand with `az network
+  nsg rule update` lasts until the next `40-down.sh` and no longer. The
+  tfvars allow-lists are the only thing that survives, so change them
+  first and treat the CLI patch as a bridge.
+- The allow-lists also live inside the VM's cloud-init data, so changing
+  them in Terraform replaces the VM. Do not try to fix access with a
+  fork apply on a running host. The fork's plan will show "must be
+  replaced" until the next rebuild renders the new lists. That is expected.
+- The public IP is meant to be permanent. It is a static Standard SKU
+  address in the persistent root, so DNS records and the MCP env file stay
+  valid across rebuilds. Teardown never touches it. It costs about four
+  dollars a month while idle. A dynamic address would mean editing DNS
+  after every build, which is the thing the persistent root exists to
+  avoid.
+- `/data/images` is owned by `virl2` with mode 0711. `sysadmin` can pass
+  through it but cannot list it. Count files in the two 0755 directories
+  below it instead.
+- First runs of `uvx cml-mcp` install 73 packages. On a Mac short of
+  memory that alone blew the 60 second MCP check. The second run is fast.
+- `git show` and `git log -p` open a pager. From an agent shell that pager
+  waits forever on a terminal that is never coming. Use `--no-pager`.

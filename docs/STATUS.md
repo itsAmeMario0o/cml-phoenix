@@ -7,54 +7,60 @@ a new session.
 
 ### Where things stand
 
-The first CML controller from this repo is running. `scripts/20-up.sh`
-finished in about 20 minutes, 13 resources, CML 2.10.0 build 13 at the
-persistent public IP, API answering, MCP env file written. The 2.10
+The first CML controller from this repo is running and the smoke test is
+all green, 10 OK. `scripts/20-up.sh` took about 20 minutes and created 13
+resources. CML 2.10.0 build 13 sits at the persistent public IP, the API
+answers, cml-mcp lists labs, and the MCP env file is written. The 2.10
 package installed under the 2.9.0 fork without complaint. The persistence
 hook found the data disk on the NVMe by-lun link, formatted it, mounted
-`/data`, and copied all 15 image files. Both risks from the 2026-09-04
-handoff are closed.
+`/data`, and copied all 15 image files. The license registered and reports
+`COMPLETED`, the first time that string has been seen for real. Both open
+risks from the 2026-09-04 handoff are closed.
 
-The smoke test came back 4 OK and 6 FAIL. One failure was cml-mcp timing
-out on its first-run package install and it passes on a rerun. The other
-five all ran over SSH, and SSH cannot reach the host from this Mac while
-the VPN is on. See LESSONS-LEARNED, "SSH to the host times out". The host
-side is fine, verified through `az vm run-command`. Fixing it through
-Terraform would replace the VM, so nothing has been applied.
+Getting SSH to work took most of the afternoon. The Mac was on Cisco
+Secure Client, which shows Azure three different source addresses
+depending on the port. See LESSONS-LEARNED, "SSH to the host times out".
+The two NSG rules were patched by CLI to admit `151.186.182.0/24` and the
+home /32. `config/cml.tfvars` and the rendered `cml.yml` carry the same
+lists, so the next build renders them into the VM. Until then the fork's
+plan shows the VM as "must be replaced". Do not apply it.
 
-`config/cml.tfvars` now carries both of the Mac's public addresses. The
-deployed NSG rules still carry only the proxy one, so until the next
-rebuild or a manual NSG patch, the web UI and API work from the VPN and
-SSH does not. With the VPN off, nothing reaches the lab, because the NAT
-address is not in the deployed rules at all.
+The lab is being used from the VPN on purpose, to pair it with VPN-only
+resources later. Off the VPN, the home /32 is already allowed, so both
+paths work.
 
 ### Done today
 
 - First real build. VM `cml-controller`, E16ds_v6, in `rg-cml-lab`.
-- Verified on the host: sshd on 1122, firewalld allows it, `/data` on
-  `nvme0n1p1`, bind mount active, cloud-init done.
-- Diagnosed the two-address VPN problem. Lessons entry, tfvars comment.
-- Preflight 43 OK and persistent plan clean before the build.
-- The upload script's package copy now redirects stdin. Without it the
-  test suite hangs when stdin is open and idle. Lessons entry.
+- Diagnosed the three-path VPN problem and patched both NSG rules.
+- Smoke test fix: count images in the listable subdirectories, because
+  `/data/images` itself is 0711.
+- Remote library: deregister treats `COMPLETED` as still licensed. Test
+  added with a fake controller that reports it.
+- Upload script: the package copy redirects stdin. Without that the test
+  suite hangs from any runner that keeps stdin open.
+- Three lessons entries and the tfvars example comment.
 
 ### Next, in order
 
-1. Decide VPN or not for this lab, then make the NSG match. Either patch
-   the two rules by CLI now, or rebuild through 40-down and 20-up so the
-   new tfvars render into the VM.
-2. `scripts/90-smoke-test.sh` all green, including the license status,
-   which has still never been seen on a real controller.
-3. Task 21, the seven verification steps. The rebuild in step 1 doubles as
-   the persistence test if `/data` keeps its images.
-4. A DNS name in Cloudflare for the public IP, DNS only, no proxy.
+1. Web UI check by hand: log in, confirm the five image definitions show
+   under Tools, Node and Image Definitions.
+2. A DNS name in Cloudflare for the public IP. DNS only, grey cloud. A
+   proxied record arrives from Cloudflare's addresses and the NSG drops it.
+3. Task 21, the seven verification steps. The first `40-down.sh` and
+   `20-up.sh` cycle doubles as the persistence test if `/data` keeps its
+   15 files and the second boot skips the copy. It also shows what the
+   license reports after deregistration.
+4. Decide whether the exit block belongs in the tfvars example as a
+   worked VPN case.
 
 ### Watch out for
 
-- The fork's `terraform plan` shows the VM as "must be replaced" until the
-  deployed allow-lists and `config/cml.yml` agree. Do not apply the fork
-  root by hand to fix SSH; that is a 20 minute rebuild.
-- The NAT address is a residential dynamic IP and will change.
+- The NSG dies with the VM. The CLI patch is gone after the first
+  teardown; tfvars is what comes back.
+- The exit pool inside `151.186.182.0/24` rotates per connection. Never
+  narrow that entry to a /32.
+- The home address is a residential dynamic IP and will change.
 - The Mac ran out of memory twice today and killed background Terraform
   runs. Quit Office and the browser before a build.
 
