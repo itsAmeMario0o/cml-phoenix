@@ -49,7 +49,10 @@ an item gets a spec, link it and move the item to the bottom under Done.
    is `docs/ACCESS.md`. What remains is a script that runs after the
    readiness wait in `20-up.sh`, reads the token from the gitignored env
    file, and installs the connector over SSH, so a rebuild needs no hands.
-   It needs a spec and an ADR but no fork patch.
+   It needs a spec and an ADR but no fork patch. Upstream cloud-cml also
+   ships a Let's Encrypt hook, `03-letsencrypt.sh`, unused here. If a real
+   certificate on the box ever matters, for the API through the name,
+   start there rather than from scratch.
 7. Lab repositories. CML pulls lab YAML from a git repo. A personal
    topology repo registered on every build through the API, so labs
    import on day one. Public repo to avoid a credential on the
@@ -74,7 +77,10 @@ an item gets a spec, link it and move the item to the bottom under Done.
     the checksums, and pushes only what the library lacks. The refplat
     selection stays the single input. The persistence hook's successor,
     an `azcopy sync` from the library onto the data disk at build time,
-    belongs to the same item.
+    belongs to the same item. The other way to retire the hook's copy
+    logic is upstream: a skip-existing option on cloud-cml's copy
+    routine, off by default, offered as a pull request to CiscoDevNet.
+    Slow, and the only option that makes the fork smaller.
 
 ## From the design spec, still deferred
 
