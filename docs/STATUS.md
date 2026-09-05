@@ -36,11 +36,12 @@ at `0134c7e` for that work.
    values recorded in the 2026-09-04 session.
 2. Done. Four of five image names had moved; `config/refplat.txt` now
    matches the April 2026 ISO.
-3. License is in the Smart Account. Generate the token and put it into
-   `config/cml.tfvars` (copy the example first), plus your
-   public IP as a `/32` in both allowed-subnet lists and
-   `ARM_SUBSCRIPTION_ID` in the shell profile.
-4. `scripts/00-preflight.sh` until only the blob checks fail.
+3. Done. `config/cml.tfvars` exists with the Enterprise flavor, 20 nodes,
+   the token, and the public IP in both lists. Still owed:
+   `ARM_SUBSCRIPTION_ID` in the shell profile. Preflight was run with it
+   supplied inline.
+4. Done. Preflight on 2026-09-04 evening: 31 OK, 1 WARN (blob checks
+   skipped, persistent root not applied), 0 FAIL.
 5. The persistent apply. A human says go, because the disk bills from
    creation. Then `scripts/10-upload-images.sh`.
 6. Preflight fully green, then `scripts/20-up.sh` to a running CML, then
