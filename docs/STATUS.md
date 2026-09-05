@@ -46,9 +46,13 @@ at `0134c7e` for that work.
    resources, `rg-cml-lab`, storage account `stcmllabwqspyl`, and a plan
    shows no changes. The apply failed once on the storage account with a
    409 and needed one import; see LESSONS-LEARNED. The 512 GB disk bills
-   from now. Image upload started right after.
-6. Preflight fully green, then `scripts/20-up.sh` to a running CML, then
-   plan Task 21.
+   from now.
+6. Done. The package and the five images are in the `cml` container, 16
+   blobs and 2.8 GB. The first upload run silently stopped after one image
+   because azcopy ate the loop's stdin; fixed and tested, see
+   LESSONS-LEARNED. Preflight: 43 OK, 0 WARN, 0 FAIL.
+7. `scripts/20-up.sh` to a running CML. A human says go. Then plan
+   Task 21, the seven verification steps.
 
 ### Watch out for
 
