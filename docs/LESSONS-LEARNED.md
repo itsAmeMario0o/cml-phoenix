@@ -113,3 +113,20 @@ time to learn them.
 - Fix: moved the default size to `Standard_E16ds_v6`, whose family started
   at 10 and was approved to 64. That meant teaching the persistence hook
   to find the data disk on the NVMe link as well as the SCSI one. ADR 0005.
+
+## The persistent apply died on the storage account with a 409
+
+- Symptom: `terraform apply` on the persistent root created 15 of 19
+  resources, then failed on the storage account with
+  `StorageAccountOperationInProgress: An operation is currently performing
+  on this storage account that requires exclusive access`. The account
+  existed in Azure a moment later, state Succeeded, but not in Terraform
+  state.
+- Cause: Azure accepted the create and the azurerm provider's immediate
+  follow-up call hit the account while Azure still held its provisioning
+  lock. The provider treats the 409 as a failed create, so the resource
+  never lands in state, and a re-run would refuse with "already exists".
+- Fix: `terraform import azurerm_storage_account.lab <id>` (a human runs
+  it, per CLAUDE.md), then plan, which showed only the three resources that
+  never ran, then apply. The random suffix was already in state, so the
+  name matched. Total cost: five minutes.

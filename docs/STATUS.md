@@ -42,8 +42,11 @@ at `0134c7e` for that work.
    supplied inline.
 4. Done. Preflight on 2026-09-04 evening: 31 OK, 1 WARN (blob checks
    skipped, persistent root not applied), 0 FAIL.
-5. The persistent apply. A human says go, because the disk bills from
-   creation. Then `scripts/10-upload-images.sh`.
+5. Done 2026-09-04 evening. `terraform/persistent` is applied: 19
+   resources, `rg-cml-lab`, storage account `stcmllabwqspyl`, and a plan
+   shows no changes. The apply failed once on the storage account with a
+   409 and needed one import; see LESSONS-LEARNED. The 512 GB disk bills
+   from now. Image upload started right after.
 6. Preflight fully green, then `scripts/20-up.sh` to a running CML, then
    plan Task 21.
 
