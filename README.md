@@ -42,4 +42,6 @@ Start with `docs/PREREQUISITES.md`. It lists what only you can provide,
 mostly a license and two Cisco downloads. `docs/STATUS.md` says where
 things stand today. `CLAUDE.md` has the rules for working in the repo,
 `docs/superpowers/specs/` has the design, and `docs/decisions/` explains
-why it is built this way.
+why it is built this way. `docs/ACCESS.md` is optional: a name and a
+trusted certificate for the web UI through a zero trust front door.
+`docs/ROADMAP.md` lists what is agreed but not yet specified.

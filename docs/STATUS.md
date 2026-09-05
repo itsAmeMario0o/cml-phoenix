@@ -46,6 +46,10 @@ paths work.
 - `docs/ROADMAP.md` created. Terminal UI, credential wizard, lab
   calculator, free certificate, lab repositories, Nexus, AWS port.
 - A DNS name `lab.rooez.com` points at the public IP, DNS only.
+- `docs/ACCESS.md`: the Cloudflare Tunnel procedure, by hand for now.
+  Decision: Debian package as a systemd unit, not a container, because
+  CML runs Docker for its own container nodes. Linked from the
+  prerequisites, the README, and the roadmap.
 
 ### Next, in order
 
@@ -60,8 +64,8 @@ paths work.
 4. Nexus is not on the server. The refplat selection is five small
    images on purpose. Adding `nxosv9000` means upload and a down and up
    cycle, which is item 3 anyway.
-5. Pick the certificate shape in `docs/ROADMAP.md` item 6 and spec it.
-   Leaning tunnel.
+5. Walk `docs/ACCESS.md` once by hand. Then spec the post-build script,
+   roadmap item 6.
 
 ### Watch out for
 

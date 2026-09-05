@@ -41,16 +41,14 @@ an item gets a spec, link it and move the item to the bottom under Done.
 
 ## Access and trust
 
-6. A trusted certificate for the web UI, at no cost. Two shapes, both
-   free. Let's Encrypt through the Cloudflare DNS challenge, with the
-   cert cached on the Mac and the data disk and installed on the
-   controller after each build. Or a Cloudflare Tunnel from the
-   controller, which gives a valid cert and an Access login with no
-   inbound rule at all, at the price of Cloudflare sitting in the browser
-   path. The scripts, cml-mcp, and the smoke test keep talking to the IP
-   either way. Decide in the spec. The controller is stock Ubuntu under CML, so
-   an agent on it is ordinary; install it from the Mac over SSH after each
-   build, no fork patch. See STATUS 2026-09-05 for the discussion.
+6. Automate the Cloudflare Tunnel connector as a post-build step.
+   Decided 2026-09-05: the front door is a Cloudflare Tunnel, and the
+   connector is the Debian package as a systemd unit, not a container,
+   because CML owns the Docker daemon on the host. The manual procedure
+   is `docs/ACCESS.md`. What remains is a script that runs after the
+   readiness wait in `20-up.sh`, reads the token from the gitignored env
+   file, and installs the connector over SSH, so a rebuild needs no hands.
+   Needs a spec and an ADR. No fork patch.
 7. Lab repositories. CML pulls lab YAML from a git repo. A personal
    topology repo registered on every build through the API, so labs
    import on day one. Public repo to avoid a credential on the

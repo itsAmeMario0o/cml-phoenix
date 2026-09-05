@@ -159,13 +159,13 @@ email) and `expires` (a date, used only as a tag).
 
 Nothing in this repo needs one. The scripts, cml-mcp, and the smoke test
 all use the public IP, which is static and lives in the persistent root,
-so it survives every rebuild. If you want a name for the browser or for
-SSH, add an A record at your own DNS provider pointing at the persistent
-public IP. Two things to get right: the record must be plain DNS, not
-routed through a proxy or CDN, because the NSG only admits your own
-addresses and SSH on 1122 does not go through a web proxy anyway. And the
-CML certificate is self-signed, so the browser warning stays with or
-without a name.
+so it survives every rebuild. If you want a name, there are two shapes.
+A plain A record at your DNS provider pointing at the public IP, DNS
+only, no proxy: simple, but the self-signed certificate warning stays and
+a proxied record does not work because the NSG only admits your own
+addresses. Or a zero trust front door with a real certificate and a login
+before CML's own, at no cost. `docs/ACCESS.md` walks through the second
+one with Cloudflare as the worked example.
 
 ## 3. GitHub
 
