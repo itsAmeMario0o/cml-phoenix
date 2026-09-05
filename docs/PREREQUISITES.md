@@ -61,8 +61,8 @@ optional. The supplemental one holds the SD-WAN set, the Cat9800
 controller, FMCv and FTDv, and Meraki vMX; nothing in the current
 scenarios reads it. They can sit in `software/` beside the base ISO: the
 upload script ignores those four suffixes and mounts the base one. To
-upload from an add-on ISO, point `REFPLAT_ISO` at it. Nexus 9300v is on
-the base ISO, not the supplemental.
+upload from an add-on ISO, point `REFPLAT_ISO` at it. Nexus 9300v lives
+on the base ISO, so it needs none of the add-ons.
 
 One caveat on the version. The fork tracks cloud-cml v2.9.0, and upstream
 has published nothing for 2.10 as of today; its main branch is two

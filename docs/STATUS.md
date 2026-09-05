@@ -23,9 +23,10 @@ depending on the port. See LESSONS-LEARNED, "SSH to the host times out".
 The two NSG rules were patched by CLI to admit `151.186.182.0/24` and the
 home /32. `config/cml.tfvars` and the rendered `cml.yml` carry the same
 lists, so the next build renders them into the VM. Until then the fork's
-plan shows the VM as "must be replaced". Do not apply it.
+plan shows the VM as "must be replaced", and applying it would be a
+20 minute rebuild by accident.
 
-The lab is being used from the VPN on purpose, to pair it with VPN-only
+You use the lab from the VPN on purpose, so it can pair with VPN-only
 resources later. Off the VPN, the home /32 is already allowed, so both
 paths work.
 
@@ -45,39 +46,41 @@ paths work.
   in `.mcp.json` needs a session restart to pick up the env file.
 - `docs/ROADMAP.md` created. Terminal UI, credential wizard, lab
   calculator, free certificate, lab repositories, Nexus, AWS port.
-- A DNS name `lab.rooez.com` points at the public IP, DNS only.
+- Web UI checked by hand: logged in at the IP, five image definitions
+  present.
 - `docs/ACCESS.md`: the Cloudflare Tunnel procedure, by hand for now.
-  Decision: Debian package as a systemd unit, not a container, because
-  CML runs Docker for its own container nodes. Linked from the
-  prerequisites, the README, and the roadmap.
-- cloudflared 2026.8.3 installed on the controller from the Mac over
-  SSH, token from the gitignored env file. Four connections registered.
-  Cloudflare side done the same evening: published route to local 443,
-  Access application `lab` with policy `Owner` (own domain plus one
-  exact address). Verified: name resolves to Cloudflare, Let's Encrypt
-  cert, 302 to the Access login. Then in a browser: one-time code by
-  mail, CML login page with a clean padlock, logged in. The A record was
-  deleted first; it had been proxied all along, which is why the name
-  never worked directly. Console over the tunnel not yet tried; no lab
-  exists to try it on.
+  The connector is the Debian package under systemd rather than a
+  container, because CML runs Docker for its own container nodes. Linked
+  from the prerequisites, the README, and the roadmap.
+- The front door works end to end. cloudflared 2026.8.3 went onto the
+  controller from the Mac over SSH with the token from the gitignored env
+  file, and registered four connections. In Cloudflare: a published route
+  to local 443, and an Access application `lab` with policy `Owner`, own
+  domain plus one exact address. Checked from the shell, the name resolves
+  to Cloudflare with a Let's Encrypt cert and a 302 to the Access login.
+  Checked in a browser, the one-time code arrives by mail and the CML
+  login page shows a clean padlock.
+- The A record `lab.rooez.com` made earlier had to go first. It had been
+  proxied all along, which is why the name never worked directly.
+- Nexus 9300v 10.6.2 uploaded to blob, 2.8 GB, sixth line in
+  `config/refplat.txt`. The upload script now ignores the add-on ISOs
+  beside the base one, so the supplemental ISO can stay in `software/`.
 
 ### Next, in order
 
-1. Web UI check by hand: log in, confirm the five image definitions show
-   under Tools, Node and Image Definitions.
-2. A DNS name in Cloudflare for the public IP. DNS only, grey cloud. A
-   proxied record arrives from Cloudflare's addresses and the NSG drops it.
-3. Task 21, the seven verification steps. The first `40-down.sh` and
-   `20-up.sh` cycle doubles as the persistence test if `/data` keeps its
-   15 files and the second boot skips the copy. It also shows what the
-   license reports after deregistration.
-4. Nexus 9300v 10.6.2 is in blob as of the evening of 2026-09-05, 2.8 GB,
-   sixth line in `config/refplat.txt`. It reaches the server at the next
-   build, which is item 3. The upload script now ignores the add-on
-   ISOs beside the base one, so the supplemental ISO can stay in
-   `software/`.
-5. Done by hand on 2026-09-05. Spec the post-build script, roadmap
-   item 6, so the next rebuild does not need step 4 typed in.
+1. The first teardown and rebuild, `40-down.sh` then `20-up.sh`. It
+   proves four things at once: teardown releases the license and shows
+   what the status string says afterwards; the new host keeps the 15
+   files on `/data` and pulls only Nexus from blob; the NSG comes back
+   from tfvars with both address entries; and the fork's plan goes quiet.
+   Check the home address first, it is a residential dynamic IP.
+2. Reinstall the tunnel connector on the new host, step 4 of
+   `docs/ACCESS.md`, same token. The tunnel shows Down until then.
+3. A node console through the tunnel, the one path never tried. Needs a
+   lab to exist, so it comes right after the rebuild.
+4. Spec the post-build script, roadmap item 6, so step 2 stops being a
+   thing anyone types.
+5. Task 21, the seven verification steps.
 
 ### Watch out for
 

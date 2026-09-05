@@ -25,11 +25,12 @@ an item gets a spec, link it and move the item to the bottom under Done.
    minutes. The UI should show progress from the script output and
    give the operator something to look at meanwhile, in the spirit of
    the dinosaur game Chrome shows when it is offline. A small ASCII
-   animation or a tiny game in a side pane, dismissable, never hiding
-   a `[FAIL]`. Part of the UI spec, not its own.
+   animation or a tiny game in a side pane, dismissable, and it must
+   never cover a `[FAIL]`. It belongs inside the UI spec rather than
+   getting one of its own.
 4. Textual as the UI framework. This is the implementation choice for
-   items 1 to 3, not a separate deliverable. Recorded here so a future
-   engineer does not reopen the question. The ADR is written when the UI
+   items 1 to 3 rather than a deliverable of its own. It is recorded
+   here so a future engineer does not reopen the question. The ADR is written when the UI
    spec is approved.
 5. Lab calculator. Given a desired topology, or a lab YAML, add up the
    vCPU and RAM each node definition asks for, compare against the
@@ -43,12 +44,12 @@ an item gets a spec, link it and move the item to the bottom under Done.
 
 6. Automate the Cloudflare Tunnel connector as a post-build step.
    Decided 2026-09-05: the front door is a Cloudflare Tunnel, and the
-   connector is the Debian package as a systemd unit, not a container,
-   because CML owns the Docker daemon on the host. The manual procedure
+   connector is the Debian package as a systemd unit rather than a
+   container, because CML owns the Docker daemon on the host. The manual procedure
    is `docs/ACCESS.md`. What remains is a script that runs after the
    readiness wait in `20-up.sh`, reads the token from the gitignored env
    file, and installs the connector over SSH, so a rebuild needs no hands.
-   Needs a spec and an ADR. No fork patch.
+   It needs a spec and an ADR but no fork patch.
 7. Lab repositories. CML pulls lab YAML from a git repo. A personal
    topology repo registered on every build through the API, so labs
    import on day one. Public repo to avoid a credential on the
@@ -56,9 +57,10 @@ an item gets a spec, link it and move the item to the bottom under Done.
 
 ## Images and scenarios
 
-8. Nexus 9300v on the server. Add `nxosv9000` to `config/refplat.txt`,
-   upload, rebuild. Two vCPU and 10 GB each. Six of them plus four
-   Ubuntu fit the current size with RAM to spare; boot them in two waves.
+8. Nexus 9300v on the server. The image is in blob and on the refplat
+   list since 2026-09-05, and it lands on the host at the next build. Two
+   vCPU and 10 GB each. Six of them plus four Ubuntu fit the current size
+   with RAM to spare, if you boot them in two waves.
 9. Scenario topologies under `labs/`. One YAML per scenario. Empty today.
 
 ## From the design spec, still deferred
