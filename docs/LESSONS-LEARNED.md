@@ -145,3 +145,39 @@ time to learn them.
   test with a stub azcopy that drains stdin, asserting five calls for two
   images. Any command run inside a `while read` loop over a file needs the
   same redirect unless it is known not to touch stdin.
+
+## SSH to the host times out while the web UI and the API work fine
+
+- Symptom: after the first real build on 2026-09-05, `https://<ip>` answered
+  and Terraform's readiness check passed, but every SSH check in the smoke
+  test failed. Ports 22, 1122, and 9090 timed out from the Mac. The host
+  was listening on 1122, firewalld allowed it, and sshd logged no
+  connection attempts at all, so the drop was at the NSG.
+- Cause: the Mac was on a corporate VPN with a web proxy. Ports 80 and 443
+  leave through the proxy and show one public address. Everything else,
+  SSH and DNS included, leaves through plain NAT and shows a different
+  one. `curl -4 ifconfig.me` only reports the proxy address, and that is
+  the one that went into the allow-lists. With the VPN off there is a
+  single address and none of this happens.
+- Fix: put both addresses in `allowed_ipv4_subnets_mgmt` and
+  `allowed_ipv4_subnets_cml2`. Find the NAT address with
+  `dig +short myip.opendns.com @resolver1.opendns.com` and the proxy
+  address with `curl -4 ifconfig.me`. If they differ, the VPN is doing
+  this. The allow-lists are baked into the VM's cloud-init data, so
+  changing them through Terraform replaces the VM. On a running host, patch
+  the two NSG rules with `az network nsg rule update` and let the next
+  rebuild catch up. Decide before the build whether the lab needs to be
+  reached from the VPN, for example to pair it with VPN-only resources, and
+  fill the lists accordingly.
+
+## tests/run.sh hangs forever in the upload test
+
+- Symptom: `tests/run.sh` never returns. `ps` shows the stub azcopy from
+  `tests/test_upload_dry_run.sh` sitting in `cat` for as long as you leave it.
+- Cause: the stub azcopy drains stdin, the way the real one can. Yesterday's
+  fix redirected stdin for the two calls inside the image loop but not for
+  the package copy above it, so that call inherited the caller's stdin. From
+  a terminal that is a tty and nobody notices. From Claude Code, or any
+  runner that keeps stdin open and idle, `cat` waits forever.
+- Fix: the package copy gets `</dev/null` like the other two. Anything that
+  runs azcopy should never inherit stdin.

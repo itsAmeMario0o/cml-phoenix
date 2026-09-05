@@ -3,6 +3,61 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
+## 2026-09-05
+
+### Where things stand
+
+The first CML controller from this repo is running. `scripts/20-up.sh`
+finished in about 20 minutes, 13 resources, CML 2.10.0 build 13 at the
+persistent public IP, API answering, MCP env file written. The 2.10
+package installed under the 2.9.0 fork without complaint. The persistence
+hook found the data disk on the NVMe by-lun link, formatted it, mounted
+`/data`, and copied all 15 image files. Both risks from the 2026-09-04
+handoff are closed.
+
+The smoke test came back 4 OK and 6 FAIL. One failure was cml-mcp timing
+out on its first-run package install and it passes on a rerun. The other
+five all ran over SSH, and SSH cannot reach the host from this Mac while
+the VPN is on. See LESSONS-LEARNED, "SSH to the host times out". The host
+side is fine, verified through `az vm run-command`. Fixing it through
+Terraform would replace the VM, so nothing has been applied.
+
+`config/cml.tfvars` now carries both of the Mac's public addresses. The
+deployed NSG rules still carry only the proxy one, so until the next
+rebuild or a manual NSG patch, the web UI and API work from the VPN and
+SSH does not. With the VPN off, nothing reaches the lab, because the NAT
+address is not in the deployed rules at all.
+
+### Done today
+
+- First real build. VM `cml-controller`, E16ds_v6, in `rg-cml-lab`.
+- Verified on the host: sshd on 1122, firewalld allows it, `/data` on
+  `nvme0n1p1`, bind mount active, cloud-init done.
+- Diagnosed the two-address VPN problem. Lessons entry, tfvars comment.
+- Preflight 43 OK and persistent plan clean before the build.
+- The upload script's package copy now redirects stdin. Without it the
+  test suite hangs when stdin is open and idle. Lessons entry.
+
+### Next, in order
+
+1. Decide VPN or not for this lab, then make the NSG match. Either patch
+   the two rules by CLI now, or rebuild through 40-down and 20-up so the
+   new tfvars render into the VM.
+2. `scripts/90-smoke-test.sh` all green, including the license status,
+   which has still never been seen on a real controller.
+3. Task 21, the seven verification steps. The rebuild in step 1 doubles as
+   the persistence test if `/data` keeps its images.
+4. A DNS name in Cloudflare for the public IP, DNS only, no proxy.
+
+### Watch out for
+
+- The fork's `terraform plan` shows the VM as "must be replaced" until the
+  deployed allow-lists and `config/cml.yml` agree. Do not apply the fork
+  root by hand to fix SSH; that is a 20 minute rebuild.
+- The NAT address is a residential dynamic IP and will change.
+- The Mac ran out of memory twice today and killed background Terraform
+  runs. Quit Office and the browser before a build.
+
 ## 2026-09-04
 
 ### Where things stand
