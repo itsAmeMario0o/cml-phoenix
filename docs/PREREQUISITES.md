@@ -147,13 +147,25 @@ Copy `config/cml.tfvars.example` to `config/cml.tfvars` and fill in:
 | `smartlicense_token` | From 1.2 |
 | `license_flavor` | `CML_Enterprise`, see 1.1 |
 | `license_nodes` | `20`. Only read for Enterprise. |
-| `allowed_ipv4_subnets_mgmt` | Your public IP as `/32`. Get it with `curl -4 ifconfig.me`. SSH and Cockpit. |
+| `allowed_ipv4_subnets_mgmt` | Your public IP as `/32`. Get it with `curl -4 ifconfig.me` with any VPN off. On a VPN, add its exit block too; see LESSONS-LEARNED, "SSH to the host times out". SSH and Cockpit. |
 | `allowed_ipv4_subnets_cml2` | Same `/32`. The CML UI and API, which is what cml-mcp uses. |
 | `vm_size` | `Standard_E16ds_v6` to start. Any size with nested virtualization works; v6 and v7 attach disks over NVMe and the fork handles both. ADR 0005. |
 | `spot_enabled` | `false` for the first build. Turn on once the persist path is proven. |
 
 Also for the persistent root's `terraform.tfvars`: `owner` (your name or
 email) and `expires` (a date, used only as a tag).
+
+### 2.4 A DNS name, optional
+
+Nothing in this repo needs one. The scripts, cml-mcp, and the smoke test
+all use the public IP, which is static and lives in the persistent root,
+so it survives every rebuild. If you want a name for the browser or for
+SSH, add an A record at your own DNS provider pointing at the persistent
+public IP. Two things to get right: the record must be plain DNS, not
+routed through a proxy or CDN, because the NSG only admits your own
+addresses and SSH on 1122 does not go through a web proxy anyway. And the
+CML certificate is self-signed, so the browser warning stays with or
+without a name.
 
 ## 3. GitHub
 
