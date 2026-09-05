@@ -55,8 +55,11 @@ paths work.
   Cloudflare side done the same evening: published route to local 443,
   Access application `lab` with policy `Owner` (own domain plus one
   exact address). Verified: name resolves to Cloudflare, Let's Encrypt
-  cert, 302 to the Access login. The A record was deleted first; it had
-  been proxied all along, which is why the name never worked directly.
+  cert, 302 to the Access login. Then in a browser: one-time code by
+  mail, CML login page with a clean padlock, logged in. The A record was
+  deleted first; it had been proxied all along, which is why the name
+  never worked directly. Console over the tunnel not yet tried; no lab
+  exists to try it on.
 
 ### Next, in order
 
