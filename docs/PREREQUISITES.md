@@ -56,11 +56,13 @@ Download these three:
 | `refplat-20260409-fcs.iso` | The full base reference platform set. Not the `-free` subset. | 15 to 40 GB |
 | `checksum.txt` | Verify both files against it before doing anything else. | tiny |
 
-Skip the `-ise`, `-supplemental`, `-proprietary`, and `-wireless` ISOs for
-now. The supplemental one holds the SD-WAN controllers and FirePower, and
-the first build does not use them. It also would match the upload script's
-`refplat-*.iso` pattern and make it refuse to run with two candidates. Get
-it when the SD-WAN scenario has its own spec.
+The `-ise`, `-supplemental`, `-proprietary`, and `-wireless` ISOs are
+optional. The supplemental one holds the SD-WAN set, the Cat9800
+controller, FMCv and FTDv, and Meraki vMX; nothing in the current
+scenarios reads it. They can sit in `software/` beside the base ISO: the
+upload script ignores those four suffixes and mounts the base one. To
+upload from an add-on ISO, point `REFPLAT_ISO` at it. Nexus 9300v is on
+the base ISO, not the supplemental.
 
 One caveat on the version. The fork tracks cloud-cml v2.9.0, and upstream
 has published nothing for 2.10 as of today; its main branch is two

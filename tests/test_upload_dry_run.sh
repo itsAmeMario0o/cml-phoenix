@@ -57,5 +57,21 @@ out="$(PATH="${TMP}/bin:${PATH}" env ${common} bash "${SCRIPT}" 2>&1)"; rc=$?
 assert_eq "real mode exits 0" "0" "${rc}"
 assert_eq "every image is uploaded even though azcopy reads stdin" "5" "$(grep -c '^stub azcopy' <<<"${out}")"
 
+# find_iso picks the base reference platform ISO and ignores the add-on ones
+# Cisco ships beside it (-supplemental, -ise, -wireless, -proprietary), so a
+# second ISO in software/ does not stop the upload. Sourced like preflight.
+find_iso_in() { bash -c "source '${SCRIPT}'; CML_SOFTWARE_DIR='$1' ${2:-} find_iso" 2>&1; }
+mkdir -p "${TMP}/sw-both" "${TMP}/sw-addon-only" "${TMP}/sw-two-base"
+touch "${TMP}/sw-both/refplat-20260409-fcs.iso" "${TMP}/sw-both/refplat-20260611-supplemental.iso" "${TMP}/sw-both/refplat-20260611-ise.iso"
+touch "${TMP}/sw-addon-only/refplat-20260611-supplemental.iso"
+touch "${TMP}/sw-two-base/refplat-20260409-fcs.iso" "${TMP}/sw-two-base/refplat-20250620-fcs.iso"
+assert_eq "base ISO chosen over add-on ISOs" "${TMP}/sw-both/refplat-20260409-fcs.iso" "$(find_iso_in "${TMP}/sw-both")"
+rc=0; out="$(find_iso_in "${TMP}/sw-addon-only")" || rc=$?
+assert_eq "add-on ISO alone is refused" "1" "${rc}"
+assert_contains "add-on ISO alone names the problem" "no base refplat" "${out}"
+rc=0; out="$(find_iso_in "${TMP}/sw-two-base")" || rc=$?
+assert_eq "two base ISOs are refused" "1" "${rc}"
+assert_eq "REFPLAT_ISO override wins" "${TMP}/sw-addon-only/refplat-20260611-supplemental.iso" "$(find_iso_in "${TMP}/sw-both" "REFPLAT_ISO=${TMP}/sw-addon-only/refplat-20260611-supplemental.iso")"
+
 if [[ "${failures}" -gt 0 ]]; then echo "test_upload_dry_run: ${failures} failure(s)"; exit 1; fi
 echo "test_upload_dry_run: all passed"

@@ -36,17 +36,24 @@ run() {
   fi
 }
 
+# Cisco ships add-on ISOs beside the base one, named -supplemental, -ise,
+# -wireless, and -proprietary. They match refplat-*.iso too, so they are
+# dropped here; the base ISO is the default and REFPLAT_ISO picks any other.
 find_iso() {
-  local candidates
+  local all base
   if [[ -n "${REFPLAT_ISO:-}" ]]; then
     echo "${REFPLAT_ISO}"
     return 0
   fi
-  candidates="$(ls "${CML_SOFTWARE_DIR}"/refplat-*.iso 2>/dev/null || true)"
-  if [[ "$(echo "${candidates}" | grep -c .)" -ne 1 ]]; then
-    die "expected exactly one refplat-*.iso in ${CML_SOFTWARE_DIR}, found: ${candidates:-none}. Set REFPLAT_ISO."
+  all="$(ls "${CML_SOFTWARE_DIR}"/refplat-*.iso 2>/dev/null || true)"
+  base="$(grep -vE -- '-(supplemental|ise|wireless|proprietary)\.iso$' <<<"${all}" | grep . || true)"
+  if [[ -z "${base}" ]]; then
+    die "no base refplat-*.iso in ${CML_SOFTWARE_DIR}, found: ${all:-none}. Set REFPLAT_ISO."
   fi
-  echo "${candidates}"
+  if [[ "$(grep -c . <<<"${base}")" -ne 1 ]]; then
+    die "expected one base refplat-*.iso in ${CML_SOFTWARE_DIR}, found: ${base}. Set REFPLAT_ISO."
+  fi
+  echo "${base}"
 }
 
 mount_iso() {
@@ -139,4 +146,6 @@ main() {
   summary_and_exit
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
