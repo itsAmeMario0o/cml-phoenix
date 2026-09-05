@@ -3,11 +3,11 @@
 # check, and the refplat block rendered into config/cml.yml.
 #
 # Names must match the folders on the refplat ISO exactly. These are from
-# the June 2025 ISO. Check them against refplat-20260409-fcs.iso before the
-# first upload; the upload script refuses to run if any name is missing.
+# refplat-20260409-fcs.iso, checked 2026-09-04. The upload script refuses
+# to run if any name is missing from the mounted ISO.
 # Keep the first build small. Add Nexus, Cat9k, and IOS XR per scenario.
-alpine alpine-base-3-21-3
-ubuntu ubuntu-24-04-20250503
-iosv iosv-159-3-m10
+alpine alpine-base-3-23-3
+ubuntu ubuntu-24-04-20260307
+iosv iosv-159-3-m12
 iosvl2 iosvl2-2020
-cat8000v cat8000v-17-16-01a
+cat8000v cat8000v-17-18-02

@@ -31,11 +31,13 @@ at `0134c7e` for that work.
 
 ### Next, in order
 
-1. Downloads finish. Verify both against `checksum.txt`. `git status` must
-   not show them.
-2. Mount the ISO read-only and check the five names in `config/refplat.txt`
-   against its folders. Fix any that moved.
-3. License and Smart License token into `config/cml.tfvars`, plus your
+1. Done. Both files are in `software/` and git ignores them. Still owed:
+   `checksum.txt` from the download page, to compare against the SHA-256
+   values recorded in the 2026-09-04 session.
+2. Done. Four of five image names had moved; `config/refplat.txt` now
+   matches the April 2026 ISO.
+3. License is in the Smart Account. Generate the token and put it into
+   `config/cml.tfvars` (copy the example first), plus your
    public IP as a `/32` in both allowed-subnet lists and
    `ARM_SUBSCRIPTION_ID` in the shell profile.
 4. `scripts/00-preflight.sh` until only the blob checks fail.
