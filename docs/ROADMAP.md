@@ -62,18 +62,31 @@ an item gets a spec, link it and move the item to the bottom under Done.
    vCPU and 10 GB each. Six of them plus four Ubuntu fit the current size
    with RAM to spare, if you boot them in two waves.
 9. Scenario topologies under `labs/`. One YAML per scenario. Empty today.
+10. Image library as a product, not a chore. The blob container is
+    already a shared library: one upload per deployment, none per
+    engineer, and preflight checks it. What is not portable is the
+    upload script itself. It mounts the ISO with a macOS tool and calls
+    azcopy directly. Replace the mount with bsdtar extraction of only
+    the selected paths, which works on Linux and macOS without root, and
+    put the copy behind one small storage layer with an Azure
+    implementation now and S3 later. End state is one command, or one
+    screen in the Terminal UI, that finds the Cisco downloads, verifies
+    the checksums, and pushes only what the library lacks. The refplat
+    selection stays the single input. The persistence hook's successor,
+    an `azcopy sync` from the library onto the data disk at build time,
+    belongs to the same item.
 
 ## From the design spec, still deferred
 
-10. The lab edge router and the host's local bridge.
-11. ISE and FTD virtual machines with their own persistent disks.
-12. Key Vault and a managed identity for the secrets that are tfvars
+11. The lab edge router and the host's local bridge.
+12. ISE and FTD virtual machines with their own persistent disks.
+13. Key Vault and a managed identity for the secrets that are tfvars
     today.
-13. CI, Bastion, and CML clusters.
+14. CI, Bastion, and CML clusters.
 
 ## Other clouds
 
-14. AWS port. Lowest priority. Upstream cloud-cml already supports AWS,
+15. AWS port. Lowest priority. Upstream cloud-cml already supports AWS,
     so the fork patches and the persistent root are the real work: a
     persistent root for the VPC, EBS data disk, and S3 bucket that
     mirrors the Azure one, an S3 upload path in the image script, and
