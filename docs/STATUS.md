@@ -52,7 +52,11 @@ paths work.
   prerequisites, the README, and the roadmap.
 - cloudflared 2026.8.3 installed on the controller from the Mac over
   SSH, token from the gitignored env file. Four connections registered.
-  The Cloudflare side, hostname and Access, was still open at handoff.
+  Cloudflare side done the same evening: published route to local 443,
+  Access application `lab` with policy `Owner` (own domain plus one
+  exact address). Verified: name resolves to Cloudflare, Let's Encrypt
+  cert, 302 to the Access login. The A record was deleted first; it had
+  been proxied all along, which is why the name never worked directly.
 
 ### Next, in order
 
@@ -67,8 +71,8 @@ paths work.
 4. Nexus is not on the server. The refplat selection is five small
    images on purpose. Adding `nxosv9000` means upload and a down and up
    cycle, which is item 3 anyway.
-5. Walk `docs/ACCESS.md` once by hand. Then spec the post-build script,
-   roadmap item 6.
+5. Done by hand on 2026-09-05. Spec the post-build script, roadmap
+   item 6, so the next rebuild does not need step 4 typed in.
 
 ### Watch out for
 

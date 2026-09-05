@@ -128,6 +128,11 @@ look for is "Registered tunnel connection", four times.
 - Open a node console once a lab is running. Consoles use websockets and
   Cloudflare carries them.
 
+Walked once on 2026-09-05 for `lab.rooez.com`. The certificate Cloudflare
+serves is Let's Encrypt for the zone, renewed by Cloudflare, nothing to
+do. A policy that says "Emails ending in gmail.com" admits every Gmail
+user; use the Emails selector with exact addresses for shared domains.
+
 ## After a rebuild
 
 The tunnel shows Down while the VM is gone. After `scripts/20-up.sh`,
