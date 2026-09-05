@@ -11,3 +11,4 @@ ubuntu ubuntu-24-04-20260307
 iosv iosv-159-3-m12
 iosvl2 iosvl2-2020
 cat8000v cat8000v-17-18-02
+nxosv9000 nxosv9300-10-6-2-f
