@@ -74,6 +74,16 @@ class RenderTest(unittest.TestCase):
         mode = oct(os.stat(self.tmp / "cml.yml").st_mode & 0o777)
         self.assertEqual(mode, "0o600")
 
+    def test_license_nodes_defaults_to_zero(self) -> None:
+        proc = self.run_render()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("  nodes: 0\n", (self.tmp / "cml.yml").read_text())
+
+    def test_license_nodes_from_tfvars(self) -> None:
+        proc = self.run_render(TFVARS + "license_nodes = 20\n")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("  nodes: 20\n", (self.tmp / "cml.yml").read_text())
+
     def test_refuses_open_cidr(self) -> None:
         proc = self.run_render(TFVARS.replace('"203.0.113.10/32"]', '"0.0.0.0/0"]', 1))
         self.assertEqual(proc.returncode, 1)

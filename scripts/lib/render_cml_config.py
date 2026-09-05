@@ -83,6 +83,9 @@ def build_mapping(values: dict[str, Any], refplat: tuple[list[str], list[str]], 
     mapping.update({
         "LICENSE_TOKEN": str(values["smartlicense_token"]),
         "LICENSE_FLAVOR": str(values["license_flavor"]),
+        # Only CML_Enterprise draws nodes from a separate pool. The Personal
+        # flavors carry their own, so the key is optional and defaults to 0.
+        "LICENSE_NODES": str(int(values.get("license_nodes", 0))),
         "ALLOWED_MGMT": yaml_flow_list(values["allowed_ipv4_subnets_mgmt"]),
         "ALLOWED_CML2": yaml_flow_list(values["allowed_ipv4_subnets_cml2"]),
         "VM_SIZE": str(values["vm_size"]),

@@ -8,6 +8,11 @@ smartlicense_token = "PASTE-TOKEN-HERE"
 # CML_Personal, CML_Personal40, CML_Education, or CML_Enterprise.
 license_flavor = "CML_Personal"
 
+# CML_Enterprise only: how many node licenses to pull from the pool at
+# registration. Leave 0 for the Personal flavors, which carry their own.
+# 20 covers any one planned scenario. Released again at teardown.
+license_nodes = 0
+
 # Your public IP as /32. `curl -4 ifconfig.me`. Never 0.0.0.0/0.
 allowed_ipv4_subnets_mgmt = ["203.0.113.10/32"]
 allowed_ipv4_subnets_cml2 = ["203.0.113.10/32"]

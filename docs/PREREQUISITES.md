@@ -7,13 +7,18 @@ quota is done. The downloads are the slow part now.
 
 ## 1. Cisco license and software
 
-### 1.1 Buy a CML license
+### 1.1 The CML license
 
-cloud-cml accepts `CML_Personal` (20 nodes), `CML_Personal40` (40 nodes),
-`CML_Education`, or `CML_Enterprise`. Buy Personal or Personal Plus from the
-Cisco Learning Network Store:
+Done 2026-09-04. The Smart Account's virtual account holds an Enterprise
+license: 10 of `CML - Base` and a pool of 2000 `CML - Nodes`. That is the
+`CML_Enterprise` flavor. Unlike the Personal flavors, Enterprise carries no
+nodes of its own. The controller asks the pool for a count at registration,
+which is the `license_nodes` setting, and gives them back when it
+deregisters at teardown. Set it to 20.
 
-https://learningnetworkstore.cisco.com/cisco-modeling-labs-personal
+For the record, cloud-cml also accepts `CML_Personal` (20 nodes),
+`CML_Personal40` (40 nodes), and `CML_Education`, sold through the Cisco
+Learning Network Store. Those need `license_nodes` left at 0.
 
 Node counts that matter for the planned scenarios, per running lab:
 
@@ -23,9 +28,8 @@ Node counts that matter for the planned scenarios, per running lab:
 | Catalyst SD-WAN, 3 controllers, 2 edges, 2 hosts | 7 |
 | TrustSec fabric, C8000v edge, 3 switches, 3 endpoints | 7 |
 
-Personal (20) covers any one scenario. Personal Plus (40) covers two running
-at once. The license ties to your CCO account, which is also what unlocks the
-software downloads in 1.3.
+20 nodes covers any one scenario. 40 covers two running at once. With the
+Enterprise pool that is a number in a file rather than a purchase.
 
 ### 1.2 Generate a Smart License token
 
@@ -141,7 +145,8 @@ Copy `config/cml.tfvars.example` to `config/cml.tfvars` and fill in:
 | Key | What to put |
 |---|---|
 | `smartlicense_token` | From 1.2 |
-| `license_flavor` | From 1.1: `CML_Personal`, `CML_Personal40`, `CML_Education`, or `CML_Enterprise` |
+| `license_flavor` | `CML_Enterprise`, see 1.1 |
+| `license_nodes` | `20`. Only read for Enterprise. |
 | `allowed_ipv4_subnets_mgmt` | Your public IP as `/32`. Get it with `curl -4 ifconfig.me`. SSH and Cockpit. |
 | `allowed_ipv4_subnets_cml2` | Same `/32`. The CML UI and API, which is what cml-mcp uses. |
 | `vm_size` | `Standard_E16ds_v6` to start. Any size with nested virtualization works; v6 and v7 attach disks over NVMe and the fork handles both. ADR 0005. |
@@ -195,7 +200,7 @@ reach. Those are spec success steps 2 through 7.
 
 ## 6. Checklist
 
-- [ ] License bought, flavor known
+- [x] License in the Smart Account: Enterprise, base plus a 2000 node pool
 - [ ] Smart License token generated, pasted into `config/cml.tfvars`
 - [ ] `cml2_2.10.0-13_amd64-17.pkg`, `refplat-20260409-fcs.iso`, and
       `checksum.txt` in `software/`, checksums verified. Downloading as of
