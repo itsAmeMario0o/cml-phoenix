@@ -55,14 +55,26 @@ assert_contains "first boot prefers the NVMe by-lun link" "+ parted -s /dev/disk
 out="$(env ${common_env} DATA_DEV=/dev/disk/azure/scsi1/lun0 PRETEND_FS= bash "${SCRIPT}" pre 2>&1)"
 assert_contains "DATA_DEV override is honored" "+ parted -s /dev/disk/azure/scsi1/lun0" "${out}"
 
-# 2. Rebuild: formatted disk with images. Must not format, must bind, and
-#    must empty the image list so cml.sh skips the copy.
+# 2. Rebuild: formatted disk that already holds every listed image. Must
+#    not format, must bind, and must empty the image list so cml.sh copies
+#    nothing.
+mkdir -p "${TMP}/data/images/virl-base-images/alpine-base-3-21-3"
 # shellcheck disable=SC2086
 out="$(env ${common_env} PRETEND_FS=ext4 PRETEND_IMAGE_FILES=12 bash "${SCRIPT}" pre 2>&1)"
 assert_not_contains "rebuild does not format" "mkfs.ext4" "${out}"
 assert_contains "rebuild binds images" "+ mount --bind" "${out}"
 assert_contains "rebuild skips image copy" "images = []" "${out}"
 assert_contains "rebuild reports reuse" "reusing 12 image files" "${out}"
+
+# 2b. Rebuild after a new image was added to the list. The disk has one of
+#     the two, so only the missing one may stay on the copy list.
+echo '{"definitions":["alpine","iosv"],"images":["alpine-base-3-21-3","iosv-159-3-m10"]}' > "${TMP}/refplat"
+# shellcheck disable=SC2086
+out="$(env ${common_env} PRETEND_FS=ext4 PRETEND_IMAGE_FILES=12 bash "${SCRIPT}" pre 2>&1)"
+assert_contains "new image stays on the copy list" "images = [\"iosv-159-3-m10\"]" "${out}"
+assert_not_contains "present image leaves the copy list" "\"alpine-base-3-21-3\"" "${out}"
+assert_contains "log says what is copied" "1 of 2 listed images already there, copying: iosv-159-3-m10" "${out}"
+echo '{"definitions":["alpine"],"images":["alpine-base-3-21-3"]}' > "${TMP}/refplat"
 
 # 3. Post phase fails loudly when the bind mount is gone.
 rc=0
