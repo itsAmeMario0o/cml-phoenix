@@ -40,6 +40,12 @@ paths work.
 - Upload script: the package copy redirects stdin. Without that the test
   suite hangs from any runner that keeps stdin open.
 - Three lessons entries and the tfvars example comment.
+- cml-mcp tested from the shell against the live controller: statistics,
+  node definitions, definition detail. 51 tools. The Claude Code wiring
+  in `.mcp.json` needs a session restart to pick up the env file.
+- `docs/ROADMAP.md` created. Terminal UI, credential wizard, lab
+  calculator, free certificate, lab repositories, Nexus, AWS port.
+- A DNS name `lab.rooez.com` points at the public IP, DNS only.
 
 ### Next, in order
 
@@ -51,8 +57,10 @@ paths work.
    `20-up.sh` cycle doubles as the persistence test if `/data` keeps its
    15 files and the second boot skips the copy. It also shows what the
    license reports after deregistration.
-4. Decide whether the exit block belongs in the tfvars example as a
-   worked VPN case.
+4. Nexus is not on the server. The refplat selection is five small
+   images on purpose. Adding `nxosv9000` means upload and a down and up
+   cycle, which is item 3 anyway.
+5. Pick the certificate shape in `docs/ROADMAP.md` item 5 and spec it.
 
 ### Watch out for
 
