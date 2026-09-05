@@ -137,6 +137,17 @@ render_config() {
     --set "SSH_KEY_NAME=$(out_or_placeholder ssh_key_name)"
 }
 
+# The VM being built will present a new host key. Drop the previous one
+# from the repo-local known_hosts so accept-new can pin the new key instead
+# of refusing it. ssh-keygen -R is a no-op on a missing file or entry.
+forget_host_key() {
+  local ip
+  ip="$(out_or_placeholder public_ip_address)"
+  if [[ "${DRY_RUN}" == "1" || -f "${CML_KNOWN_HOSTS}" ]]; then
+    run ssh-keygen -R "[${ip}]:1122" -f "${CML_KNOWN_HOSTS}"
+  fi
+}
+
 apply_cml() {
   local tenant
   tenant="$(az account show --query tenantId -o tsv)"
@@ -179,6 +190,7 @@ main() {
   apply_persistent
   refuse_if_vm_exists
   render_config
+  forget_host_key
   apply_cml
   write_env_and_report
 }

@@ -73,6 +73,18 @@ assert_eq "tf_out missing output exit code" "1" "${rc}"
 rm -rf "${TMP}"
 trap - EXIT
 
+# cml_ssh keeps host keys in keys/known_hosts, not ~/.ssh/known_hosts, so a
+# rebuilt VM's new key is accepted once the up script forgets the old one.
+TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+trap 'rm -rf "${TMP}"' EXIT
+mkdir -p "${TMP}/bin"
+printf '#!/bin/sh\nprintf "%%s " "$@"\n' > "${TMP}/bin/ssh"
+chmod +x "${TMP}/bin/ssh"
+out="$(PATH="${TMP}/bin:${PATH}" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; cml_ip() { echo 203.0.113.9; }; cml_ssh hostname" 2>&1)"
+assert_eq "cml_ssh uses the repo known_hosts" "yes" "$(grep -q -- "-o UserKnownHostsFile=${REPO_ROOT}/keys/known_hosts" <<<"${out}" && echo yes || echo no)"
+assert_eq "cml_ssh accepts new keys only" "yes" "$(grep -q -- "-o StrictHostKeyChecking=accept-new" <<<"${out}" && echo yes || echo no)"
+assert_eq "cml_ssh targets sysadmin on 1122" "yes" "$(grep -q -- "-p 1122 .*sysadmin@203.0.113.9 hostname" <<<"${out}" && echo yes || echo no)"
+
 if [[ "${failures}" -gt 0 ]]; then
   echo "test_common: ${failures} failure(s)"
   exit 1

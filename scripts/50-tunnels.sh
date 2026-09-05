@@ -58,10 +58,10 @@ start_one() {
   fi
   mkdir -p "${STATE_DIR}"
   if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ ssh -p 1122 -i ${KEY_FILE} -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -N -L ${lport}:${rhost}:${rport} sysadmin@${ip}"
+    echo "+ ssh -p 1122 -i ${KEY_FILE} ${CML_SSH_OPTS[*]} -o ExitOnForwardFailure=yes -N -L ${lport}:${rhost}:${rport} sysadmin@${ip}"
     return 0
   fi
-  nohup ssh -p 1122 -i "${KEY_FILE}" -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes \
+  nohup ssh -p 1122 -i "${KEY_FILE}" "${CML_SSH_OPTS[@]}" -o ExitOnForwardFailure=yes \
     -N -L "${lport}:${rhost}:${rport}" "sysadmin@${ip}" >> "${STATE_DIR}/${name}.log" 2>&1 &
   echo "$!" > "${STATE_DIR}/${name}.pid"
   # shellcheck disable=SC2034

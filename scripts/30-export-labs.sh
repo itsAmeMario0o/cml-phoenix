@@ -38,7 +38,7 @@ export_on_host() {
   if [[ "${DRY_RUN}" == "1" ]]; then
     echo "+ ssh -p 1122 sysadmin@${ip} bash -s -- export-labs /data/exports/${stamp} < ${REMOTE_LIB}"
   else
-    ssh -p 1122 -i "${key}" -o StrictHostKeyChecking=accept-new "sysadmin@${ip}" \
+    ssh -p 1122 -i "${key}" "${CML_SSH_OPTS[@]}" "sysadmin@${ip}" \
       "bash -s -- export-labs /data/exports/${stamp}" < "${REMOTE_LIB}"
   fi
 }
@@ -46,7 +46,7 @@ export_on_host() {
 pull_local_copy() {
   local ip="$1" stamp="$2" key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
   mkdir -p "${LOCAL_EXPORTS}"
-  run scp -P 1122 -i "${key}" -o StrictHostKeyChecking=accept-new -q -r \
+  run scp -P 1122 -i "${key}" "${CML_SSH_OPTS[@]}" -q -r \
     "sysadmin@${ip}:/data/exports/${stamp}" "${LOCAL_EXPORTS}/${stamp}"
 }
 

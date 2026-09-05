@@ -43,7 +43,7 @@ remote() {
   if [[ "${DRY_RUN}" == "1" ]]; then
     echo "+ ssh -p 1122 sysadmin@${ip} bash -s -- $* < ${REMOTE_LIB}"
   else
-    ssh -p 1122 -i "${key}" -o StrictHostKeyChecking=accept-new "sysadmin@${ip}" "bash -s -- $*" < "${REMOTE_LIB}"
+    ssh -p 1122 -i "${key}" "${CML_SSH_OPTS[@]}" "sysadmin@${ip}" "bash -s -- $*" < "${REMOTE_LIB}"
   fi
 }
 

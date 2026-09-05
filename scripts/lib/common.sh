@@ -73,12 +73,18 @@ cml_ip() {
   tf_out persistent public_ip_address
 }
 
+# Every rebuild gives the controller new host keys. They live in a repo-local
+# file, never ~/.ssh/known_hosts, and 20-up.sh forgets the old entry before
+# each build. accept-new then trusts the fresh key once and pins it.
+CML_KNOWN_HOSTS="${CML_KNOWN_HOSTS:-${REPO_ROOT}/keys/known_hosts}"
+CML_SSH_OPTS=(-o "UserKnownHostsFile=${CML_KNOWN_HOSTS}" -o StrictHostKeyChecking=accept-new)
+
 # cml_ssh CMD...: run a command on the CML host as sysadmin. Port 1122 is the
 # system shell on a CML host; 22 is the console server (ADR 0003 notes).
 cml_ssh() {
   local key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
   ssh -p 1122 -i "${key}" \
-    -o StrictHostKeyChecking=accept-new \
+    "${CML_SSH_OPTS[@]}" \
     -o ConnectTimeout=10 \
     "sysadmin@$(cml_ip)" "$@"
 }

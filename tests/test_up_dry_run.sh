@@ -35,6 +35,7 @@ assert_eq "dry run exits 0" "0" "${rc}"
 assert_contains "bootstrap apply planned" "+ terraform -chdir=${REPO_ROOT}/terraform/bootstrap apply" "${out}"
 assert_contains "persistent apply planned" "+ terraform -chdir=${REPO_ROOT}/terraform/persistent apply" "${out}"
 assert_contains "render planned" "+ python3 ${REPO_ROOT}/scripts/lib/render_cml_config.py" "${out}"
+assert_contains "old host key forgotten before the build" "+ ssh-keygen -R [203.0.113.5]:1122 -f ${REPO_ROOT}/keys/known_hosts" "${out}"
 assert_contains "cml apply planned" "+ terraform -chdir=${REPO_ROOT}/vendor/cloud-cml apply" "${out}"
 assert_contains "env file planned" "+ write ${REPO_ROOT}/config/mcp-env/cml.env" "${out}"
 
