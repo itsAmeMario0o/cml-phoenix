@@ -75,7 +75,9 @@ an item gets a spec, link it and move the item to the bottom under Done.
     implementation now and S3 later. End state is one command, or one
     screen in the Terminal UI, that finds the Cisco downloads, verifies
     the checksums, and pushes only what the library lacks. The refplat
-    selection stays the single input. The persistence hook's successor,
+    selection stays the single input, but it should learn which ISO each
+    image comes from, because FTDv, FMCv, and the SD-WAN set live on the
+    supplemental ISO and item 12 will need them. The persistence hook's successor,
     an `azcopy sync` from the library onto the data disk at build time,
     belongs to the same item. The other way to retire the hook's copy
     logic is upstream: a skip-existing option on cloud-cml's copy
