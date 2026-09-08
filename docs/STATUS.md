@@ -3,13 +3,19 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
+## 2026-09-08
+
+Built again in the morning for use: preflight 53 OK, build in under five
+minutes, smoke test 10 OK, connector reinstalled by hand. The VM is
+running and billing until the next `40-down.sh`. Roadmap item 6 now
+records the user CSV decision.
+
 ## 2026-09-07
 
 ### Where things stand
 
-No CML VM exists. Torn down at the end of the session with the license
-released; only the persistent root bills. The next `20-up.sh` brings
-back a controller with ten images on the data disk: the original
+Torn down at the end of the session with the license released. The next
+`20-up.sh` brings back a controller with ten images on the data disk: the original
 five, Nexus 9300v, and the Catalyst SD-WAN Manager, Validator, Controller,
 and edge. The image copy patch is proven. The rebuild found 16 files,
 kept them, and fetched only the five new images; the post phase counted
