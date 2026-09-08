@@ -29,6 +29,9 @@ in a comment.
 - Fork `fdf539c` proven on a real host. Lesson closed with the log line.
 - Roadmap: Nexus and SD-WAN moved to Done; the image library item now
   says images can come from more than one ISO.
+- Browser login through the front door confirmed again on the rebuilt
+  host. The login page shows the Zero Trust team domain, which every
+  Access application in the account shares; it is not another tunnel.
 
 ### Pick up here
 
@@ -37,7 +40,8 @@ in a comment.
    `config/mcp-env/cloudflare-tunnel.env` and rerun step 4 of
    `docs/ACCESS.md` on the host.
 2. A node console through the tunnel: one iosv lab, start it, open the
-   console at `lab.rooez.com`. The last path never tried.
+   console at `lab.rooez.com`. Login was confirmed on 2026-09-07; a
+   console specifically was not.
 3. Task 21, ticked against what the last three days already covered.
 4. Then design work. The Terminal UI spec is the natural next piece;
    three later roadmap items assume it.
