@@ -7,7 +7,9 @@ a new session.
 
 ### Where things stand
 
-The controller is running with ten images on the data disk: the original
+No CML VM exists. Torn down at the end of the session with the license
+released; only the persistent root bills. The next `20-up.sh` brings
+back a controller with ten images on the data disk: the original
 five, Nexus 9300v, and the Catalyst SD-WAN Manager, Validator, Controller,
 and edge. The image copy patch is proven. The rebuild found 16 files,
 kept them, and fetched only the five new images; the post phase counted
