@@ -42,13 +42,19 @@ an item gets a spec, link it and move the item to the bottom under Done.
 
 ## Access and trust
 
-6. Automate the Cloudflare Tunnel connector as a post-build step.
+6. Post-build configuration: the tunnel connector, users, lab repositories.
    Decided 2026-09-05: the front door is a Cloudflare Tunnel, and the
    connector is the Debian package as a systemd unit rather than a
    container, because CML owns the Docker daemon on the host. The manual procedure
    is `docs/ACCESS.md`. What remains is a script that runs after the
    readiness wait in `20-up.sh`, reads the token from the gitignored env
    file, and installs the connector over SSH, so a rebuild needs no hands.
+   The same step should create the CML users and groups that a rebuild
+   wipes: a list of usernames, full names, admin flag, and groups in the
+   repo, passwords from the persistent root the way the admin and
+   sysadmin ones already are, and a create-if-missing subcommand in the
+   remote library. A student is a non-admin user in a group with rights
+   on named labs; a peer is an admin flag. Item 7 belongs here as well.
    It needs a spec and an ADR but no fork patch. Upstream cloud-cml also
    ships a Let's Encrypt hook, `03-letsencrypt.sh`, unused here. If a real
    certificate on the box ever matters, for the API through the name,
