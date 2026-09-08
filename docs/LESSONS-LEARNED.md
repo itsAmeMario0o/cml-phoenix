@@ -244,8 +244,9 @@ time to learn them.
 - Fix: the hook now drops only the images whose directory already exists
   under `/data/images` and leaves the rest on the list for cloud-cml to
   copy. It logs how many were there and which ones it is fetching.
-  Written and tested on 2026-09-05; the fork commit and pointer bump
-  are a human's step and the log line on the next build is the proof.
+  Proven on 2026-09-07 with five new images at once. The log read
+  "reusing 16 image files, 5 of 10 listed images already there,
+  copying:" followed by the five names, and the post phase counted 30.
 
 ## NVMe device names move between boots
 

@@ -60,10 +60,7 @@ an item gets a spec, link it and move the item to the bottom under Done.
 
 ## Images and scenarios
 
-8. Nexus 9300v on the server. The image is in blob and on the refplat
-   list since 2026-09-05, and it lands on the host at the next build. Two
-   vCPU and 10 GB each. Six of them plus four Ubuntu fit the current size
-   with RAM to spare, if you boot them in two waves.
+8. Moved to Done.
 9. Scenario topologies under `labs/`. One YAML per scenario. Empty today.
 10. Image library as a product, not a chore. The blob container is
     already a shared library: one upload per deployment, none per
@@ -103,4 +100,9 @@ an item gets a spec, link it and move the item to the bottom under Done.
 
 ## Done
 
-Nothing yet.
+- Nexus 9300v on the server, 2026-09-07. Two vCPU and 10 GB each. With
+  it came the Catalyst SD-WAN Manager, Validator, Controller, and edge
+  from the supplemental ISO, uploaded with the `REFPLAT_ISO` override.
+  The Manager wants 8 vCPU and 32 GB and carries a 256 GB thin data
+  volume on the OS disk; watch that on long labs. vEdge, FTDv, FMCv,
+  the wireless controller, and Meraki vMX were left off on purpose.

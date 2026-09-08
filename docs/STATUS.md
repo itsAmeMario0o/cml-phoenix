@@ -3,6 +3,57 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
+## 2026-09-07
+
+### Where things stand
+
+The controller is running with ten images on the data disk: the original
+five, Nexus 9300v, and the Catalyst SD-WAN Manager, Validator, Controller,
+and edge. The image copy patch is proven. The rebuild found 16 files,
+kept them, and fetched only the five new images; the post phase counted
+30 and the smoke test reads 10 OK. The host key fix passed its first
+real rebuild: SSH went in through `keys/known_hosts` with no complaint.
+CML lists all twelve node definitions through cml-mcp. The tunnel
+connector is reinstalled and the name answers.
+
+The SD-WAN images came from the supplemental ISO. The upload script
+checks names against one mounted ISO at a time, so they went up with
+`REFPLAT_ISO` pointing at that ISO and `REFPLAT_FILE` holding only their
+four lines. `config/refplat.txt` carries all ten for the build and says so
+in a comment.
+
+### Done today
+
+- Preflight, SD-WAN upload of 5 GB, preflight again at 53 OK, build,
+  smoke test, connector. Steps 1 to 5 of the seven-step close-out.
+- Fork `fdf539c` proven on a real host. Lesson closed with the log line.
+- Roadmap: Nexus and SD-WAN moved to Done; the image library item now
+  says images can come from more than one ISO.
+
+### Pick up here
+
+1. Refresh the tunnel token in the Cloudflare dashboard, since the old
+   one passed through a Claude session. Put the new one in
+   `config/mcp-env/cloudflare-tunnel.env` and rerun step 4 of
+   `docs/ACCESS.md` on the host.
+2. A node console through the tunnel: one iosv lab, start it, open the
+   console at `lab.rooez.com`. The last path never tried.
+3. Task 21, ticked against what the last three days already covered.
+4. Then design work. The Terminal UI spec is the natural next piece;
+   three later roadmap items assume it.
+
+If a bigger box is wanted, `vm_size` in `config/cml.tfvars` is the only
+change: E20ds_v6 is 20 vCPU and 160 GB, E32ds_v6 is 32 and 256, both
+inside the approved family quota of 64. Takes effect at the next cycle.
+
+### Watch out for
+
+- The SD-WAN Manager's data volume is thin but lives on the 200 GB OS
+  disk with every node overlay. A Manager left running for days is the
+  first thing that fills it.
+- The tunnel connector still needs the manual reinstall after every
+  build until roadmap item 6 exists.
+
 ## 2026-09-05, end of day
 
 ### Where things stand
