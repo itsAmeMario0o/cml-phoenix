@@ -133,6 +133,18 @@ serves is Let's Encrypt for the zone, renewed by Cloudflare, nothing to
 do. A policy that says "Emails ending in gmail.com" admits every Gmail
 user; use the Emails selector with exact addresses for shared domains.
 
+## Adding a person
+
+Two doors, and both must open. Their email goes into the Access policy,
+as an exact address under the Emails selector, so Cloudflare lets them
+through to the login page. Their CML account is created separately in
+the CML web UI or through cml-mcp. A person with a CML account and no
+policy entry gets Cloudflare's not-authorized page and never sees CML.
+A person with a policy entry and no CML account sees the CML login and
+gets nowhere. And they must use the name, never the IP; the NSG admits
+only the operator's own addresses. Access sessions last 24 hours by
+default, so a second visit shows no prompt.
+
 ## After a rebuild
 
 The tunnel shows Down while the VM is gone. After `scripts/20-up.sh`,
