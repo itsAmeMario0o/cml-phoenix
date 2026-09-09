@@ -6,9 +6,12 @@ a new session.
 ## 2026-09-08
 
 Built again in the morning for use: preflight 53 OK, build in under five
-minutes, smoke test 10 OK, connector reinstalled by hand. The VM is
-running and billing until the next `40-down.sh`. Roadmap item 6 now
-records the user CSV decision.
+minutes, smoke test 10 OK, connector reinstalled by hand. Torn down the
+same evening with the license released; no VM exists. A peer's CML
+account was verified against the API; the block was the Access policy,
+which now also admits cisco.com addresses domain-wide. Narrow that to
+the one address when the test is done. Roadmap item 6 records the user
+CSV decision; ACCESS.md gained an "Adding a person" section.
 
 ## 2026-09-07
 
