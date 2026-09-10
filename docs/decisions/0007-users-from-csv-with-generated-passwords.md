@@ -42,8 +42,10 @@ what gets handed out anyway.
   person their line. A rebuild means new passwords for everyone, which
   is a feature for a class and a nuisance for a peer. Peers can change
   theirs in CML, and the script will not reset it.
-- Lab permissions are not in the CSV. A group with rights on a lab is
-  set in the UI or through cml-mcp after the lab exists.
+- Lab permissions are not in the CSV. A group or user with rights on
+  a lab is set in the UI or with a PATCH on the lab's associations
+  after the lab exists; the cml-mcp tool for it is broken in 0.31.2
+  (LESSONS-LEARNED).
 - A row without an email creates a working CML account that cannot get
   past the Access login. The script warns rather than refuses, since a
   class may be run on the IP inside the allow-list.

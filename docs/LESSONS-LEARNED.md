@@ -271,3 +271,18 @@ time to learn them.
 - Fix: nothing to repair. Wait until `/api/v0/system_information` says
   `ready: true` again, about a minute after the build prints its URL,
   and rerun. The second run read ten of ten.
+
+## cml-mcp cannot set lab permissions, the API can
+
+- Symptom: `set_cml_lab_permissions` in cml-mcp 0.31.2 answered
+  `'str' object has no attribute 'match'` and changed nothing, with a
+  well-formed lab id, user id, and `LAB_EDIT`/`LAB_EXEC` list. Seen
+  2026-09-10.
+- Cause: a bug in the tool's own validation, before any request reaches
+  the controller. Nothing on the CML side.
+- Fix: talk to the controller directly. `PATCH /api/v0/labs/<id>/associations`
+  with `{"groups": [], "users": [{"id": "<user id>", "permissions":
+  ["lab_edit", "lab_exec"]}]}`. Two details: the method is PATCH, since
+  PUT answers 405, and the permission names are lowercase on 2.10 even
+  though the tool's help spells them in capitals. A GET on the same path
+  reads them back. Listing users through cml-mcp still works.

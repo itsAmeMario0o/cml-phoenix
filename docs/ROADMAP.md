@@ -56,7 +56,7 @@ an item gets a spec, link it and move the item to the bottom under Done.
    build. The connector half was done by hand over one SSH session the
    same day, with the sysadmin password and the token on stdin, which
    is the shape the script should take. Lab rights for a group are
-   still set in the UI or through cml-mcp. Item 7 belongs here as well.
+   still set in the UI or by a PATCH on the lab's associations. Item 7 belongs here as well.
    It needs a spec and an ADR but no fork patch. Upstream cloud-cml also
    ships a Let's Encrypt hook, `03-letsencrypt.sh`, unused here. If a real
    certificate on the box ever matters, for the API through the name,
