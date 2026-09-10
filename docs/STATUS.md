@@ -5,11 +5,14 @@ a new session.
 
 ## 2026-09-10
 
-No VM exists. Preflight passed at 53 OK in the afternoon, but the build
-was not started, so the next session begins with `20-up.sh` again once
-the marker has expired.
+Built in the evening and online: preflight 53 OK, 13 resources in about
+five minutes, smoke test 10 OK on the second run. The first run landed
+in the host's post-install reboot and failed five checks; that is now a
+lesson. The tunnel connector is not reinstalled yet, so the front door
+name does not answer until step 4 of `docs/ACCESS.md` is done on the
+host. No lab has been imported.
 
-The session went to a new lab instead. A peer's repo,
+Before the build, the session went to a new lab. A peer's repo,
 cml-cilium-evpn-lab, describes an NX-OS EVPN fabric with a kind cluster
 running Cilium Enterprise, built through Nexus Dashboard. It fits this
 host: 84 GB of RAM and 18 vCPU for nine licensed nodes, with Nexus
@@ -27,8 +30,9 @@ the fake API; not yet run against a real controller.
 
 ### Pick up here
 
-1. `scripts/00-preflight.sh`, then `ASSUME_YES=1 scripts/20-up.sh`,
-   smoke test, connector reinstall from `docs/ACCESS.md`.
+1. If the VM is still up: connector reinstall from `docs/ACCESS.md`.
+   If it was torn down: preflight, `ASSUME_YES=1 scripts/20-up.sh`,
+   wait for ready, smoke test, then the connector.
 2. Copy `config/labs.env.example` to `config/mcp-env/labs.env`, set the
    password, then `scripts/60-import-lab.sh labs/cilium-evpn-blank.yaml`.
    This is the first real run of the import path; if the controller

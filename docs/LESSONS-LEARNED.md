@@ -256,3 +256,18 @@ time to learn them.
   and the kernel numbers them in the order they answer.
 - Fix: nothing to do. The hook mounts through `/dev/disk/azure/data/by-lun/0`,
   which followed the disk both times. Never hardcode an `nvme` path.
+
+## The smoke test fails five checks straight after a build
+
+- Symptom: `90-smoke-test.sh` run right after `20-up.sh` reported the API
+  not ready, the license UNREACHABLE, `/data` not mounted, no bind mount,
+  and cml-mcp getting a Bad gateway, while the same run counted 30 image
+  files on `/data`. Seen 2026-09-10.
+- Cause: the host reboots once at the end of the install, after the
+  readiness module has already seen the API answer. `uptime` on the host
+  read zero minutes. The smoke test landed in the middle of that reboot,
+  and the checks that need the controller or a fresh SSH session failed
+  while the one that read the disk got through.
+- Fix: nothing to repair. Wait until `/api/v0/system_information` says
+  `ready: true` again, about a minute after the build prints its URL,
+  and rerun. The second run read ten of ten.
