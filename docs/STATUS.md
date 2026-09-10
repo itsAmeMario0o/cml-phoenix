@@ -22,7 +22,12 @@ the API because the cml-mcp tool for it is broken (LESSONS-LEARNED).
 `labs/cilium-evpn-fabric/` holds the reference fabric configuration,
 one NX-OS file per switch, generated from one address plan: eBGP
 underlay and overlay, leaves 65000, spines 65010, anycast RP, VRFs red
-and blue with anycast gateways. Not yet applied to a switch.
+and blue with anycast gateways. Pushed to all six through cml-mcp's
+`send_cli_command` once the pyATS extra was installed (LESSONS-LEARNED)
+and saved. Verified: every spine holds four underlay and four overlay
+sessions, every leaf two of each, all Established; each leaf sees the
+other three VTEPs and all four VNIs are up. The kind host and the two
+endpoints are still not started.
 
 Later the same evening: `scripts/70-users.sh` (ADR 0007) creates CML
 users and groups from `config/mcp-env/users.csv` with a generated

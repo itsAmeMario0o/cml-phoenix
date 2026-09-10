@@ -66,7 +66,9 @@ leaf2 Ethernet1/7 is the same in VLAN 200 for blue-endpoint.
 ## Applying it
 
 Spines first, then leaves, in configuration mode. Each file is idempotent
-and can be pasted more than once.
+and can be pasted more than once. Through cml-mcp, `send_cli_command`
+with `config_command` set takes a whole file at once, minus the `!`
+comment lines; that is how the first deployment went in on 2026-09-10.
 
 On a spine after both spines are done and the leaves are in:
 

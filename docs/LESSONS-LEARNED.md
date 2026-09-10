@@ -286,3 +286,19 @@ time to learn them.
   PUT answers 405, and the permission names are lowercase on 2.10 even
   though the tool's help spells them in capitals. A GET on the same path
   reads them back. Listing users through cml-mcp still works.
+
+## cml-mcp says pyATS is required, then logs in to the switch as cisco
+
+- Symptom: `send_cli_command` answered "PyATS and Genie are required to
+  send commands to running devices" on a booted Nexus. Seen 2026-09-10.
+- Cause: the plain `cml-mcp` package has no pyATS. The `cml-mcp[pyats]`
+  extra carries it, which `docs/design-notes.md` had named from the
+  start and the wrapper never used. A second trap sits behind the
+  first: the tool logs in to every device as `PYATS_USERNAME` and
+  `PYATS_PASSWORD`, cisco and cisco when unset, which no topology in
+  `labs/` uses.
+- Fix: `scripts/mcp-cml.sh` runs `uvx "cml-mcp[pyats]"` and, when
+  `config/mcp-env/labs.env` exists, exports admin and the lab password
+  for the tool. Proven the same day: six switch configs of 113 to 158
+  lines each went in through the tool in about 30 seconds apiece, with
+  no rejected lines, and the fabric came up.
