@@ -60,3 +60,30 @@ work, and it comes from Cisco's Artifactory devhub with a personal
 token. Open-source Cilium peers BGP to the leaves but does not do EVPN.
 The built edition of this lab, with the full fabric in day-0 config, is
 tabled until the blank one has been worked through by hand.
+
+## ftdv-cluster.yaml
+
+Two Nexus 9300v in a vPC domain with routed uplinks to a cat8000v
+edge, two Threat Defense Virtual nodes, one per Nexus, that form a
+cluster under cloud-delivered management from the operator's Security
+Cloud Control tenant, an inside host bonded across the pair, and an
+outside host on the edge. No FMCv. Design, address plan, and the
+platform rules it follows are in
+`docs/superpowers/specs/2026-09-10-ftdv-cluster-lab-design.md`; the
+Nexus and edge configuration is in `ftdv-cluster-fabric/`.
+
+The FTDv day-0 registers each node with cdFMC at first boot from three
+extra values in `config/mcp-env/labs.env`: `CDFMC_HOST`,
+`CDFMC_REG_KEY`, `CDFMC_NAT_ID`, taken from the CLI registration key
+command that Security Cloud Control generates. The import refuses to
+render until they are set. About 15 vCPU and 48 GB; needs the
+`ftdv-10-0-0` image on the data disk, which arrives at the next
+rebuild.
+
+| Node | mgmt address | user |
+|---|---|---|
+| n9k1, n9k2 | 192.168.255.71, .72 | admin |
+| edge | 192.168.255.73 | admin |
+| ftd1, ftd2 | 192.168.255.81, .82 | admin |
+| inside-host | 10.10.0.100 on bond0, no mgmt | cisco |
+| outside-host | 203.0.113.100 on the edge LAN, no mgmt | cisco |

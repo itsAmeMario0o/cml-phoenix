@@ -67,25 +67,42 @@ the fake API; not yet run against a real controller.
 
 ### Pick up here
 
-1. If the VM was torn down: preflight, `ASSUME_YES=1 scripts/20-up.sh`,
-   wait for ready, smoke test, then the connector from `docs/ACCESS.md`.
-2. `config/mcp-env/labs.env` exists with a real password. After a
-   teardown the lab is gone with the VM, so rerun
-   `scripts/60-import-lab.sh labs/cilium-evpn-blank.yaml`.
-3. Start the switches, then push `labs/cilium-evpn-fabric/` through
-   cml-mcp. Then start the kind host and the endpoints, which has not
-   been tried yet: confirm the endpoints ping their gateways and the
-   kind host has Docker and kind installed.
-4. First real run of `scripts/70-users.sh --dry-run`, then without,
+The Cilium fabric is running and the operator is using it. When it is
+time to cycle the box for the FTDv image, this is the order:
+
+1. `ASSUME_YES=1 scripts/40-down.sh`. Exports labs to blob, releases
+   the license, destroys the VM. The switch running configs die with
+   it; the reference files in `labs/` are the source.
+2. `scripts/00-preflight.sh`, then `ASSUME_YES=1 scripts/20-up.sh`.
+   The hook fetches only `ftdv-10-0-0` and keeps the other ten.
+3. Wait for `ready: true`, since the host reboots once after the
+   install, then `scripts/90-smoke-test.sh`.
+4. The tunnel connector: step 4 of `docs/ACCESS.md`, or the one-line
+   SSH form from this entry, with the token and the sysadmin password
+   on stdin.
+5. `scripts/60-import-lab.sh labs/cilium-evpn-blank.yaml`, start the
+   six switches, push `labs/cilium-evpn-fabric/` through cml-mcp,
+   about three minutes. Start the NAT node too; it was never started
+   on 2026-09-10, so the kind host had no internet.
+6. Set `CDFMC_HOST`, `CDFMC_REG_KEY`, and `CDFMC_NAT_ID` in
+   `config/mcp-env/labs.env` from a Security Cloud Control onboarding
+   with the CLI registration key method, then
+   `scripts/60-import-lab.sh labs/ftdv-cluster.yaml`. Start n9k1,
+   n9k2, edge, push `labs/ftdv-cluster-fabric/`, then the hosts, then
+   the two FTDv nodes last. Only one of the two labs runs at a time.
+7. First real run of `scripts/70-users.sh --dry-run`, then without,
    from a `config/mcp-env/users.csv` started from the example. Add the
    printed emails to the Access policy.
-5. FTDv cluster lab: rebuild puts the image on the disk, then a spec
-   with the interface plan, address pools, and ECMP arrangement, then
-   the topology YAML. Check the SCC tenant has FTDv entitlements and
-   accepts version 10.0.0 before building.
-6. The earlier items still stand: refresh the tunnel token, narrow the
-   Access policy to the peer's exact address, test a node console
-   through the tunnel.
+8. Still standing: refresh the tunnel token, taint the admin
+   `random_password`, narrow the Access policy to the peer's exact
+   address, test a node console through the tunnel.
+
+The FTDv cluster lab is prepared and untested: spec, topology,
+reference configs, and the renderer now fills any `__NAME__` from the
+env file, not just the password. The tenant checks are the operator's:
+FTDv entitlements and acceptance of version 10.0.0. FTD enforces
+password complexity, so the lab password must carry upper case, lower
+case, and a digit.
 
 ## 2026-09-08
 

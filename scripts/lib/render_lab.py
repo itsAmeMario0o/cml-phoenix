@@ -4,12 +4,13 @@
     LAB_PASSWORD=... python3 scripts/lib/render_lab.py labs/x.yaml \
         --pubkey keys/cml-lab.pub --out exports/.rendered/x.yaml
 
-Tracked topologies under labs/ carry __LAB_PASSWORD__ and __LAB_SSH_PUBKEY__
-instead of real values (ADR 0006). The password comes from the environment,
-never from argv, so it stays out of process listings. Exit 1 with a message
-on stderr when the password is empty, the key file is unreadable, or any
-__NAME__ placeholder is still present after substitution. The output file
-is created with mode 0600. Stdlib only.
+Tracked topologies under labs/ carry __NAME__ placeholders instead of
+real values (ADR 0006). Every __NAME__ is filled from the environment
+variable NAME, except __LAB_SSH_PUBKEY__, which comes from the key file.
+Values pass through the environment, never argv, so they stay out of
+process listings. Exit 1 with a message on stderr naming every
+placeholder whose variable is unset or empty, or when the key file is
+unreadable. The output file is created with mode 0600. Stdlib only.
 """
 from __future__ import annotations
 
@@ -19,22 +20,20 @@ import re
 import sys
 from pathlib import Path
 
-PLACEHOLDER = re.compile(r"__[A-Z][A-Z0-9_]*__")
-PASSWORD = "__LAB_PASSWORD__"
-PUBKEY = "__LAB_SSH_PUBKEY__"
+PLACEHOLDER = re.compile(r"__([A-Z][A-Z0-9_]*)__")
+PUBKEY = "LAB_SSH_PUBKEY"
 
 
-def render(text: str, password: str, pubkey: str) -> str:
-    """Substitute both placeholders. Raises ValueError for anything left over."""
-    if not password:
-        raise ValueError("LAB_PASSWORD is empty")
-    if not pubkey:
-        raise ValueError("public key is empty")
-    out = text.replace(PASSWORD, password).replace(PUBKEY, pubkey)
-    leftover = sorted(set(PLACEHOLDER.findall(out)))
-    if leftover:
-        raise ValueError("unfilled placeholders: " + ", ".join(leftover))
-    return out
+def render(text: str, values: dict[str, str], pubkey: str) -> str:
+    """Substitute every placeholder. Raises ValueError naming what is missing."""
+    names = set(PLACEHOLDER.findall(text))
+    filled = {k: v for k, v in values.items() if v}
+    if pubkey:
+        filled[PUBKEY] = pubkey
+    missing = sorted(n for n in names if n not in filled)
+    if missing:
+        raise ValueError("missing or empty: " + ", ".join(missing))
+    return PLACEHOLDER.sub(lambda m: filled[m.group(1)], text)
 
 
 def lab_title(text: str) -> str:
@@ -81,7 +80,7 @@ def main(argv: list[str]) -> int:
         print(f"render_lab: cannot read {args.pubkey}: {exc}", file=sys.stderr)
         return 1
     try:
-        rendered = render(text, os.environ.get("LAB_PASSWORD", ""), pubkey)
+        rendered = render(text, dict(os.environ), pubkey)
     except ValueError as exc:
         print(f"render_lab: {exc}", file=sys.stderr)
         return 1

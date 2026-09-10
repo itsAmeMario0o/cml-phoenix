@@ -1,0 +1,584 @@
+# FTDv cluster behind a Nexus vPC pair. Two Nexus 9300v in a vPC domain
+# with routed uplinks to a cat8000v edge, two Threat Defense Virtual
+# nodes (one per Nexus) that form a cluster under cloud-delivered
+# management, an inside host bonded across the pair, and an outside host
+# on the edge. Spec: docs/superpowers/specs/2026-09-10-ftdv-cluster-lab-design.md.
+#
+# The Nexus pair and the edge boot with hostname, admin user, and
+# management address only; the fabric configuration is in
+# labs/ftdv-cluster-fabric/. The FTDv day-0 is complete, including the
+# cdFMC registration from __CDFMC_HOST__, __CDFMC_REG_KEY__, and
+# __CDFMC_NAT_ID__. Render with scripts/60-import-lab.sh, which fills
+# every __NAME__ from config/mcp-env/labs.env (ADR 0006).
+#
+# Management on the NAT connector, 192.168.255.0/24, gateway .1:
+#   n9k1 .71  n9k2 .72  edge .73  ftd1 .81  ftd2 .82
+# FTDv slot 1 is the node definition's placeholder and stays unconnected.
+---
+lab:
+  title: FTDv cluster on a vPC pair
+  description: Two FTDv nodes clustered under cdFMC between a Nexus vPC pair and an edge router.
+  version: 0.1.0
+nodes:
+- id: n0
+  label: NAT
+  node_definition: external_connector
+  x: -900
+  y: -400
+  interfaces:
+  - id: n0-port
+    label: port
+    type: physical
+    slot: 0
+  configuration:
+  - name: default
+    content: NAT
+- id: n1
+  label: mgmt-switch
+  node_definition: unmanaged_switch
+  x: -900
+  y: -250
+  interfaces:
+  - id: n1-port0
+    label: port0
+    type: physical
+    slot: 0
+  - id: n1-port1
+    label: port1
+    type: physical
+    slot: 1
+  - id: n1-port2
+    label: port2
+    type: physical
+    slot: 2
+  - id: n1-port3
+    label: port3
+    type: physical
+    slot: 3
+  - id: n1-port4
+    label: port4
+    type: physical
+    slot: 4
+  - id: n1-port5
+    label: port5
+    type: physical
+    slot: 5
+  - id: n1-port6
+    label: port6
+    type: physical
+    slot: 6
+  - id: n1-port7
+    label: port7
+    type: physical
+    slot: 7
+  configuration: []
+- id: n2
+  label: ccl-switch
+  node_definition: unmanaged_switch
+  x: -200
+  y: 300
+  interfaces:
+  - id: n2-port0
+    label: port0
+    type: physical
+    slot: 0
+  - id: n2-port1
+    label: port1
+    type: physical
+    slot: 1
+  - id: n2-port2
+    label: port2
+    type: physical
+    slot: 2
+  - id: n2-port3
+    label: port3
+    type: physical
+    slot: 3
+  configuration: []
+- id: n3
+  label: n9k1
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-6-2-f
+  x: -400
+  y: 0
+  interfaces:
+  - id: n3-mgmt0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: n3-Ethernet1_1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: n3-Ethernet1_2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: n3-Ethernet1_3
+    label: Ethernet1/3
+    type: physical
+    slot: 3
+  - id: n3-Ethernet1_10
+    label: Ethernet1/10
+    type: physical
+    slot: 10
+  - id: n3-Ethernet1_11
+    label: Ethernet1/11
+    type: physical
+    slot: 11
+  - id: n3-Ethernet1_12
+    label: Ethernet1/12
+    type: physical
+    slot: 12
+  configuration:
+  - name: nxos_config.txt
+    content: |
+      hostname n9k1
+      # workaround for booting to loader> prompt
+      echo 'from cli import cli' > set_boot.py
+      echo 'import json' >> set_boot.py
+      echo 'import os' >> set_boot.py
+      echo 'import time' >> set_boot.py
+      echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+      echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+      echo 'i = 0' >> set_boot.py
+      echo 'while i < 10:' >> set_boot.py
+      echo '    try:' >> set_boot.py
+      echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+      echo '        break' >> set_boot.py
+      echo '    except Exception:' >> set_boot.py
+      echo '        i += 1' >> set_boot.py
+      echo '        time.sleep(1)' >> set_boot.py
+      echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+      event manager applet BOOTCONFIG
+       event syslog pattern "Configured from vty"
+       action 1.0 cli python bootflash:set_boot.py
+      # minimum needed config to login
+      no password strength-check
+      username admin role network-admin
+      username admin password __LAB_PASSWORD__ role network-admin
+      vrf context management
+        ip route 0.0.0.0/0 192.168.255.1
+      interface mgmt0
+        vrf member management
+        ip address 192.168.255.71/24
+- id: n4
+  label: n9k2
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-6-2-f
+  x: 0
+  y: 0
+  interfaces:
+  - id: n4-mgmt0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: n4-Ethernet1_1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: n4-Ethernet1_2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: n4-Ethernet1_3
+    label: Ethernet1/3
+    type: physical
+    slot: 3
+  - id: n4-Ethernet1_10
+    label: Ethernet1/10
+    type: physical
+    slot: 10
+  - id: n4-Ethernet1_11
+    label: Ethernet1/11
+    type: physical
+    slot: 11
+  - id: n4-Ethernet1_12
+    label: Ethernet1/12
+    type: physical
+    slot: 12
+  configuration:
+  - name: nxos_config.txt
+    content: |
+      hostname n9k2
+      # workaround for booting to loader> prompt
+      echo 'from cli import cli' > set_boot.py
+      echo 'import json' >> set_boot.py
+      echo 'import os' >> set_boot.py
+      echo 'import time' >> set_boot.py
+      echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+      echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+      echo 'i = 0' >> set_boot.py
+      echo 'while i < 10:' >> set_boot.py
+      echo '    try:' >> set_boot.py
+      echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+      echo '        break' >> set_boot.py
+      echo '    except Exception:' >> set_boot.py
+      echo '        i += 1' >> set_boot.py
+      echo '        time.sleep(1)' >> set_boot.py
+      echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+      event manager applet BOOTCONFIG
+       event syslog pattern "Configured from vty"
+       action 1.0 cli python bootflash:set_boot.py
+      # minimum needed config to login
+      no password strength-check
+      username admin role network-admin
+      username admin password __LAB_PASSWORD__ role network-admin
+      vrf context management
+        ip route 0.0.0.0/0 192.168.255.1
+      interface mgmt0
+        vrf member management
+        ip address 192.168.255.72/24
+- id: n5
+  label: edge
+  node_definition: cat8000v
+  image_definition: cat8000v-17-18-02
+  x: -200
+  y: -250
+  interfaces:
+  - id: n5-GigabitEthernet1
+    label: GigabitEthernet1
+    type: physical
+    slot: 0
+  - id: n5-GigabitEthernet2
+    label: GigabitEthernet2
+    type: physical
+    slot: 1
+  - id: n5-GigabitEthernet3
+    label: GigabitEthernet3
+    type: physical
+    slot: 2
+  - id: n5-GigabitEthernet4
+    label: GigabitEthernet4
+    type: physical
+    slot: 3
+  configuration:
+  - name: iosxe_config.txt
+    content: |
+      hostname edge
+      no ip domain lookup
+      ip domain name lab.local
+      username admin privilege 15 secret __LAB_PASSWORD__
+      vrf definition MGMT
+       address-family ipv4
+      interface GigabitEthernet1
+       description management
+       vrf forwarding MGMT
+       ip address 192.168.255.73 255.255.255.0
+       no shutdown
+      ip route vrf MGMT 0.0.0.0 0.0.0.0 192.168.255.1
+      line con 0
+       exec-timeout 0 0
+       logging synchronous
+      line vty 0 4
+       login local
+       transport input ssh
+      end
+- id: n6
+  label: ftd1
+  node_definition: ftdv
+  image_definition: ftdv-10-0-0
+  x: -400
+  y: 200
+  interfaces:
+  - id: n6-Management0_0
+    label: Management0/0
+    type: physical
+    slot: 0
+  - id: n6-donotuse1
+    label: donotuse1
+    type: physical
+    slot: 1
+  - id: n6-GigabitEthernet0_0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 2
+  - id: n6-GigabitEthernet0_1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 3
+  - id: n6-GigabitEthernet0_2
+    label: GigabitEthernet0/2
+    type: physical
+    slot: 4
+  configuration:
+  - name: day0-config
+    content: |-
+      {
+          "EULA": "accept",
+          "Hostname": "ftd1",
+          "AdminPassword": "__LAB_PASSWORD__",
+          "FirewallMode": "routed",
+          "DNS1": "8.8.8.8",
+          "DNS2": "1.1.1.1",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "192.168.255.81",
+          "IPv4Mask": "255.255.255.0",
+          "IPv4Gw": "192.168.255.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "__CDFMC_HOST__",
+          "FmcRegKey": "__CDFMC_REG_KEY__",
+          "FmcNatId": "__CDFMC_NAT_ID__",
+          "ManageLocally": "No"
+      }
+- id: n7
+  label: ftd2
+  node_definition: ftdv
+  image_definition: ftdv-10-0-0
+  x: 0
+  y: 200
+  interfaces:
+  - id: n7-Management0_0
+    label: Management0/0
+    type: physical
+    slot: 0
+  - id: n7-donotuse1
+    label: donotuse1
+    type: physical
+    slot: 1
+  - id: n7-GigabitEthernet0_0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 2
+  - id: n7-GigabitEthernet0_1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 3
+  - id: n7-GigabitEthernet0_2
+    label: GigabitEthernet0/2
+    type: physical
+    slot: 4
+  configuration:
+  - name: day0-config
+    content: |-
+      {
+          "EULA": "accept",
+          "Hostname": "ftd2",
+          "AdminPassword": "__LAB_PASSWORD__",
+          "FirewallMode": "routed",
+          "DNS1": "8.8.8.8",
+          "DNS2": "1.1.1.1",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "192.168.255.82",
+          "IPv4Mask": "255.255.255.0",
+          "IPv4Gw": "192.168.255.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "__CDFMC_HOST__",
+          "FmcRegKey": "__CDFMC_REG_KEY__",
+          "FmcNatId": "__CDFMC_NAT_ID__",
+          "ManageLocally": "No"
+      }
+- id: n8
+  label: inside-host
+  node_definition: ubuntu
+  image_definition: ubuntu-24-04-20260307
+  x: -200
+  y: 120
+  interfaces:
+  - id: n8-ens2
+    label: ens2
+    type: physical
+    slot: 0
+  - id: n8-ens3
+    label: ens3
+    type: physical
+    slot: 1
+  configuration:
+  - name: user-data
+    content: |-
+      #cloud-config
+      hostname: inside-host
+      manage_etc_hosts: true
+      ssh_pwauth: true
+      users:
+        - name: cisco
+          groups: sudo
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          lock_passwd: false
+          ssh_authorized_keys:
+            - __LAB_SSH_PUBKEY__
+      chpasswd:
+        users:
+          - name: cisco
+            password: '__LAB_PASSWORD__'
+            type: text
+        expire: false
+      write_files:
+        - path: /etc/netplan/60-bond.yaml
+          permissions: '0600'
+          content: |
+            network:
+              version: 2
+              ethernets:
+                ens2:
+                  dhcp4: false
+                ens3:
+                  dhcp4: false
+              bonds:
+                bond0:
+                  interfaces: [ens2, ens3]
+                  parameters:
+                    mode: 802.3ad
+                    lacp-rate: fast
+                    mii-monitor-interval: 100
+                    transmit-hash-policy: layer3+4
+                  addresses: [10.10.0.100/24]
+                  routes:
+                    - to: default
+                      via: 10.10.0.1
+      runcmd:
+        - rm -f /etc/netplan/50-cloud-init.yaml
+        - netplan apply
+- id: n9
+  label: outside-host
+  node_definition: ubuntu
+  image_definition: ubuntu-24-04-20260307
+  x: 200
+  y: -250
+  interfaces:
+  - id: n9-ens2
+    label: ens2
+    type: physical
+    slot: 0
+  configuration:
+  - name: user-data
+    content: |-
+      #cloud-config
+      hostname: outside-host
+      manage_etc_hosts: true
+      ssh_pwauth: true
+      users:
+        - name: cisco
+          groups: sudo
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          lock_passwd: false
+          ssh_authorized_keys:
+            - __LAB_SSH_PUBKEY__
+      chpasswd:
+        users:
+          - name: cisco
+            password: '__LAB_PASSWORD__'
+            type: text
+        expire: false
+      write_files:
+        - path: /etc/netplan/60-static.yaml
+          permissions: '0600'
+          content: |
+            network:
+              version: 2
+              ethernets:
+                ens2:
+                  dhcp4: false
+                  addresses: [203.0.113.100/24]
+                  routes:
+                    - to: default
+                      via: 203.0.113.1
+      runcmd:
+        - rm -f /etc/netplan/50-cloud-init.yaml
+        - netplan apply
+links:
+- id: l0
+  n1: n0
+  i1: n0-port
+  n2: n1
+  i2: n1-port0
+- id: l1
+  n1: n3
+  i1: n3-mgmt0
+  n2: n1
+  i2: n1-port1
+- id: l2
+  n1: n4
+  i1: n4-mgmt0
+  n2: n1
+  i2: n1-port2
+- id: l3
+  n1: n5
+  i1: n5-GigabitEthernet1
+  n2: n1
+  i2: n1-port3
+- id: l4
+  n1: n6
+  i1: n6-Management0_0
+  n2: n1
+  i2: n1-port4
+- id: l5
+  n1: n7
+  i1: n7-Management0_0
+  n2: n1
+  i2: n1-port5
+- id: l6
+  n1: n3
+  i1: n3-Ethernet1_1
+  n2: n4
+  i2: n4-Ethernet1_1
+- id: l7
+  n1: n3
+  i1: n3-Ethernet1_2
+  n2: n4
+  i2: n4-Ethernet1_2
+- id: l8
+  n1: n3
+  i1: n3-Ethernet1_3
+  n2: n5
+  i2: n5-GigabitEthernet2
+- id: l9
+  n1: n4
+  i1: n4-Ethernet1_3
+  n2: n5
+  i2: n5-GigabitEthernet3
+- id: l10
+  n1: n6
+  i1: n6-GigabitEthernet0_1
+  n2: n3
+  i2: n3-Ethernet1_10
+- id: l11
+  n1: n6
+  i1: n6-GigabitEthernet0_2
+  n2: n3
+  i2: n3-Ethernet1_11
+- id: l12
+  n1: n7
+  i1: n7-GigabitEthernet0_1
+  n2: n4
+  i2: n4-Ethernet1_10
+- id: l13
+  n1: n7
+  i1: n7-GigabitEthernet0_2
+  n2: n4
+  i2: n4-Ethernet1_11
+- id: l14
+  n1: n6
+  i1: n6-GigabitEthernet0_0
+  n2: n2
+  i2: n2-port0
+- id: l15
+  n1: n7
+  i1: n7-GigabitEthernet0_0
+  n2: n2
+  i2: n2-port1
+- id: l16
+  n1: n8
+  i1: n8-ens2
+  n2: n3
+  i2: n3-Ethernet1_12
+- id: l17
+  n1: n8
+  i1: n8-ens3
+  n2: n4
+  i2: n4-Ethernet1_12
+- id: l18
+  n1: n9
+  i1: n9-ens2
+  n2: n5
+  i2: n5-GigabitEthernet4
