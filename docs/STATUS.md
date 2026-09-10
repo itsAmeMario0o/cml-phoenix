@@ -12,7 +12,9 @@ lesson. The tunnel connector went in over a single SSH session, with
 the sysadmin password and the token fed on stdin from the persistent
 root and the env file, so neither touched the chat. Four registered
 connections, and the name redirects to the Access login. That one
-command is most of roadmap item 6. No lab has been imported.
+command is most of roadmap item 6. The blank Cilium EVPN lab imported
+on the first try through `60-import-lab.sh`: eleven nodes, 22 links,
+image names resolved, kind-host at 4 vCPU and 8 GB. It sits stopped.
 
 Before the build, the session went to a new lab. A peer's repo,
 cml-cilium-evpn-lab, describes an NX-OS EVPN fabric with a kind cluster
@@ -34,12 +36,12 @@ the fake API; not yet run against a real controller.
 
 1. If the VM was torn down: preflight, `ASSUME_YES=1 scripts/20-up.sh`,
    wait for ready, smoke test, then the connector from `docs/ACCESS.md`.
-2. Copy `config/labs.env.example` to `config/mcp-env/labs.env`, set the
-   password, then `scripts/60-import-lab.sh labs/cilium-evpn-blank.yaml`.
-   This is the first real run of the import path; if the controller
-   rejects the body, the content type is the first thing to check.
+2. `config/mcp-env/labs.env` exists with a real password. After a
+   teardown the lab is gone with the VM, so rerun
+   `scripts/60-import-lab.sh labs/cilium-evpn-blank.yaml`.
 3. Start spines, then leaves, then hosts. Confirm the switches reach a
    login prompt and the kind host has Docker and kind installed.
+   Neither has been tried yet.
 4. The earlier items still stand: refresh the tunnel token, narrow the
    Access policy to the peer's exact address, test a node console
    through the tunnel.
