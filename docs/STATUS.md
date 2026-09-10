@@ -8,9 +8,11 @@ a new session.
 Built in the evening and online: preflight 53 OK, 13 resources in about
 five minutes, smoke test 10 OK on the second run. The first run landed
 in the host's post-install reboot and failed five checks; that is now a
-lesson. The tunnel connector is not reinstalled yet, so the front door
-name does not answer until step 4 of `docs/ACCESS.md` is done on the
-host. No lab has been imported.
+lesson. The tunnel connector went in over a single SSH session, with
+the sysadmin password and the token fed on stdin from the persistent
+root and the env file, so neither touched the chat. Four registered
+connections, and the name redirects to the Access login. That one
+command is most of roadmap item 6. No lab has been imported.
 
 Before the build, the session went to a new lab. A peer's repo,
 cml-cilium-evpn-lab, describes an NX-OS EVPN fabric with a kind cluster
@@ -30,9 +32,8 @@ the fake API; not yet run against a real controller.
 
 ### Pick up here
 
-1. If the VM is still up: connector reinstall from `docs/ACCESS.md`.
-   If it was torn down: preflight, `ASSUME_YES=1 scripts/20-up.sh`,
-   wait for ready, smoke test, then the connector.
+1. If the VM was torn down: preflight, `ASSUME_YES=1 scripts/20-up.sh`,
+   wait for ready, smoke test, then the connector from `docs/ACCESS.md`.
 2. Copy `config/labs.env.example` to `config/mcp-env/labs.env`, set the
    password, then `scripts/60-import-lab.sh labs/cilium-evpn-blank.yaml`.
    This is the first real run of the import path; if the controller
