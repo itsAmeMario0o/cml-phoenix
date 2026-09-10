@@ -29,6 +29,7 @@ over SSH. Claude Code drives the controller through
     scripts/00-preflight.sh      # green before anything else
     scripts/20-up.sh             # build, prompts before each apply
     scripts/90-smoke-test.sh     # prove it
+    scripts/60-import-lab.sh labs/<scenario>.yaml   # load a topology
     ...work...
     scripts/40-down.sh           # export labs, release license, destroy VM
 

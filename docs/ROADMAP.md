@@ -70,7 +70,14 @@ an item gets a spec, link it and move the item to the bottom under Done.
 ## Images and scenarios
 
 8. Moved to Done.
-9. Scenario topologies under `labs/`. One YAML per scenario. Empty today.
+9. Scenario topologies under `labs/`. One YAML per scenario. The first
+   one landed 2026-09-10: the Cilium EVPN fabric, blank edition, with
+   placeholders rendered at import (ADR 0006). Still to come in that
+   family: the built edition, where the six switch configs carry the
+   whole eBGP EVPN fabric from the source lab's Nexus Dashboard data
+   model, so the Cilium work starts on a working fabric. Tabled until
+   the blank one has been built by hand at least once. Both editions
+   should come from one node-and-link definition so they never drift.
 10. Image library as a product, not a chore. The blob container is
     already a shared library: one upload per deployment, none per
     engineer, and preflight checks it. What is not portable is the
@@ -109,7 +116,8 @@ an item gets a spec, link it and move the item to the bottom under Done.
 
 ## Done
 
-- Nexus 9300v on the server, 2026-09-07. Two vCPU and 10 GB each. With
+- Nexus 9300v on the server, 2026-09-07. Two vCPU and 12 GB each by the
+  node definition in this refplat. With
   it came the Catalyst SD-WAN Manager, Validator, Controller, and edge
   from the supplemental ISO, uploaded with the `REFPLAT_ISO` override.
   The Manager wants 8 vCPU and 32 GB and carries a 256 GB thin data

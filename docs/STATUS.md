@@ -3,6 +3,42 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
+## 2026-09-10
+
+No VM exists. Preflight passed at 53 OK in the afternoon, but the build
+was not started, so the next session begins with `20-up.sh` again once
+the marker has expired.
+
+The session went to a new lab instead. A peer's repo,
+cml-cilium-evpn-lab, describes an NX-OS EVPN fabric with a kind cluster
+running Cilium Enterprise, built through Nexus Dashboard. It fits this
+host: 84 GB of RAM and 18 vCPU for nine licensed nodes, with Nexus
+Dashboard dropped in favour of plain NX-OS configuration. The first
+deliverable is `labs/cilium-evpn-blank.yaml`, where the switches boot
+with only hostname, admin user, mgmt0 address, and the loader-prompt
+workaround. The management network moved from the System Bridge to the
+NAT connector so the kind host has internet. The built edition, with
+the full fabric in day-0 config, is tabled (roadmap item 9).
+
+Passwords in a tracked topology were the design question. ADR 0006:
+placeholders in the file, `scripts/60-import-lab.sh` renders them from
+`config/mcp-env/labs.env` and posts the lab to the API. Tested against
+the fake API; not yet run against a real controller.
+
+### Pick up here
+
+1. `scripts/00-preflight.sh`, then `ASSUME_YES=1 scripts/20-up.sh`,
+   smoke test, connector reinstall from `docs/ACCESS.md`.
+2. Copy `config/labs.env.example` to `config/mcp-env/labs.env`, set the
+   password, then `scripts/60-import-lab.sh labs/cilium-evpn-blank.yaml`.
+   This is the first real run of the import path; if the controller
+   rejects the body, the content type is the first thing to check.
+3. Start spines, then leaves, then hosts. Confirm the switches reach a
+   login prompt and the kind host has Docker and kind installed.
+4. The earlier items still stand: refresh the tunnel token, narrow the
+   Access policy to the peer's exact address, test a node console
+   through the tunnel.
+
 ## 2026-09-08
 
 Built again in the morning for use: preflight 53 OK, build in under five

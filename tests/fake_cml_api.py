@@ -15,6 +15,7 @@ import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs, urlparse
 
 
 def _default_labs() -> dict:
@@ -45,13 +46,24 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get("Authorization") == "Bearer FAKE-TOKEN"
 
     def do_POST(self) -> None:  # noqa: N802
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length)
         if self.path == "/api/v0/authenticate":
-            length = int(self.headers.get("Content-Length", "0"))
-            creds = json.loads(self.rfile.read(length))
+            creds = json.loads(body)
             if creds == {"username": "admin", "password": "secret"}:
                 self._send(200, json.dumps("FAKE-TOKEN"))
             else:
                 self._send(403, {"description": "bad credentials"})
+            return
+        if not self._authorized():
+            self._send(401, {})
+            return
+        if self.path.startswith("/api/v0/import"):
+            # Real CML reads the body as YAML. Here the title comes from the
+            # query and the body is kept verbatim for the download endpoint.
+            title = parse_qs(urlparse(self.path).query).get("title", ["Imported"])[0]
+            STATE["labs"]["lab-new"] = {"lab_title": title, "state": "STOPPED", "topology": body.decode()}
+            self._send(200, {"id": "lab-new", "warnings": []})
             return
         self._send(404, {})
 
@@ -65,7 +77,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"registration": {"status": STATE["registration"]}})
         elif self.path.startswith("/api/v0/labs/") and self.path.endswith("/download"):
             lab_id = self.path.split("/")[4]
-            self._send(200, f"lab:\n  title: {STATE['labs'][lab_id]['lab_title']}\n", "text/plain")
+            lab = STATE["labs"][lab_id]
+            self._send(200, lab.get("topology", f"lab:\n  title: {lab['lab_title']}\n"), "text/plain")
         elif self.path.startswith("/api/v0/labs/"):
             lab_id = self.path.split("/")[4]
             self._send(200, {"id": lab_id, **STATE["labs"][lab_id]})

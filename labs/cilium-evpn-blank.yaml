@@ -1,0 +1,744 @@
+# Cilium EVPN fabric, blank edition. Two Nexus 9000v spines, four leaves,
+# an Ubuntu host for a kind cluster with Cilium, and two Ubuntu endpoints.
+# The switches boot with only what it takes to log in: hostname, admin
+# user, mgmt0 address, and the loader-prompt workaround. The fabric itself
+# (underlay, VXLAN, VRFs, BGP toward Cilium) is left for you to build.
+#
+# Adapted from marinfer/cml-cilium-evpn-lab. Changes from the source:
+# the management network rides the CML NAT connector (192.168.255.0/24,
+# gateway .1) instead of the System Bridge, image names match
+# config/refplat.txt, and every password is a placeholder. Render with
+# scripts/60-import-lab.sh, which fills __LAB_PASSWORD__ from
+# config/mcp-env/labs.env and __LAB_SSH_PUBKEY__ from keys/cml-lab.pub.
+# ADR 0006 for why the tracked file carries placeholders.
+#
+# Management addresses
+#   spine1 192.168.255.50   spine2 192.168.255.60
+#   leaf1  192.168.255.51   leaf2  192.168.255.52
+#   leaf3  192.168.255.53   leaf4  192.168.255.54
+#   kind-host 192.168.255.5 (ens2)
+# Fabric links
+#   leafN Ethernet1/1 -> spine1 Ethernet1/N, leafN Ethernet1/2 -> spine2 Ethernet1/N
+#   kind-host ens3..ens6 -> leaf1..leaf4 Ethernet1/6
+#   red-endpoint -> leaf1 Ethernet1/7, blue-endpoint -> leaf2 Ethernet1/7
+---
+lab:
+  title: Cilium EVPN fabric (blank)
+  description: NX-OS spine-leaf with a kind host for Cilium. Switches boot blank.
+  version: 0.1.0
+nodes:
+- id: n0
+  label: NAT
+  node_definition: external_connector
+  x: -1274
+  y: -315
+  interfaces:
+  - id: n0-port
+    label: port
+    type: physical
+    slot: 0
+  configuration:
+  - name: default
+    content: NAT
+- id: n1
+  label: Management Switch
+  node_definition: unmanaged_switch
+  x: -1271
+  y: -163
+  interfaces:
+  - id: n1-port0
+    label: port0
+    type: physical
+    slot: 0
+  - id: n1-port1
+    label: port1
+    type: physical
+    slot: 1
+  - id: n1-port2
+    label: port2
+    type: physical
+    slot: 2
+  - id: n1-port3
+    label: port3
+    type: physical
+    slot: 3
+  - id: n1-port4
+    label: port4
+    type: physical
+    slot: 4
+  - id: n1-port5
+    label: port5
+    type: physical
+    slot: 5
+  - id: n1-port6
+    label: port6
+    type: physical
+    slot: 6
+  - id: n1-port7
+    label: port7
+    type: physical
+    slot: 7
+  configuration: []
+- id: n2
+  label: spine1
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-6-2-f
+  x: -361
+  y: -76
+  interfaces:
+  - id: n2-mgmt0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: n2-Ethernet1_1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: n2-Ethernet1_2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: n2-Ethernet1_3
+    label: Ethernet1/3
+    type: physical
+    slot: 3
+  - id: n2-Ethernet1_4
+    label: Ethernet1/4
+    type: physical
+    slot: 4
+  configuration:
+  - name: nxos_config.txt
+    content: |
+      hostname spine1
+      # workaround for booting to loader> prompt
+      echo 'from cli import cli' > set_boot.py
+      echo 'import json' >> set_boot.py
+      echo 'import os' >> set_boot.py
+      echo 'import time' >> set_boot.py
+      echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+      echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+      echo 'i = 0' >> set_boot.py
+      echo 'while i < 10:' >> set_boot.py
+      echo '    try:' >> set_boot.py
+      echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+      echo '        break' >> set_boot.py
+      echo '    except Exception:' >> set_boot.py
+      echo '        i += 1' >> set_boot.py
+      echo '        time.sleep(1)' >> set_boot.py
+      echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+      event manager applet BOOTCONFIG
+       event syslog pattern "Configured from vty"
+       action 1.0 cli python bootflash:set_boot.py
+      # minimum needed config to login
+      no password strength-check
+      username admin role network-admin
+      username admin password __LAB_PASSWORD__ role network-admin
+      vrf context management
+        ip route 0.0.0.0/0 192.168.255.1
+      interface mgmt0
+        vrf member management
+        ip address 192.168.255.50/24
+- id: n3
+  label: spine2
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-6-2-f
+  x: -226
+  y: -75
+  interfaces:
+  - id: n3-mgmt0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: n3-Ethernet1_1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: n3-Ethernet1_2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: n3-Ethernet1_3
+    label: Ethernet1/3
+    type: physical
+    slot: 3
+  - id: n3-Ethernet1_4
+    label: Ethernet1/4
+    type: physical
+    slot: 4
+  configuration:
+  - name: nxos_config.txt
+    content: |
+      hostname spine2
+      # workaround for booting to loader> prompt
+      echo 'from cli import cli' > set_boot.py
+      echo 'import json' >> set_boot.py
+      echo 'import os' >> set_boot.py
+      echo 'import time' >> set_boot.py
+      echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+      echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+      echo 'i = 0' >> set_boot.py
+      echo 'while i < 10:' >> set_boot.py
+      echo '    try:' >> set_boot.py
+      echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+      echo '        break' >> set_boot.py
+      echo '    except Exception:' >> set_boot.py
+      echo '        i += 1' >> set_boot.py
+      echo '        time.sleep(1)' >> set_boot.py
+      echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+      event manager applet BOOTCONFIG
+       event syslog pattern "Configured from vty"
+       action 1.0 cli python bootflash:set_boot.py
+      # minimum needed config to login
+      no password strength-check
+      username admin role network-admin
+      username admin password __LAB_PASSWORD__ role network-admin
+      vrf context management
+        ip route 0.0.0.0/0 192.168.255.1
+      interface mgmt0
+        vrf member management
+        ip address 192.168.255.60/24
+- id: n4
+  label: leaf1
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-6-2-f
+  x: -444
+  y: 116
+  interfaces:
+  - id: n4-mgmt0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: n4-Ethernet1_1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: n4-Ethernet1_2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: n4-Ethernet1_6
+    label: Ethernet1/6
+    type: physical
+    slot: 6
+  - id: n4-Ethernet1_7
+    label: Ethernet1/7
+    type: physical
+    slot: 7
+  configuration:
+  - name: nxos_config.txt
+    content: |
+      hostname leaf1
+      # workaround for booting to loader> prompt
+      echo 'from cli import cli' > set_boot.py
+      echo 'import json' >> set_boot.py
+      echo 'import os' >> set_boot.py
+      echo 'import time' >> set_boot.py
+      echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+      echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+      echo 'i = 0' >> set_boot.py
+      echo 'while i < 10:' >> set_boot.py
+      echo '    try:' >> set_boot.py
+      echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+      echo '        break' >> set_boot.py
+      echo '    except Exception:' >> set_boot.py
+      echo '        i += 1' >> set_boot.py
+      echo '        time.sleep(1)' >> set_boot.py
+      echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+      event manager applet BOOTCONFIG
+       event syslog pattern "Configured from vty"
+       action 1.0 cli python bootflash:set_boot.py
+      # minimum needed config to login
+      no password strength-check
+      username admin role network-admin
+      username admin password __LAB_PASSWORD__ role network-admin
+      vrf context management
+        ip route 0.0.0.0/0 192.168.255.1
+      interface mgmt0
+        vrf member management
+        ip address 192.168.255.51/24
+- id: n5
+  label: leaf2
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-6-2-f
+  x: -360
+  y: 120
+  interfaces:
+  - id: n5-mgmt0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: n5-Ethernet1_1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: n5-Ethernet1_2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: n5-Ethernet1_6
+    label: Ethernet1/6
+    type: physical
+    slot: 6
+  - id: n5-Ethernet1_7
+    label: Ethernet1/7
+    type: physical
+    slot: 7
+  configuration:
+  - name: nxos_config.txt
+    content: |
+      hostname leaf2
+      # workaround for booting to loader> prompt
+      echo 'from cli import cli' > set_boot.py
+      echo 'import json' >> set_boot.py
+      echo 'import os' >> set_boot.py
+      echo 'import time' >> set_boot.py
+      echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+      echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+      echo 'i = 0' >> set_boot.py
+      echo 'while i < 10:' >> set_boot.py
+      echo '    try:' >> set_boot.py
+      echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+      echo '        break' >> set_boot.py
+      echo '    except Exception:' >> set_boot.py
+      echo '        i += 1' >> set_boot.py
+      echo '        time.sleep(1)' >> set_boot.py
+      echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+      event manager applet BOOTCONFIG
+       event syslog pattern "Configured from vty"
+       action 1.0 cli python bootflash:set_boot.py
+      # minimum needed config to login
+      no password strength-check
+      username admin role network-admin
+      username admin password __LAB_PASSWORD__ role network-admin
+      vrf context management
+        ip route 0.0.0.0/0 192.168.255.1
+      interface mgmt0
+        vrf member management
+        ip address 192.168.255.52/24
+- id: n6
+  label: leaf3
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-6-2-f
+  x: -200
+  y: 120
+  interfaces:
+  - id: n6-mgmt0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: n6-Ethernet1_1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: n6-Ethernet1_2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: n6-Ethernet1_6
+    label: Ethernet1/6
+    type: physical
+    slot: 6
+  configuration:
+  - name: nxos_config.txt
+    content: |
+      hostname leaf3
+      # workaround for booting to loader> prompt
+      echo 'from cli import cli' > set_boot.py
+      echo 'import json' >> set_boot.py
+      echo 'import os' >> set_boot.py
+      echo 'import time' >> set_boot.py
+      echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+      echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+      echo 'i = 0' >> set_boot.py
+      echo 'while i < 10:' >> set_boot.py
+      echo '    try:' >> set_boot.py
+      echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+      echo '        break' >> set_boot.py
+      echo '    except Exception:' >> set_boot.py
+      echo '        i += 1' >> set_boot.py
+      echo '        time.sleep(1)' >> set_boot.py
+      echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+      event manager applet BOOTCONFIG
+       event syslog pattern "Configured from vty"
+       action 1.0 cli python bootflash:set_boot.py
+      # minimum needed config to login
+      no password strength-check
+      username admin role network-admin
+      username admin password __LAB_PASSWORD__ role network-admin
+      vrf context management
+        ip route 0.0.0.0/0 192.168.255.1
+      interface mgmt0
+        vrf member management
+        ip address 192.168.255.53/24
+- id: n7
+  label: leaf4
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-6-2-f
+  x: -120
+  y: 120
+  interfaces:
+  - id: n7-mgmt0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: n7-Ethernet1_1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: n7-Ethernet1_2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: n7-Ethernet1_6
+    label: Ethernet1/6
+    type: physical
+    slot: 6
+  configuration:
+  - name: nxos_config.txt
+    content: |
+      hostname leaf4
+      # workaround for booting to loader> prompt
+      echo 'from cli import cli' > set_boot.py
+      echo 'import json' >> set_boot.py
+      echo 'import os' >> set_boot.py
+      echo 'import time' >> set_boot.py
+      echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+      echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+      echo 'i = 0' >> set_boot.py
+      echo 'while i < 10:' >> set_boot.py
+      echo '    try:' >> set_boot.py
+      echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+      echo '        break' >> set_boot.py
+      echo '    except Exception:' >> set_boot.py
+      echo '        i += 1' >> set_boot.py
+      echo '        time.sleep(1)' >> set_boot.py
+      echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+      event manager applet BOOTCONFIG
+       event syslog pattern "Configured from vty"
+       action 1.0 cli python bootflash:set_boot.py
+      # minimum needed config to login
+      no password strength-check
+      username admin role network-admin
+      username admin password __LAB_PASSWORD__ role network-admin
+      vrf context management
+        ip route 0.0.0.0/0 192.168.255.1
+      interface mgmt0
+        vrf member management
+        ip address 192.168.255.54/24
+- id: n8
+  label: kind-host
+  node_definition: ubuntu
+  image_definition: ubuntu-24-04-20260307
+  x: -265
+  y: 331
+  ram: 8192
+  cpus: 4
+  boot_disk_size: 20
+  interfaces:
+  - id: n8-ens2
+    label: ens2
+    type: physical
+    slot: 0
+  - id: n8-ens3
+    label: ens3
+    type: physical
+    slot: 1
+  - id: n8-ens4
+    label: ens4
+    type: physical
+    slot: 2
+  - id: n8-ens5
+    label: ens5
+    type: physical
+    slot: 3
+  - id: n8-ens6
+    label: ens6
+    type: physical
+    slot: 4
+  configuration:
+  - name: user-data
+    content: |-
+      #cloud-config
+      hostname: kind-host
+      ssh_pwauth: true
+
+      users:
+        - name: kindops
+          gecos: Kind Ops User
+          groups: sudo
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          lock_passwd: false
+          ssh_authorized_keys:
+            - __LAB_SSH_PUBKEY__
+
+      chpasswd:
+        users:
+          - name: kindops
+            password: '__LAB_PASSWORD__'
+            type: text
+        expire: false
+
+      write_files:
+        - path: /etc/netplan/60-static.yaml
+          permissions: '0600'
+          content: |
+            network:
+              version: 2
+              ethernets:
+                ens2:
+                  dhcp4: false
+                  addresses: [192.168.255.5/24]
+                  routes:
+                    - to: default
+                      via: 192.168.255.1
+                  nameservers:
+                    addresses: [192.168.255.1, 8.8.8.8]
+        - path: /etc/netplan/61-fabric-interfaces.yaml
+          permissions: '0600'
+          content: |
+            network:
+              version: 2
+              ethernets:
+                ens3:
+                  dhcp4: false
+                  optional: true
+                ens4:
+                  dhcp4: false
+                  optional: true
+                ens5:
+                  dhcp4: false
+                  optional: true
+                ens6:
+                  dhcp4: false
+                  optional: true
+
+      runcmd:
+        - rm -f /etc/netplan/50-cloud-init.yaml
+        - netplan apply
+        - sleep 10
+        - |
+          for i in 1 2 3 4 5; do
+            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && break
+            sleep 10
+          done
+        - sh /tmp/get-docker.sh
+        - usermod -aG docker kindops
+        - systemctl enable --now docker
+        - curl -Lo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+        - chmod +x /usr/local/bin/kind
+        - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        - install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        - curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        - chmod +x /tmp/get_helm.sh
+        - /tmp/get_helm.sh
+        - curl -fsSL --remote-name-all https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz
+        - tar xzvfC cilium-linux-amd64.tar.gz /usr/local/bin
+        - rm -f cilium-linux-amd64.tar.gz
+- id: n9
+  label: red-endpoint
+  node_definition: ubuntu
+  image_definition: ubuntu-24-04-20260307
+  x: -622
+  y: 339
+  interfaces:
+  - id: n9-ens2
+    label: ens2
+    type: physical
+    slot: 0
+  configuration:
+  - name: user-data
+    content: |-
+      #cloud-config
+      hostname: host-red
+      manage_etc_hosts: true
+      ssh_pwauth: true
+      users:
+        - name: cisco
+          groups: sudo
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          lock_passwd: false
+          ssh_authorized_keys:
+            - __LAB_SSH_PUBKEY__
+      chpasswd:
+        users:
+          - name: cisco
+            password: '__LAB_PASSWORD__'
+            type: text
+        expire: false
+      write_files:
+        - path: /etc/netplan/60-static.yaml
+          permissions: '0600'
+          content: |
+            network:
+              version: 2
+              ethernets:
+                ens2:
+                  dhcp4: false
+                  addresses: [10.0.100.10/24]
+                  routes:
+                    - to: default
+                      via: 10.0.100.1
+      runcmd:
+        - rm -f /etc/netplan/50-cloud-init.yaml
+        - netplan apply
+- id: n10
+  label: blue-endpoint
+  node_definition: ubuntu
+  image_definition: ubuntu-24-04-20260307
+  x: -474
+  y: 331
+  interfaces:
+  - id: n10-ens2
+    label: ens2
+    type: physical
+    slot: 0
+  configuration:
+  - name: user-data
+    content: |-
+      #cloud-config
+      hostname: host-blue
+      manage_etc_hosts: true
+      ssh_pwauth: true
+      users:
+        - name: cisco
+          groups: sudo
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          lock_passwd: false
+          ssh_authorized_keys:
+            - __LAB_SSH_PUBKEY__
+      chpasswd:
+        users:
+          - name: cisco
+            password: '__LAB_PASSWORD__'
+            type: text
+        expire: false
+      write_files:
+        - path: /etc/netplan/60-static.yaml
+          permissions: '0600'
+          content: |
+            network:
+              version: 2
+              ethernets:
+                ens2:
+                  dhcp4: false
+                  addresses: [10.0.200.10/24]
+                  routes:
+                    - to: default
+                      via: 10.0.200.1
+      runcmd:
+        - rm -f /etc/netplan/50-cloud-init.yaml
+        - netplan apply
+links:
+- id: l0
+  n1: n0
+  i1: n0-port
+  n2: n1
+  i2: n1-port0
+- id: l1
+  n1: n2
+  i1: n2-mgmt0
+  n2: n1
+  i2: n1-port1
+- id: l2
+  n1: n4
+  i1: n4-mgmt0
+  n2: n1
+  i2: n1-port2
+- id: l3
+  n1: n5
+  i1: n5-mgmt0
+  n2: n1
+  i2: n1-port3
+- id: l4
+  n1: n6
+  i1: n6-mgmt0
+  n2: n1
+  i2: n1-port4
+- id: l5
+  n1: n7
+  i1: n7-mgmt0
+  n2: n1
+  i2: n1-port5
+- id: l6
+  n1: n3
+  i1: n3-mgmt0
+  n2: n1
+  i2: n1-port6
+- id: l7
+  n1: n8
+  i1: n8-ens2
+  n2: n1
+  i2: n1-port7
+- id: l8
+  n1: n4
+  i1: n4-Ethernet1_1
+  n2: n2
+  i2: n2-Ethernet1_1
+- id: l9
+  n1: n4
+  i1: n4-Ethernet1_2
+  n2: n3
+  i2: n3-Ethernet1_1
+- id: l10
+  n1: n5
+  i1: n5-Ethernet1_1
+  n2: n2
+  i2: n2-Ethernet1_2
+- id: l11
+  n1: n5
+  i1: n5-Ethernet1_2
+  n2: n3
+  i2: n3-Ethernet1_2
+- id: l12
+  n1: n6
+  i1: n6-Ethernet1_1
+  n2: n2
+  i2: n2-Ethernet1_3
+- id: l13
+  n1: n6
+  i1: n6-Ethernet1_2
+  n2: n3
+  i2: n3-Ethernet1_3
+- id: l14
+  n1: n7
+  i1: n7-Ethernet1_1
+  n2: n2
+  i2: n2-Ethernet1_4
+- id: l15
+  n1: n7
+  i1: n7-Ethernet1_2
+  n2: n3
+  i2: n3-Ethernet1_4
+- id: l16
+  n1: n8
+  i1: n8-ens3
+  n2: n4
+  i2: n4-Ethernet1_6
+- id: l17
+  n1: n8
+  i1: n8-ens4
+  n2: n5
+  i2: n5-Ethernet1_6
+- id: l18
+  n1: n8
+  i1: n8-ens5
+  n2: n6
+  i2: n6-Ethernet1_6
+- id: l19
+  n1: n8
+  i1: n8-ens6
+  n2: n7
+  i2: n7-Ethernet1_6
+- id: l20
+  n1: n9
+  i1: n9-ens2
+  n2: n4
+  i2: n4-Ethernet1_7
+- id: l21
+  n1: n10
+  i1: n10-ens2
+  n2: n5
+  i2: n5-Ethernet1_7
