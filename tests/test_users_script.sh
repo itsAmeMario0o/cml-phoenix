@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Runs scripts/70-users.sh end to end against tests/fake_cml_api.py:
+# class rows, dry run, real run, idempotent rerun, and the failure paths.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="${REPO_ROOT}/scripts/70-users.sh"
+TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+PORT=18007
+failures=0
+
+python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT}" &
+API_PID=$!
+trap 'kill "${API_PID}" 2>/dev/null || true; rm -rf "${TMP}"' EXIT
+sleep 1
+
+printf 'CML_URL=http://127.0.0.1:%s\nCML_USERNAME=admin\nCML_PASSWORD=secret\nCML_VERIFY_SSL=false\n' "${PORT}" > "${TMP}/cml.env"
+export CML_ENV_FILE="${TMP}/cml.env" USERS_CSV="${TMP}/users.csv" USERS_CREDENTIALS="${TMP}/creds.csv"
+
+assert_eq() {
+  local label="$1" expected="$2" actual="$3"
+  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
+}
+assert_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
+    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
+}
+
+out="$(bash "${SCRIPT}" class netsec 3 example.com)"
+assert_eq "class prints a header and three rows" "4" "$(echo "${out}" | wc -l | tr -d ' ')"
+assert_contains "class row shape" "netsec02,netsec02@example.com,Netsec 02,user,netsec" "${out}"
+echo "${out}" > "${TMP}/users.csv"
+echo "jdoe,jdoe@example.com,Jane Doe,admin," >> "${TMP}/users.csv"
+
+out="$(bash "${SCRIPT}" --dry-run 2>&1)"
+assert_contains "dry run plans the group" "would create group netsec" "${out}"
+assert_contains "dry run plans a user" "would create netsec01 (user, group netsec)" "${out}"
+assert_contains "dry run plans the admin" "would create jdoe (admin)" "${out}"
+assert_contains "dry run lists policy emails" "Access policy emails: jdoe@example.com, netsec01@example.com" "${out}"
+assert_eq "dry run writes no credentials" "no" "$([[ -f "${TMP}/creds.csv" ]] && echo yes || echo no)"
+
+out="$(bash "${SCRIPT}" 2>&1)"
+assert_contains "real run creates the group" "created group netsec" "${out}"
+assert_contains "real run creates users" "created netsec03 (user, group netsec)" "${out}"
+assert_contains "real run reports the sheet" "4 password(s) written to ${TMP}/creds.csv" "${out}"
+assert_eq "credentials file is private" "600" "$(stat -f %Lp "${TMP}/creds.csv" 2>/dev/null || stat -c %a "${TMP}/creds.csv")"
+assert_eq "credentials has four users" "5" "$(wc -l < "${TMP}/creds.csv" | tr -d ' ')"
+if grep -qE "^[a-z0-9]+,.*,[A-Za-z0-9]{16}$" <<<"$(tail -1 "${TMP}/creds.csv")"; then echo "[OK]    password column is 16 alphanumerics"; else
+  echo "[FAIL]  password column shape"; failures=$((failures + 1)); fi
+if grep -qE "[A-Za-z0-9]{16}" <<<"${out}"; then echo "[FAIL]  a password leaked into stdout"; failures=$((failures + 1)); else
+  echo "[OK]    no password on stdout"; fi
+
+printf 'old\n' > "${TMP}/creds.csv.keep"; cp "${TMP}/creds.csv" "${TMP}/creds.csv.keep"
+out="$(bash "${SCRIPT}" 2>&1)"
+assert_contains "rerun leaves users alone" "netsec01 exists, left alone" "${out}"
+assert_contains "rerun keeps the sheet" "nothing to create; credentials file untouched" "${out}"
+assert_eq "sheet unchanged after rerun" "same" "$(cmp -s "${TMP}/creds.csv" "${TMP}/creds.csv.keep" && echo same || echo changed)"
+
+rc=0; out="$(USERS_CSV="${TMP}/missing.csv" bash "${SCRIPT}" 2>&1)" || rc=$?
+assert_eq "missing csv exits 1" "1" "${rc}"
+assert_contains "missing csv names the example" "config/users.csv.example" "${out}"
+
+printf 'username,email,fullname,role,group\nbad user,,B,user,\n' > "${TMP}/bad.csv"
+rc=0; out="$(bash "${SCRIPT}" --csv "${TMP}/bad.csv" 2>&1)" || rc=$?
+assert_eq "bad csv exits 1" "1" "${rc}"
+assert_contains "bad csv names the line" "line 2: bad username" "${out}"
+
+rc=0; bash "${SCRIPT}" --bogus >/dev/null 2>&1 || rc=$?
+assert_eq "bad flag exits 2" "2" "${rc}"
+
+if [[ "${failures}" -gt 0 ]]; then echo "test_users_script: ${failures} failure(s)"; exit 1; fi
+echo "test_users_script: all passed"

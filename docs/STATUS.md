@@ -16,6 +16,15 @@ command is most of roadmap item 6. The blank Cilium EVPN lab imported
 on the first try through `60-import-lab.sh`: eleven nodes, 22 links,
 image names resolved, kind-host at 4 vCPU and 8 GB. It sits stopped.
 
+Later the same evening: `scripts/70-users.sh` (ADR 0007) creates CML
+users and groups from `config/mcp-env/users.csv` with a generated
+password each, written to a private sheet, and a `class` subcommand
+prints rows for a class. Proven against the fake API only; no user has
+been created on the live controller yet. The admin password from
+`cml.env` was exposed by an editor selection in this session, so the
+persistent `random_password` for it should be tainted before the next
+build.
+
 Before the build, the session went to a new lab. A peer's repo,
 cml-cilium-evpn-lab, describes an NX-OS EVPN fabric with a kind cluster
 running Cilium Enterprise, built through Nexus Dashboard. It fits this
@@ -42,6 +51,9 @@ the fake API; not yet run against a real controller.
 3. Start spines, then leaves, then hosts. Confirm the switches reach a
    login prompt and the kind host has Docker and kind installed.
    Neither has been tried yet.
+4. First real run of `scripts/70-users.sh --dry-run`, then without,
+   from a `config/mcp-env/users.csv` started from the example. Add the
+   printed emails to the Access policy.
 4. The earlier items still stand: refresh the tunnel token, narrow the
    Access policy to the peer's exact address, test a node console
    through the tunnel.

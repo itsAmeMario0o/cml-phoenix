@@ -1,0 +1,10 @@
+# Copy to config/mcp-env/users.csv (gitignored) and edit. Read by
+# scripts/70-users.sh, which creates each user in CML with a generated
+# password and writes the passwords to config/mcp-env/users-credentials.csv.
+# role is admin or user. group is optional and is created when missing.
+# The email is what the Cloudflare Access policy checks; the script prints
+# the list to add. For a class: scripts/70-users.sh class netsec 10 >> this file
+username,email,fullname,role,group
+jdoe,jdoe@example.com,Jane Doe,admin,
+student01,student01@example.com,Netsec 01,user,netsec
+student02,,Netsec 02,user,netsec

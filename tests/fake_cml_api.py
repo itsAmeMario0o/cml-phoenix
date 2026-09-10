@@ -30,7 +30,17 @@ STATE: dict = {
     "labs": _default_labs() if os.environ.get("FAKE_LABS") != "0" else {},
     "registration": os.environ.get("FAKE_REGISTRATION", "REGISTERED"),
     "deregister_fails": os.environ.get("FAKE_DEREGISTER_FAILS") == "1",
+    # Users and groups, shaped like GET /users and GET /groups on 2.10.
+    # Passwords are kept aside so a created user can authenticate.
+    "users": {"u-admin": {"id": "u-admin", "username": "admin", "fullname": "", "email": "",
+                          "admin": True, "groups": []}},
+    "passwords": {"admin": "secret"},
+    "groups": {},
 }
+
+
+def _user_by_name(username: str) -> dict | None:
+    return next((u for u in STATE["users"].values() if u["username"] == username), None)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -43,20 +53,42 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _authorized(self) -> bool:
-        return self.headers.get("Authorization") == "Bearer FAKE-TOKEN"
+        return self.headers.get("Authorization", "").startswith("Bearer FAKE-TOKEN")
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
         if self.path == "/api/v0/authenticate":
             creds = json.loads(body)
-            if creds == {"username": "admin", "password": "secret"}:
-                self._send(200, json.dumps("FAKE-TOKEN"))
+            name = creds.get("username", "")
+            if STATE["passwords"].get(name) == creds.get("password"):
+                self._send(200, json.dumps("FAKE-TOKEN" if name == "admin" else f"FAKE-TOKEN-{name}"))
             else:
                 self._send(403, {"description": "bad credentials"})
             return
         if not self._authorized():
             self._send(401, {})
+            return
+        if self.path == "/api/v0/users":
+            data = json.loads(body)
+            if _user_by_name(data["username"]) is not None:
+                self._send(422, {"description": "User already exists."})
+                return
+            uid = f"u-{len(STATE['users'])}"
+            STATE["users"][uid] = {"id": uid, "username": data["username"], "fullname": data.get("fullname", ""),
+                                   "email": data.get("email", ""), "admin": bool(data.get("admin")),
+                                   "groups": list(data.get("groups", []))}
+            STATE["passwords"][data["username"]] = data["password"]
+            for gid in data.get("groups", []):
+                STATE["groups"][gid]["members"].append(uid)
+            self._send(200, STATE["users"][uid])
+            return
+        if self.path == "/api/v0/groups":
+            data = json.loads(body)
+            gid = f"g-{len(STATE['groups']) + 1}"
+            STATE["groups"][gid] = {"id": gid, "name": data["name"], "description": data.get("description", ""),
+                                    "members": list(data.get("members", []))}
+            self._send(200, STATE["groups"][gid])
             return
         if self.path.startswith("/api/v0/import"):
             # Real CML reads the body as YAML. Here the title comes from the
@@ -73,6 +105,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/v0/labs":
             self._send(200, list(STATE["labs"]))
+        elif self.path == "/api/v0/users":
+            self._send(200, list(STATE["users"].values()))
+        elif self.path == "/api/v0/groups":
+            self._send(200, list(STATE["groups"].values()))
         elif self.path == "/api/v0/licensing":
             self._send(200, {"registration": {"status": STATE["registration"]}})
         elif self.path.startswith("/api/v0/labs/") and self.path.endswith("/download"):

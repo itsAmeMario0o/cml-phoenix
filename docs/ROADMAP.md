@@ -49,15 +49,14 @@ an item gets a spec, link it and move the item to the bottom under Done.
    is `docs/ACCESS.md`. What remains is a script that runs after the
    readiness wait in `20-up.sh`, reads the token from the gitignored env
    file, and installs the connector over SSH, so a rebuild needs no hands.
-   The same step should create the CML users and groups that a rebuild
-   wipes. Decided 2026-09-08: a CSV with username, first name, last
-   name, role, and a static temporary password. `config/users.csv.example`
-   is tracked; `config/users.csv` is gitignored, the way the tfvars pair
-   works. Students change the password themselves; CML does not force
-   it, so the handout should say so. A create-if-missing subcommand in
-   the remote library reads the file. A student is a non-admin user in
-   a group with rights on named labs; a peer is an admin flag. The
-   `.gitignore` line is a human's edit. Item 7 belongs here as well.
+   The users half landed 2026-09-10 as `scripts/70-users.sh` (ADR
+   0007): a CSV in the self-ignoring mcp-env directory, generated
+   passwords written to a private sheet, a `class` subcommand for ten
+   students at a time, create-if-missing so it reruns after every
+   build. The connector half was done by hand over one SSH session the
+   same day, with the sysadmin password and the token on stdin, which
+   is the shape the script should take. Lab rights for a group are
+   still set in the UI or through cml-mcp. Item 7 belongs here as well.
    It needs a spec and an ADR but no fork patch. Upstream cloud-cml also
    ships a Let's Encrypt hook, `03-letsencrypt.sh`, unused here. If a real
    certificate on the box ever matters, for the API through the name,

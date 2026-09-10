@@ -137,8 +137,10 @@ user; use the Emails selector with exact addresses for shared domains.
 
 Two doors, and both must open. Their email goes into the Access policy,
 as an exact address under the Emails selector, so Cloudflare lets them
-through to the login page. Their CML account is created separately in
-the CML web UI or through cml-mcp. A person with a CML account and no
+through to the login page. Their CML account comes from
+`scripts/70-users.sh`, which reads `config/mcp-env/users.csv`, creates
+what is missing, writes the generated passwords to a private sheet, and
+prints the email list for this policy (ADR 0007). A person with a CML account and no
 policy entry gets Cloudflare's not-authorized page and never sees CML.
 A person with a policy entry and no CML account sees the CML login and
 gets nowhere. And they must use the name, never the IP; the NSG admits

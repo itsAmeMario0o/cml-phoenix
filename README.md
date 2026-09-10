@@ -30,6 +30,7 @@ over SSH. Claude Code drives the controller through
     scripts/20-up.sh             # build, prompts before each apply
     scripts/90-smoke-test.sh     # prove it
     scripts/60-import-lab.sh labs/<scenario>.yaml   # load a topology
+    scripts/70-users.sh          # create users from the CSV, passwords to a sheet
     ...work...
     scripts/40-down.sh           # export labs, release license, destroy VM
 
