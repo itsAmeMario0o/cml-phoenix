@@ -61,13 +61,14 @@ the fake API; not yet run against a real controller.
 2. `config/mcp-env/labs.env` exists with a real password. After a
    teardown the lab is gone with the VM, so rerun
    `scripts/60-import-lab.sh labs/cilium-evpn-blank.yaml`.
-3. Start spines, then leaves, then hosts. Confirm the switches reach a
-   login prompt and the kind host has Docker and kind installed.
-   Neither has been tried yet.
+3. Start the switches, then push `labs/cilium-evpn-fabric/` through
+   cml-mcp. Then start the kind host and the endpoints, which has not
+   been tried yet: confirm the endpoints ping their gateways and the
+   kind host has Docker and kind installed.
 4. First real run of `scripts/70-users.sh --dry-run`, then without,
    from a `config/mcp-env/users.csv` started from the example. Add the
    printed emails to the Access policy.
-4. The earlier items still stand: refresh the tunnel token, narrow the
+5. The earlier items still stand: refresh the tunnel token, narrow the
    Access policy to the peer's exact address, test a node console
    through the tunnel.
 
