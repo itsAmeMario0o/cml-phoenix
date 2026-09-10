@@ -16,6 +16,14 @@ command is most of roadmap item 6. The blank Cilium EVPN lab imported
 on the first try through `60-import-lab.sh`: eleven nodes, 22 links,
 image names resolved, kind-host at 4 vCPU and 8 GB. It sits stopped.
 
+The six switches were started by hand and booted. The lab user
+mruiznet@gmail.com holds lab_edit and lab_exec on the lab, set through
+the API because the cml-mcp tool for it is broken (LESSONS-LEARNED).
+`labs/cilium-evpn-fabric/` holds the reference fabric configuration,
+one NX-OS file per switch, generated from one address plan: eBGP
+underlay and overlay, leaves 65000, spines 65010, anycast RP, VRFs red
+and blue with anycast gateways. Not yet applied to a switch.
+
 Later the same evening: `scripts/70-users.sh` (ADR 0007) creates CML
 users and groups from `config/mcp-env/users.csv` with a generated
 password each, written to a private sheet, and a `class` subcommand

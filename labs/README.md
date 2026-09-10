@@ -51,6 +51,10 @@ a jump, since 192.168.255.0/24 lives inside the controller. For the kind
 cluster itself, the source repo's `kind-config.yaml` binds the API
 server to the host's management address; here that is 192.168.255.5.
 
+The fabric itself, as plain NX-OS for the six switches, is in
+`cilium-evpn-fabric/`, one file per device with the address plan in its
+README. Paste it, push it, or use it as the answer key.
+
 Cilium Enterprise is what makes the EVPN and private-network pieces
 work, and it comes from Cisco's Artifactory devhub with a personal
 token. Open-source Cilium peers BGP to the leaves but does not do EVPN.
