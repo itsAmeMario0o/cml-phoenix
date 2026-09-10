@@ -122,3 +122,5 @@ an item gets a spec, link it and move the item to the bottom under Done.
   The Manager wants 8 vCPU and 32 GB and carries a 256 GB thin data
   volume on the OS disk; watch that on long labs. vEdge, FTDv, FMCv,
   the wireless controller, and Meraki vMX were left off on purpose.
+  FTDv 10.0.0 joined the list on 2026-09-10 for the firewall cluster
+  lab; FMCv stays off, since management is cloud-delivered.

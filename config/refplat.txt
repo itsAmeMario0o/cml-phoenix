@@ -19,3 +19,4 @@ cat-sdwan-manager cat-sdwan-manager-20-18-2-1
 cat-sdwan-validator cat-sdwan-validator-20-18-2-1
 cat-sdwan-controller cat-sdwan-controller-20-18-2-1
 cat-sdwan-edge cat-sdwan-edge-17-18-02
+ftdv ftdv-10-0-0

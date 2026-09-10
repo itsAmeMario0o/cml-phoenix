@@ -29,6 +29,17 @@ sessions, every leaf two of each, all Established; each leaf sees the
 other three VTEPs and all four VNIs are up. The kind host and the two
 endpoints are still not started.
 
+Next lab decided: a vPC pair of Nexus 9300v with routed uplinks to a
+cat8000v and two FTDv nodes dual-homed to both Nexus, clustered under
+cloud-delivered management from the user's Security Cloud Control
+tenant, so no FMCv. Cisco documents FTDv clustering on KVM for cdFMC:
+individual data interfaces only, a dedicated VXLAN cluster control
+link, same version on every node. FTDv 10.0.0 from the supplemental
+ISO is in blob (1.6 GB, uploaded with `REFPLAT_ISO`) and on
+`config/refplat.txt` as the eleventh image. It lands on the data disk
+at the next rebuild. About 18 vCPU and 48 GB for the whole lab. Spec
+and topology are not written.
+
 Later the same evening: `scripts/70-users.sh` (ADR 0007) creates CML
 users and groups from `config/mcp-env/users.csv` with a generated
 password each, written to a private sheet, and a `class` subcommand
@@ -68,7 +79,11 @@ the fake API; not yet run against a real controller.
 4. First real run of `scripts/70-users.sh --dry-run`, then without,
    from a `config/mcp-env/users.csv` started from the example. Add the
    printed emails to the Access policy.
-5. The earlier items still stand: refresh the tunnel token, narrow the
+5. FTDv cluster lab: rebuild puts the image on the disk, then a spec
+   with the interface plan, address pools, and ECMP arrangement, then
+   the topology YAML. Check the SCC tenant has FTDv entitlements and
+   accepts version 10.0.0 before building.
+6. The earlier items still stand: refresh the tunnel token, narrow the
    Access policy to the peer's exact address, test a node console
    through the tunnel.
 
