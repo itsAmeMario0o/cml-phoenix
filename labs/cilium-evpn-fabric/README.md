@@ -70,20 +70,112 @@ and can be pasted more than once. Through cml-mcp, `send_cli_command`
 with `config_command` set takes a whole file at once, minus the `!`
 comment lines; that is how the first deployment went in on 2026-09-10.
 
-On a spine after both spines are done and the leaves are in:
+## Verifying, in build order
+
+Same order as the configuration goes in. Each step assumes the one
+before it passed. Commands run on a leaf unless a spine is named.
+
+### 1. Features
+
+    show feature | include enabled
+    show running-config | include ^feature|^nv overlay
+
+Leaves: bgp, pim, interface-vlan, vn-segment-vlan-based, nv overlay,
+fabric forwarding, plus the `nv overlay evpn` line. Spines: bgp and pim
+only, plus `nv overlay evpn`. A missing feature shows up later as a
+command that was silently dropped, so check this first.
+
+### 2. Cabling and point to point links
+
+    show cdp neighbors
+    show interface brief | include Eth1/[12]
+    show ip interface brief
+    show interface Ethernet1/1 | include MTU|line protocol
+
+CDP should name the far end exactly as `links.md` does: leaf1
+Ethernet1/1 sees spine1 Ethernet1/1, Ethernet1/2 sees spine2
+Ethernet1/1. Both links up, addressed from the table, MTU 9216. Then
+ping the far end of each link: from leaf1, `ping 10.4.0.1` and
+`ping 10.4.0.5`.
+
+### 3. Underlay BGP
 
     show bgp ipv4 unicast summary
-    show bgp l2vpn evpn summary
+    show bgp ipv4 unicast neighbors 10.4.0.1 | include AS|state
+    show ip route bgp
+    show ip route 10.3.0.12
+
+A leaf holds two sessions, AS 65010, Established, with prefixes
+received. The routing table carries every other device's loopback0,
+the three other VTEP loopback1 addresses, and the RP address, each
+learned from both spines, so the last command shows two next hops.
+Prove reachability the way the overlay will use it, loopback to
+loopback: `ping 10.2.0.12 source 10.2.0.11` and
+`ping 10.3.0.12 source 10.3.0.11`. On a spine the summary shows four
+sessions, AS 65000, and `show ip route bgp` has all four VTEPs.
+
+### 4. Multicast underlay
+
+    show ip pim interface brief
+    show ip pim neighbor
     show ip pim rp
 
-Each spine should show four underlay and four overlay sessions, one
-per leaf. Each leaf should show two of each, one per spine, all
-Established. On a leaf:
+PIM sparse mode on both fabric links and the loopbacks, one PIM
+neighbor per link, and the RP 10.254.254.1 learned statically for
+239.1.1.0/25. On a spine, `show ip pim rp` also lists both spines
+as anycast-RP members. `show ip mroute` stays empty until the NVE
+joins its groups in step 6.
 
+### 5. Overlay BGP EVPN
+
+    show bgp l2vpn evpn summary
+    show bgp l2vpn evpn neighbors 10.2.0.1 | include multihop|Established|community|allowas
+
+Two sessions per leaf to the spine loopbacks, Established, multihop
+5, both communities sent, allowas-in on. On a spine, four sessions and
+`show bgp l2vpn evpn` shows routes from every leaf with the leaf's own
+loopback1 as next hop, which is the route-map doing its job. Also on
+the spine, `show running-config bgp | include retain` must show
+`retain route-target all`, or the spine drops every EVPN route it has
+no VRF for, which on a spine is all of them.
+
+### 6. VXLAN and the VRFs
+
+    show nve interface nve1 detail
+    show nve vni
     show nve peers
-    show bgp l2vpn evpn
+    show vlan id 100
+    show vrf red detail
     show ip route vrf red
+    show interface vlan100 brief
 
-`show nve peers` lists the other three VTEPs once a host is learned on
-each. With the endpoints started, red-endpoint at 10.0.100.10 pings
-its gateway, and blue-endpoint at 10.0.200.10 pings 10.0.200.1.
+nve1 up, source loopback1, host reachability BGP. Four VNIs up: 30000
+and 30001 with their multicast groups, 50000 and 50001 as L3 bound to
+red and blue. Three NVE peers, one per other leaf, once routes are
+exchanged. VLAN 100 maps to segment 30000. VRF red carries VNI 50000
+and its route table has 10.0.100.0/24 attached. Vlan100 is up in VRF
+red with the anycast gateway address. `show ip mroute` now has a
+(*, 239.1.1.1) and (*, 239.1.1.2) entry.
+
+    show bgp l2vpn evpn route-type 5
+
+Type-5 routes for 10.0.100.0/24 and 10.0.200.0/24 from every leaf.
+That is the `tag 12345` on the SVIs and the redistribute route-map.
+
+### 7. Endpoints on the overlay
+
+Start red-endpoint and blue-endpoint. red-endpoint at 10.0.100.10
+pings its gateway 10.0.100.1; blue-endpoint at 10.0.200.10 pings
+10.0.200.1. Then on leaf1 and leaf2:
+
+    show mac address-table vlan 100
+    show ip arp vrf red
+    show l2route evpn mac-ip all
+    show bgp l2vpn evpn route-type 2
+
+The endpoint's MAC learned on Ethernet1/7, its ARP entry in the VRF,
+and a Type-2 route for it that every other leaf receives; on leaf3,
+`show l2route evpn mac all` lists the MAC with leaf1's VTEP as next
+hop. red-endpoint cannot reach blue-endpoint, since they sit in
+different VRFs, which is the point of the two private networks the
+Cilium step attaches to.
