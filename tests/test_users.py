@@ -148,6 +148,24 @@ class ApplyAgainstFakeApiTest(unittest.TestCase):
         self.assertEqual(again.labs_granted, 0)
         self.assertIn("[OK]    jdoe@example.com exists, left alone", self.log)
 
+    def test_shared_password_used_for_all(self) -> None:
+        # Unique emails so this test does not depend on which other tests
+        # have already created users on the shared fake server.
+        rows = users.load_rows("email,fullname,role\n"
+                               "shareda@example.com,Shared A,user\n"
+                               "sharedb@example.com,Shared B,user\n")
+        outcome = users.apply(rows, self.api, "lab-users", "lab_exec",
+                              dry_run=False, log=self.log.append, shared_password="labpass1")
+        self.assertEqual({r.email for r, _ in outcome.created}, {"shareda@example.com", "sharedb@example.com"})
+        self.assertEqual({pw for _, pw in outcome.created}, {"labpass1"})
+        for row, _ in outcome.created:
+            users.CmlApi(f"http://127.0.0.1:{PORT}", row.email, "labpass1")
+
+    def test_short_shared_password_refused(self) -> None:
+        with self.assertRaisesRegex(users.UsersError, "at least 8 characters"):
+            users.apply(self.rows, self.api, "lab-users", "lab_exec",
+                        dry_run=True, log=self.log.append, shared_password="short")
+
     def test_write_credentials_private(self) -> None:
         with tempfile.TemporaryDirectory(prefix=".tmp.users.", dir=REPO / "tests") as tmp:
             path = Path(tmp) / "creds.csv"

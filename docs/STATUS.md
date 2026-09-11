@@ -42,7 +42,7 @@ non-admin in one managed group (`lab-users`) that holds lab_exec on
 every lab on the controller, so one run gives everyone every lab and a
 rerun after importing a lab grants it too. Verified live: a probe user
 was created, logged in, and saw both labs under show_all (the UI's
-default). The MCP server's create_cml_user works too but passes the
+default). Passwords: set LAB_USER_PASSWORD in config/mcp-env/labs.env to give every user the same simple login, or leave it empty to generate one per user; either way they land in the private sheet. CML wants at least 8 characters and rejects common words (labpass1 works, 12345678 does not). This is separate from LAB_PASSWORD, the device login, which is untouched. Verified live: a shared-password user logged in and saw both labs. The MCP server's create_cml_user works too but passes the
 password as a chat argument, so the script stays the path for real
 people. `docs/USER-GUIDE.md` is the page to hand an end user: the
 Cloudflare email prompt, the one-time code, then the CML login with the

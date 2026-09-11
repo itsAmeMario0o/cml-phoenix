@@ -16,6 +16,9 @@ sleep 1
 
 printf 'CML_URL=http://127.0.0.1:%s\nCML_USERNAME=admin\nCML_PASSWORD=secret\nCML_VERIFY_SSL=false\n' "${PORT}" > "${TMP}/cml.env"
 export CML_ENV_FILE="${TMP}/cml.env" USERS_CSV="${TMP}/users.csv" USERS_CREDENTIALS="${TMP}/creds.csv"
+# LAB_ENV_FILE points at a path that does not exist, so the wrapper does
+# not read the operator's real labs.env and the test controls its own env.
+export LAB_ENV_FILE="${TMP}/labs.env"
 
 assert_eq() {
   local label="$1" expected="$2" actual="$3"
@@ -59,6 +62,17 @@ out="$(bash "${SCRIPT}" 2>&1)"
 assert_contains "rerun leaves users alone" "netsec01@cisco.com exists, left alone" "${out}"
 assert_contains "rerun keeps the sheet" "no new users; credentials file untouched" "${out}"
 assert_eq "sheet unchanged after rerun" "same" "$(cmp -s "${TMP}/creds.csv" "${TMP}/creds.csv.keep" && echo same || echo changed)"
+
+# shared password: LAB_USER_PASSWORD gives every new user the same one
+printf 'email,fullname,role\nsuser@example.com,Shared User,user\n' > "${TMP}/shared.csv"
+out="$(LAB_USER_PASSWORD=labpass1 USERS_CSV="${TMP}/shared.csv" USERS_CREDENTIALS="${TMP}/shared-creds.csv" bash "${SCRIPT}" 2>&1)"
+assert_contains "shared run creates the user" "created suser@example.com (user)" "${out}"
+assert_eq "shared password in the sheet" "suser@example.com,Shared User,user,labpass1" "$(tail -1 "${TMP}/shared-creds.csv")"
+if grep -qF "labpass1" <<<"${out}"; then echo "[FAIL]  shared password leaked to stdout"; failures=$((failures + 1)); else
+  echo "[OK]    shared password stays out of stdout"; fi
+rc=0; out="$(LAB_USER_PASSWORD=short USERS_CSV="${TMP}/shared.csv" USERS_CREDENTIALS="${TMP}/x.csv" bash "${SCRIPT}" 2>&1)" || rc=$?
+assert_eq "short shared password exits 1" "1" "${rc}"
+assert_contains "short shared password message" "at least 8 characters" "${out}"
 
 rc=0; out="$(USERS_CSV="${TMP}/missing.csv" bash "${SCRIPT}" 2>&1)" || rc=$?
 assert_eq "missing csv exits 1" "1" "${rc}"

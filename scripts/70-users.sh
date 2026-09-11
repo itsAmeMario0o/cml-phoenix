@@ -19,6 +19,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 CML_ENV_FILE="${CML_ENV_FILE:-${REPO_ROOT}/config/mcp-env/cml.env}"
+LAB_ENV_FILE="${LAB_ENV_FILE:-${REPO_ROOT}/config/mcp-env/labs.env}"
 USERS_CSV="${USERS_CSV:-${REPO_ROOT}/config/mcp-env/users.csv}"
 USERS_CREDENTIALS="${USERS_CREDENTIALS:-${REPO_ROOT}/config/mcp-env/users-credentials.csv}"
 USERS_PY="${REPO_ROOT}/scripts/lib/users.py"
@@ -34,6 +35,12 @@ load_env() {
   set -a
   # shellcheck disable=SC1090
   source "${CML_ENV_FILE}"
+  # labs.env is optional here; it may carry LAB_USER_PASSWORD, LAB_GROUP,
+  # or LAB_PERMISSION. It holds no CML login, so its absence is fine.
+  if [[ -f "${LAB_ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${LAB_ENV_FILE}"
+  fi
   set +a
 }
 

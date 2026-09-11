@@ -15,6 +15,12 @@ default lab_exec) on every lab currently on the controller. So a user
 sees every lab in the kit, and importing a new lab then rerunning this
 grants it to everyone. Admins need no grant; CML shows them all labs.
 
+Each new user gets a password. Set LAB_USER_PASSWORD to give everyone
+the same simple one, or leave it unset to generate a random password
+per user. CML requires at least 8 characters and rejects common
+dictionary passwords, so a shared password like "labpass1" works but
+"12345678" does not. Either way the passwords land in the sheet.
+
 Users and grants that already exist are left as they are, so the same
 file can be applied after every rebuild. Controller credentials come
 from the environment: CML_URL, CML_USERNAME, CML_PASSWORD,
@@ -46,6 +52,7 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 USERNAME_MAX = 32
 PASSWORD_ALPHABET = string.ascii_letters + string.digits
 PASSWORD_LENGTH = 16
+PASSWORD_MIN = 8
 DEFAULT_GROUP = "lab-users"
 DEFAULT_PERMISSION = "lab_exec"
 PERMISSIONS = {"lab_admin", "lab_edit", "lab_exec", "lab_view"}
@@ -175,10 +182,17 @@ class Outcome:
 
 
 def apply(rows: list[Row], api: CmlApi, group_name: str, permission: str,
-          dry_run: bool, log: Any = print) -> Outcome:
-    """Create missing users, then give the managed group every lab. Idempotent."""
+          dry_run: bool, log: Any = print, shared_password: str = "") -> Outcome:
+    """Create missing users, then give the managed group every lab. Idempotent.
+
+    With shared_password set, every new user gets it; otherwise each gets a
+    generated one. CML rejects a password under 8 characters or on its
+    common-word list, and that rejection surfaces as a UsersError.
+    """
     if permission not in PERMISSIONS:
         raise UsersError(f"permission must be one of {sorted(PERMISSIONS)}, got {permission!r}")
+    if shared_password and len(shared_password) < PASSWORD_MIN:
+        raise UsersError(f"LAB_USER_PASSWORD must be at least {PASSWORD_MIN} characters")
     existing_users = api.users()
     groups = api.groups()
     outcome = Outcome()
@@ -200,7 +214,7 @@ def apply(rows: list[Row], api: CmlApi, group_name: str, permission: str,
             outcome.existing.append(row)
             log(f"[OK]    {row.username} exists, left alone")
             continue
-        password = generate_password()
+        password = shared_password or generate_password()
         if dry_run:
             log(f"[OK]    would create {row.username} ({row.role})")
         else:
@@ -269,10 +283,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
         return 1
     group_name = os.environ.get("LAB_GROUP", DEFAULT_GROUP)
     permission = os.environ.get("LAB_PERMISSION", DEFAULT_PERMISSION)
+    shared_password = os.environ.get("LAB_USER_PASSWORD", "").strip()
     try:
         api = CmlApi(url, os.environ.get("CML_USERNAME", ""), os.environ.get("CML_PASSWORD", ""),
                      env_bool("CML_VERIFY_SSL", True))
-        outcome = apply(rows, api, group_name, permission, args.dry_run)
+        outcome = apply(rows, api, group_name, permission, args.dry_run, shared_password=shared_password)
     except UsersError as exc:
         print(f"users: {exc}", file=sys.stderr)
         return 1
