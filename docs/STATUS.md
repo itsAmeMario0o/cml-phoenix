@@ -34,10 +34,9 @@ day-0 and was verified after the first import. The lab was renamed
 in the UI to "Attack Lab - Inline IPS, FTD HA pair"; the console
 server paths use that title.
 
-Two fixes on the operator's side before the next console session:
-`ssh-keygen -R 20.114.184.195`, and remove line 17 of
-`config/mcp-env/labs.env`, a pasted `configure manager add` line that
-breaks every script that sources the file.
+Both tooling blockers cleared the same evening: the stale host key
+was removed with `ssh-keygen -R`, and the env file was back to clean
+KEY=VALUE lines, so cml-mcp console sessions work again.
 
 The rebuild wiped the CML users, as every rebuild does. The lab user
 mruiznet@gmail.com no longer exists and its lab rights could not be
