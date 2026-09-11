@@ -34,6 +34,25 @@ day-0 and was verified after the first import. The lab was renamed
 in the UI to "Attack Lab - Inline IPS, FTD HA pair"; the console
 server paths use that title.
 
+Full verification of every non-FTD node, all correct:
+
+- n9k1: VLAN 10 and 20 up, all seven access ports connected in the
+  right VLAN (ftd1/ftd2 inside on 1/1 and 1/3, outside on 1/2 and 1/4,
+  edge on 1/5, kali on 1/6, insrv on 1/7).
+- edge: mgmt .73, inside gateway 10.10.0.1, outside 203.0.113.1,
+  loopback 198.51.100.1, all up; DHCP pool serving VLAN 10.
+- insrv: static 10.10.0.10/24. extsrv 203.0.113.101, esrv
+  203.0.113.251, both reach the edge and each other.
+- kali: eth0 up, no lease yet.
+
+The inside cannot reach the outside, and Kali cannot get DHCP, because
+VLAN 10 only reaches VLAN 20 through an inline set on an active
+firewall, and the pair is not built yet: ftd1 shows registration
+Completed but failover Disabled, no inline set, data interfaces
+administratively down. That is the cdFMC work in the operator's hands.
+So everything the lab owns is configured; what remains is the HA pair
+and the inline set, then Kali gets DHCP and the scans cross.
+
 Both tooling blockers cleared the same evening: the stale host key
 was removed with `ssh-keygen -R`, and the env file was back to clean
 KEY=VALUE lines, so cml-mcp console sessions work again.
