@@ -81,7 +81,12 @@ values in `config/mcp-env/labs.env`: `CDFMC_HOST`, and per node
 `CDFMC_NAT_ID_FTD2`. Security Cloud Control generates one CLI
 registration key command per onboarded device, so onboard two devices
 named ftd1 and ftd2 and copy each line's key and NAT ID. The import
-refuses to render until all six are set. About 15 vCPU and 48 GB.
+refuses to render until all six are set. One timing rule learned the
+hard way: a cdFMC registration key is live only briefly after SCC
+generates it, so the day-0 values only register if the node boots
+within minutes of generating them. The dependable sequence is boot
+first, then generate the key in SCC and run `configure manager add`
+at the console right away. About 15 vCPU and 48 GB.
 The `ftdv-10-0-0` image has been on the data disk since 2026-09-10.
 
 | Node | mgmt address | user |

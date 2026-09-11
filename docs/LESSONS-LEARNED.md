@@ -387,11 +387,18 @@ time to learn them.
   Parameters" on 10.0.0; plain `DONTRESOLVE`, accepted, which leaves
   the device waiting for a manager that never initiates. None
   registered.
-- Fix: unknown. The remaining question sits on the tenant side: why
-  8305 answers for one device and not for these two. When a host and
-  port that accept the tunnel are known, `configure manager delete`
-  and `configure manager add` on both consoles is a one minute job
-  from the env file values.
+- Fix, found by the operator on 2026-09-11: the registration key is
+  only live for a short window after Security Cloud Control generates
+  it, and the cloud accepts the 8305 handshake only for a device whose
+  record is fresh. Generate the key, run `configure manager delete`
+  and `configure manager add` at the console within a minute or two,
+  and both nodes went to Completed. The reset on 8305 was the cloud
+  refusing keys that were hours old, which is what "not in an
+  onboarding state" meant. Consequence for the kit: cdFMC values in
+  a day-0 rendered at import are stale by the time the node boots, so
+  the FTDv day-0 keeps them only as a convenience, and the reliable
+  path is registration from the console after boot with keys
+  generated at that moment.
 - Smaller things learned on the way: `ping system` on the FTD CLI
   runs until interrupted and holds the console; the day-0
   `AdminPassword` must satisfy FTD's complexity rule or the node

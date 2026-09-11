@@ -13,6 +13,14 @@ twelve images, Kali and FTDv included, and both custom definitions
 were still registered. Both labs reimported with `60-import-lab.sh`
 and the IPS lab is starting, firewalls last.
 
+Registration solved by the operator: the cdFMC registration key is
+live only briefly after SCC generates it. Delete the manager on the
+console, generate the key, add the manager within a minute, and both
+firewalls registered (LESSONS-LEARNED). Both FTDv nodes are Completed
+in cdFMC. Next in cdFMC: HA pair on GigabitEthernet0/0, inline set
+from 0/1 and 0/2 on the pair, allow-all access control policy with an
+intrusion policy, deploy. Then Kali gets DHCP and the IPS lab is live.
+
 The rebuild wiped the CML users, as every rebuild does. The lab user
 mruiznet@gmail.com no longer exists and its lab rights could not be
 re-granted. Either recreate it in the UI, or add a row to
