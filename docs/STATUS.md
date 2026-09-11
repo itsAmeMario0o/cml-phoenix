@@ -3,6 +3,36 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
+## 2026-09-11
+
+The FTDv cluster lab ran for an hour and was retired. The vPC pair,
+HSRP, eBGP to the edge, and ECMP toward the firewalls all came up from
+the reference configs, and the inside host's LACP bond bundled once
+the virtio members were given a link speed (LESSONS-LEARNED). The
+firewalls never registered: Threat Defense rejected the day-0
+password for lacking a special character and then blocked all
+configuration. The deeper problem was design: a Threat Defense
+Virtual cluster cannot run inline sets, and the operator wants an IPS
+lab. The cluster lab was wiped and deleted from the controller; its
+files stay under `labs/ftdv-cluster*` as a retired design.
+
+Replacement: `labs/ips-ha.yaml`, spec
+`docs/superpowers/specs/2026-09-11-ips-ha-lab-design.md`. An FTD HA
+pair with inline sets between VLAN 10 and 20 on one Nexus, a cat8000v
+edge as gateway and DHCP, Kali and an Ubuntu server inside, two
+servers outside, cdFMC management. Kali 2026.2 came from the official
+QEMU image: downloaded on the CML host, unpacked there with 7z from
+apt, registered through the dropfolder and the definitions API under
+`config/node-definitions/kali.yaml`, and copied to blob under
+`custom/` for future rebuilds (15 GB, fourteen seconds inside Azure).
+
+Blocked on the operator: `FTD_ADMIN_PASSWORD` in
+`config/mcp-env/labs.env`, upper, lower, digit, special character, no
+sequences. The import refuses to render without it. Then: import,
+start the switches, Nexus, and edge, then hosts, then the two FTDv,
+console password change if day-0 still trips, registration, and the
+HA pair plus inline set in cdFMC.
+
 ## 2026-09-10
 
 Built in the evening and online: preflight 53 OK, 13 resources in about
