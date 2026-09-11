@@ -84,9 +84,10 @@ time to cycle the box for the FTDv image, this is the order:
    six switches, push `labs/cilium-evpn-fabric/` through cml-mcp,
    about three minutes. Start the NAT node too; it was never started
    on 2026-09-10, so the kind host had no internet.
-6. Set `CDFMC_HOST`, `CDFMC_REG_KEY`, and `CDFMC_NAT_ID` in
-   `config/mcp-env/labs.env` from a Security Cloud Control onboarding
-   with the CLI registration key method, then
+6. Set `CDFMC_HOST` and the per-node `CDFMC_REG_KEY_FTD1`,
+   `CDFMC_NAT_ID_FTD1`, `CDFMC_REG_KEY_FTD2`, `CDFMC_NAT_ID_FTD2` in
+   `config/mcp-env/labs.env` from two Security Cloud Control
+   onboardings with the CLI registration key method, then
    `scripts/60-import-lab.sh labs/ftdv-cluster.yaml`. Start n9k1,
    n9k2, edge, push `labs/ftdv-cluster-fabric/`, then the hosts, then
    the two FTDv nodes last. Only one of the two labs runs at a time.
@@ -96,6 +97,15 @@ time to cycle the box for the FTDv image, this is the order:
 8. Still standing: refresh the tunnel token, taint the admin
    `random_password`, narrow the Access policy to the peer's exact
    address, test a node console through the tunnel.
+
+Late in the evening the Cilium lab was stopped, not wiped, so the
+fabric's saved configs survive a start. FTDv 10.0.0 went onto the data
+disk in place: dropfolder plus the definitions API (LESSONS-LEARNED),
+no rebuild. Steps 1 and 2 of the order above are therefore optional
+for the FTDv lab; they remain the right thing when the box is cycled
+anyway. Blocked on the operator: five cdFMC values in
+`config/mcp-env/labs.env` from two device onboardings in Security
+Cloud Control, one key per device.
 
 The FTDv cluster lab is prepared and untested: spec, topology,
 reference configs, and the renderer now fills any `__NAME__` from the

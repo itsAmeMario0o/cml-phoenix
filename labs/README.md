@@ -72,13 +72,14 @@ platform rules it follows are in
 `docs/superpowers/specs/2026-09-10-ftdv-cluster-lab-design.md`; the
 Nexus and edge configuration is in `ftdv-cluster-fabric/`.
 
-The FTDv day-0 registers each node with cdFMC at first boot from three
-extra values in `config/mcp-env/labs.env`: `CDFMC_HOST`,
-`CDFMC_REG_KEY`, `CDFMC_NAT_ID`, taken from the CLI registration key
-command that Security Cloud Control generates. The import refuses to
-render until they are set. About 15 vCPU and 48 GB; needs the
-`ftdv-10-0-0` image on the data disk, which arrives at the next
-rebuild.
+The FTDv day-0 registers each node with cdFMC at first boot from
+values in `config/mcp-env/labs.env`: `CDFMC_HOST`, and per node
+`CDFMC_REG_KEY_FTD1`, `CDFMC_NAT_ID_FTD1`, `CDFMC_REG_KEY_FTD2`,
+`CDFMC_NAT_ID_FTD2`. Security Cloud Control generates one CLI
+registration key command per onboarded device, so onboard two devices
+named ftd1 and ftd2 and copy each line's key and NAT ID. The import
+refuses to render until all five are set. About 15 vCPU and 48 GB.
+The `ftdv-10-0-0` image has been on the data disk since 2026-09-10.
 
 | Node | mgmt address | user |
 |---|---|---|

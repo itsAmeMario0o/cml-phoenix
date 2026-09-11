@@ -7,8 +7,9 @@
 # The Nexus pair and the edge boot with hostname, admin user, and
 # management address only; the fabric configuration is in
 # labs/ftdv-cluster-fabric/. The FTDv day-0 is complete, including the
-# cdFMC registration from __CDFMC_HOST__, __CDFMC_REG_KEY__, and
-# __CDFMC_NAT_ID__. Render with scripts/60-import-lab.sh, which fills
+# cdFMC registration from __CDFMC_HOST__ plus a key and NAT ID per node,
+# __CDFMC_REG_KEY_FTD1__ and __CDFMC_NAT_ID_FTD1__ and the FTD2 pair, since
+# Security Cloud Control issues one registration key per device. Render with scripts/60-import-lab.sh, which fills
 # every __NAME__ from config/mcp-env/labs.env (ADR 0006).
 #
 # Management on the NAT connector, 192.168.255.0/24, gateway .1:
@@ -321,8 +322,8 @@ nodes:
           "IPv6Mask": "",
           "IPv6Gw": "",
           "FmcIp": "__CDFMC_HOST__",
-          "FmcRegKey": "__CDFMC_REG_KEY__",
-          "FmcNatId": "__CDFMC_NAT_ID__",
+          "FmcRegKey": "__CDFMC_REG_KEY_FTD1__",
+          "FmcNatId": "__CDFMC_NAT_ID_FTD1__",
           "ManageLocally": "No"
       }
 - id: n7
@@ -372,8 +373,8 @@ nodes:
           "IPv6Mask": "",
           "IPv6Gw": "",
           "FmcIp": "__CDFMC_HOST__",
-          "FmcRegKey": "__CDFMC_REG_KEY__",
-          "FmcNatId": "__CDFMC_NAT_ID__",
+          "FmcRegKey": "__CDFMC_REG_KEY_FTD2__",
+          "FmcNatId": "__CDFMC_NAT_ID_FTD2__",
           "ManageLocally": "No"
       }
 - id: n8

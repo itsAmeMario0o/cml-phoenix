@@ -1,7 +1,7 @@
 # FTDv cluster behind a Nexus vPC pair
 
-Status: draft, 2026-09-10. Depends on a rebuild that puts `ftdv-10-0-0`
-on the data disk; the image is in blob and on `config/refplat.txt`.
+Status: draft, 2026-09-10. The `ftdv-10-0-0` image is on the data disk
+and registered with the controller; no rebuild is needed.
 
 ## Goal
 
@@ -118,9 +118,9 @@ outside.
 the Nexus pair and the edge boot with hostname, admin user, and
 management address only. The FTDv day-0 JSON is complete: hostname,
 admin password, management address, DNS, routed mode, and the cdFMC
-registration from three placeholders, `__CDFMC_HOST__`,
-`__CDFMC_REG_KEY__`, `__CDFMC_NAT_ID__`, rendered from
-`config/mcp-env/labs.env`. The hosts boot addressed.
+registration rendered from `config/mcp-env/labs.env`: `__CDFMC_HOST__`
+shared, and a registration key and NAT ID per node, since Security
+Cloud Control issues one key per onboarded device. The hosts boot addressed.
 
 The switch and router configuration that makes the diagram work is
 in `labs/ftdv-cluster-fabric/`, one file per device, for pasting or

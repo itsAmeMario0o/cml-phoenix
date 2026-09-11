@@ -302,3 +302,22 @@ time to learn them.
   for the tool. Proven the same day: six switch configs of 113 to 158
   lines each went in through the tool in about 30 seconds apiece, with
   no rejected lines, and the fabric came up.
+
+## A new image can reach the controller without a rebuild
+
+- Symptom: FTDv was in blob and on `config/refplat.txt`, but the
+  persistence hook only copies images at build time, and a rebuild
+  would have thrown away the running Cilium fabric's switch state.
+- Cause: the kit's image path was designed around cloud-init. Nothing
+  in it covers adding an image to a live controller.
+- Fix: the controller has a dropfolder and an API for exactly this.
+  From the Mac, a user-delegation read SAS for the one blob, handed on
+  stdin to an SSH session on the host, where `azcopy` (already there
+  from cloud-cml) pulls the 1.6 GB in two seconds inside Azure. Move
+  the file into `/var/local/virl2/dropfolder` owned `www-data:virl2`
+  mode 660, then `POST /api/v0/node_definitions` and
+  `POST /api/v0/image_definitions` with the two YAML files as raw
+  bodies and no content type. The controller moves the qcow2 into
+  `/data/images/virl-base-images/<id>/` itself, so the next rebuild's
+  hook finds the directory and skips it. Done 2026-09-10 in under a
+  minute. Roadmap item 10 should absorb this as the normal path.
