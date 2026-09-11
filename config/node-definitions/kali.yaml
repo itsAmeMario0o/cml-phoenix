@@ -20,6 +20,11 @@ sim:
     cpus: 2
     data_volume: 0
     boot_disk_size: 96
+    # A video device makes CML offer a VNC console, which is how a Kali
+    # desktop is meant to be used. The serial console exists too: the base
+    # image was given serial-getty@ttyS0 and console=ttyS0 after import.
+    video:
+      memory: 16
 inherited:
   image:
     ram: true
@@ -70,6 +75,7 @@ boot:
   timeout: 300
   completed:
     - "login:"
+    - "kali login"
 pyats:
   os: linux
   username: kali

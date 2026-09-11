@@ -26,7 +26,18 @@ apt, registered through the dropfolder and the definitions API under
 `config/node-definitions/kali.yaml`, and copied to blob under
 `custom/` for future rebuilds (15 GB, fourteen seconds inside Azure).
 
-Blocked on the operator: `FTD_ADMIN_PASSWORD` in
+Built the same night. `labs/ips-ha.yaml` imported with all eleven
+nodes; n9k1, edge, the three Ubuntu hosts, Kali, and both FTDv are
+up. VLAN 10 and 20 verified on the switch, the edge answers on all
+three addresses and reaches both outside servers, no DHCP lease yet
+because VLAN 10 is isolated until an inline set exists. Both
+firewalls accepted the day-0 password this time and show the cdFMC
+manager with registration Pending. Kali needed a serial console
+edited into its base image (LESSONS-LEARNED); it now logs in on the
+console, nmap 7.99 present, and VNC is available through the video
+device in its node definition.
+
+Was blocked on the operator: `FTD_ADMIN_PASSWORD` in
 `config/mcp-env/labs.env`, upper, lower, digit, special character, no
 sequences. The import refuses to render without it. Then: import,
 start the switches, Nexus, and edge, then hosts, then the two FTDv,

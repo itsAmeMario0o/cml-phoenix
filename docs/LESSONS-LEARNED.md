@@ -338,3 +338,31 @@ time to learn them.
   now pins the speed in cloud-init and in a oneshot unit for later
   boots. The source Cilium lab's endpoint config had the same line,
   which is where the answer came from.
+
+## A custom Linux image boots but its console stays empty
+
+- Symptom: the Kali node went to BOOTED and its console log had zero
+  lines. cml-mcp could not log in; nothing answered on the serial
+  port. Seen 2026-09-11 with Kali 2026.2 from the official QEMU image.
+- Cause: desktop-oriented images have no getty on ttyS0 and no
+  `console=ttyS0` on the kernel line. CML marks such a node booted
+  when its boot timeout expires, not because it saw a prompt.
+- Fix: edit the base qcow2 once on the host with `qemu-nbd`: mount the
+  root partition, symlink `serial-getty@ttyS0.service` into
+  `getty.target.wants`, and append `console=tty0 console=ttyS0,115200`
+  to the kernel lines in `/boot/grub/grub.cfg` and to
+  `GRUB_CMDLINE_LINUX_DEFAULT`. Stop and wipe the node first, since
+  its overlay points at the base. Add `video: memory: 16` to the node
+  definition so the CML UI also offers VNC, which is the natural way
+  to use a desktop image. Both changes are in
+  `config/node-definitions/kali.yaml` and the blob library copy.
+
+## sudo over SSH swallowed the script as its password
+
+- Symptom: `sudo: 3 incorrect password attempts` from a one-shot SSH
+  session that fed the sysadmin password on stdin and then ran a
+  script through a heredoc.
+- Cause: the heredoc replaced stdin, so sudo read the first script
+  line as the password.
+- Fix: scp the script, cache the credential with
+  `printf '%s\n' "$P" | sudo -S -p "" true`, then `sudo -n bash script`.
