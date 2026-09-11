@@ -114,7 +114,13 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/api/v0/labs/") and self.path.endswith("/download"):
             lab_id = self.path.split("/")[4]
             lab = STATE["labs"][lab_id]
-            self._send(200, lab.get("topology", f"lab:\n  title: {lab['lab_title']}\n"), "text/plain")
+            # lab-1 exports the way 2.10 does, annotations first and the
+            # lab block later; the others keep the older lab-first shape.
+            if lab_id == "lab-1":
+                default = f"annotations: []\nsmart_annotations: []\nnodes: []\nlab:\n  title: {lab['lab_title']}\n"
+            else:
+                default = f"lab:\n  title: {lab['lab_title']}\n"
+            self._send(200, lab.get("topology", default), "text/plain")
         elif self.path.startswith("/api/v0/labs/"):
             lab_id = self.path.split("/")[4]
             self._send(200, {"id": lab_id, **STATE["labs"][lab_id]})

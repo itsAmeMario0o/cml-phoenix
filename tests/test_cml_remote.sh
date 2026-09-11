@@ -38,7 +38,7 @@ assert_eq "list-labs first row" "$(printf 'lab-1\tSpine Leaf\tSTARTED')" "$(echo
 out="$(bash "${SCRIPT}" export-labs "${TMP}/exports")"
 assert_eq "export message" "exported 3 labs to ${TMP}/exports" "${out}"
 assert_eq "export file exists" "yes" "$([[ -f "${TMP}/exports/spine-leaf-lab-1.yaml" ]] && echo yes || echo no)"
-assert_eq "export file content" "lab:" "$(head -1 "${TMP}/exports/spine-leaf-lab-1.yaml")"
+assert_eq "export file content, 2.10 shape accepted" "annotations: []" "$(head -1 "${TMP}/exports/spine-leaf-lab-1.yaml")"
 assert_eq "second lab export file exists" "yes" "$([[ -f "${TMP}/exports/trustsec-demo-lab-2.yaml" ]] && echo yes || echo no)"
 assert_eq "slash-in-title export file exists" "yes" "$([[ -f "${TMP}/exports/vlan-trunk-demo-lab-3.yaml" ]] && echo yes || echo no)"
 

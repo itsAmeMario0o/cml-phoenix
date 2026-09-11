@@ -397,3 +397,17 @@ time to learn them.
   `AdminPassword` must satisfy FTD's complexity rule or the node
   blocks all configuration; `show network` reports the management
   port the device listens on.
+
+## Teardown refused: "export of <id> did not look like a topology"
+
+- Symptom: `40-down.sh` stopped before destroying anything with that
+  line for the Cilium lab. Seen 2026-09-11.
+- Cause: the export helper accepted a download only if its first line
+  was `lab:`. A CML 2.10 export opens with `annotations: []` and
+  `smart_annotations: []`, then `nodes:`, and the `lab:` block sits
+  near the end. The earlier teardowns passed because their labs were
+  small and exported in the older order.
+- Fix: the helper now looks for a top-level `lab:` or `nodes:` line
+  anywhere in the file. The fake API exports one lab in the 2.10 shape
+  so the test covers it. The refusal itself was the right behaviour:
+  nothing was destroyed with an export in doubt.

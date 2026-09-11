@@ -80,7 +80,10 @@ cmd_export_labs() {
     title="$(api GET "/labs/${id}" | jq -r .lab_title)"
     file="${dir}/$(slugify "${title}")-${id}.yaml"
     api_raw GET "/labs/${id}/download" > "${file}"
-    if [[ "$(head -1 "${file}")" != lab:* ]]; then
+    # A 2.10 export opens with "annotations: []" and carries the lab:
+    # block further down, so the check looks for a top-level lab: or
+    # nodes: key anywhere rather than on the first line. Seen 2026-09-11.
+    if ! grep -qE '^(lab|nodes):' "${file}"; then
       rm -f "${file}"
       echo "export of ${id} did not look like a topology" >&2
       exit 1
