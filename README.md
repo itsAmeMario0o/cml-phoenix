@@ -1,5 +1,8 @@
 # cml-phoenix
 
+> **Have an account? Read [Getting into the Lab](https://itsamemario0o.github.io/cml-phoenix/) to log in.**
+> The same guide is in [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md).
+
 A Cisco Modeling Labs server in Azure that you build when you need it and
 tear down when you are done. The parts that are slow or expensive to
 recreate, meaning the reference platform images, the lab exports, and the
