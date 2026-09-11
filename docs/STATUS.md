@@ -5,6 +5,15 @@ a new session.
 
 ## 2026-09-11
 
+Torn down at 03:33 UTC. Both labs exported to blob under
+`exports/20260911T033320Z` (the first attempt refused a 2.10-shaped
+export; fixed, LESSONS-LEARNED), license NOT_REGISTERED, 13 resources
+destroyed, data disk unattached with twelve images on it: the ten
+from the refplat lists plus FTDv 10.0.0 and Kali 2026.2. The next
+build reimports the two labs with `60-import-lab.sh`; the Kali node
+definition and image are on the disk, and their blob copies under
+`custom/` are the fallback. No VM exists.
+
 The FTDv cluster lab ran for an hour and was retired. The vPC pair,
 HSRP, eBGP to the edge, and ECMP toward the firewalls all came up from
 the reference configs, and the inside host's LACP bond bundled once
