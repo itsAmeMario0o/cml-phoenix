@@ -366,3 +366,34 @@ time to learn them.
   line as the password.
 - Fix: scp the script, cache the credential with
   `printf '%s\n' "$P" | sudo -S -p "" true`, then `sudo -n bash script`.
+
+## The FTDv nodes never register with cdFMC: 8305 is refused
+
+- Symptom: both firewalls showed the tenant host as manager and
+  Registration Pending for an hour. Seen 2026-09-11.
+- Cause, as far as it is known: the tenant host resolves to one
+  address, which answers on 443 with the tenant's certificate and
+  sends a TCP reset on 8305. That is true from the firewalls, from
+  the CML host, and from the operator's Mac, so it is not the Azure
+  NSG or the NAT. Cisco's cdFMC troubleshooting page says the cloud
+  will not answer 8305 unless the device record is in an onboarding
+  state; the records were in that state. A third device in the same
+  tenant, onboarded another way, is Online with a manager entry of the
+  form `<uuid>DONTRESOLVE:443`.
+- What was tried, all from the device side: the generated line with
+  the host; `configure network management-port 443`, which the CLI
+  refuses below 1025 since it is the device's own listening port; the
+  host with a `:443` suffix and `DONTRESOLVE:443`, both "Invalid
+  Parameters" on 10.0.0; plain `DONTRESOLVE`, accepted, which leaves
+  the device waiting for a manager that never initiates. None
+  registered.
+- Fix: unknown. The remaining question sits on the tenant side: why
+  8305 answers for one device and not for these two. When a host and
+  port that accept the tunnel are known, `configure manager delete`
+  and `configure manager add` on both consoles is a one minute job
+  from the env file values.
+- Smaller things learned on the way: `ping system` on the FTD CLI
+  runs until interrupted and holds the console; the day-0
+  `AdminPassword` must satisfy FTD's complexity rule or the node
+  blocks all configuration; `show network` reports the management
+  port the device listens on.

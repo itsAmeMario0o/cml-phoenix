@@ -37,6 +37,23 @@ edited into its base image (LESSONS-LEARNED); it now logs in on the
 console, nmap 7.99 present, and VNC is available through the video
 device in its node definition.
 
+Registration is the open problem. The tenant host refuses 8305 from
+everywhere while 443 answers with the tenant's certificate; every
+device-side variant was tried and is written up in LESSONS-LEARNED.
+Both firewalls currently carry a plain `DONTRESOLVE` manager entry at
+the operator's request, Registration Pending. The two device records
+in Security Cloud Control are in the onboarding state with the
+generated keys, which are in `config/mcp-env/labs.env`; both lines
+also passed through the chat transcript, so regenerate them if the
+records are recreated. Next step is on the tenant side: find out
+which host and port the Online device BOWSER uses, or ask SCC support
+why 8305 is refused. Then delete and re-add the manager on both
+consoles from the env file.
+
+Everything else in the lab is up and correct. The inline set does
+not exist until cdFMC has the pair, so VLAN 10 is still isolated and
+Kali has no address; that is by design.
+
 Was blocked on the operator: `FTD_ADMIN_PASSWORD` in
 `config/mcp-env/labs.env`, upper, lower, digit, special character, no
 sequences. The import refuses to render without it. Then: import,
@@ -108,7 +125,18 @@ the fake API; not yet run against a real controller.
 
 ### Pick up here
 
-The Cilium fabric is running and the operator is using it. When it is
+1. cdFMC registration, on the tenant side first (see above). Then on
+   each firewall console: `configure manager delete`, then
+   `configure manager add <host> <key> <NAT ID> <display name>` with
+   that device's values from the env file.
+2. In cdFMC once both are Online: HA pair on GigabitEthernet0/0,
+   inline set from 0/1 and 0/2 on the pair, allow-all access control
+   policy with an intrusion policy, deploy. Then Kali gets DHCP from
+   the edge and `nmap 203.0.113.101` crosses the active unit.
+3. Push the twenty-odd unpushed commits.
+
+The original order for cycling the box follows; the Cilium lab is
+stopped, not wiped, and the FTDv image is already on the disk. When it is
 time to cycle the box for the FTDv image, this is the order:
 
 1. `ASSUME_YES=1 scripts/40-down.sh`. Exports labs to blob, releases
