@@ -143,9 +143,11 @@ Fits the E16ds_v6 with the Cilium lab stopped. Not alongside it.
 ## Open points
 
 - The tenant must hold FTDv entitlements and accept version 10.0.0.
-- FTD enforces password complexity on the admin password. The lab
-  password must have upper and lower case and a digit, at least eight
-  characters, or day-0 fails and the node falls back to the default.
+- FTD enforces password complexity on the admin password, including a
+  special character. A day-0 password that fails it is accepted for
+  login but the node then forces a change before it will apply any
+  configuration, registration included. Seen 2026-09-10; the topology
+  now carries `__FTD_ADMIN_PASSWORD__` for the FTDv nodes.
 - The unmanaged switch carrying the CCL must pass the larger MTU. CML's
   unmanaged switch has passed jumbo frames in the past; confirm with a
   ping of size 1600 across the CCL once the cluster is up.

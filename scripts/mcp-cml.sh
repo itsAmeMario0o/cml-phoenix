@@ -27,6 +27,8 @@ main() {
     source "${LAB_ENV_FILE}"
     PYATS_USERNAME="${PYATS_USERNAME:-admin}"
     PYATS_PASSWORD="${PYATS_PASSWORD:-${LAB_PASSWORD:-}}"
+    # FTDv nodes carry their own admin password; see config/labs.env.example.
+    FTD_ADMIN_PASSWORD="${FTD_ADMIN_PASSWORD:-}"
   fi
   set +a
   exec uvx "cml-mcp[pyats]" "$@"

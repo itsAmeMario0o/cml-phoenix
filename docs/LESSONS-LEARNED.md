@@ -321,3 +321,20 @@ time to learn them.
   `/data/images/virl-base-images/<id>/` itself, so the next rebuild's
   hook finds the directory and skips it. Done 2026-09-10 in under a
   minute. Roadmap item 10 should absorb this as the normal path.
+
+## An Ubuntu LACP bond to a vPC never comes up in CML
+
+- Symptom: the Nexus pair reported Ethernet1/12 "suspended (no LACP
+  PDUs)" and vPC 20 down, while the host showed bond0 up and both
+  members UP with LOWER_UP. Pings to the HSRP gateway failed. Seen
+  2026-09-10 on the FTDv cluster lab's inside host.
+- Cause: virtio interfaces report speed and duplex as unknown. The
+  Linux 802.3ad bonding driver will not put a member with unknown
+  speed into an aggregator, so it never sends an LACP PDU. The bond
+  file gave it away: `Speed: Unknown`, `MII Status: down` per member,
+  a different aggregator ID on each.
+- Fix: `ethtool -s ens2 speed 1000 duplex full` on each member. The
+  bond bundled within seconds and the gateway answered. The topology
+  now pins the speed in cloud-init and in a oneshot unit for later
+  boots. The source Cilium lab's endpoint config had the same line,
+  which is where the answer came from.

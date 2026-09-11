@@ -309,7 +309,7 @@ nodes:
       {
           "EULA": "accept",
           "Hostname": "ftd1",
-          "AdminPassword": "__LAB_PASSWORD__",
+          "AdminPassword": "__FTD_ADMIN_PASSWORD__",
           "FirewallMode": "routed",
           "DNS1": "8.8.8.8",
           "DNS2": "1.1.1.1",
@@ -360,7 +360,7 @@ nodes:
       {
           "EULA": "accept",
           "Hostname": "ftd2",
-          "AdminPassword": "__LAB_PASSWORD__",
+          "AdminPassword": "__FTD_ADMIN_PASSWORD__",
           "FirewallMode": "routed",
           "DNS1": "8.8.8.8",
           "DNS2": "1.1.1.1",
@@ -415,6 +415,23 @@ nodes:
             type: text
         expire: false
       write_files:
+        # virtio reports no link speed, and the 802.3ad bonding driver
+        # will not aggregate a member with unknown speed, so the Nexus
+        # never sees an LACP PDU. Pinning 1000/full on both members
+        # fixes it; the unit reapplies it on every boot before netplan.
+        - path: /etc/systemd/system/bond-speed.service
+          permissions: '0644'
+          content: |
+            [Unit]
+            Description=Pin link speed on virtio bond members for LACP
+            Before=systemd-networkd.service
+            After=sys-subsystem-net-devices-ens2.device sys-subsystem-net-devices-ens3.device
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/sbin/ethtool -s ens2 speed 1000 duplex full
+            ExecStart=/usr/sbin/ethtool -s ens3 speed 1000 duplex full
+            [Install]
+            WantedBy=network-pre.target
         - path: /etc/netplan/60-bond.yaml
           permissions: '0600'
           content: |
@@ -438,6 +455,9 @@ nodes:
                     - to: default
                       via: 10.10.0.1
       runcmd:
+        - systemctl enable bond-speed.service
+        - ethtool -s ens2 speed 1000 duplex full
+        - ethtool -s ens3 speed 1000 duplex full
         - rm -f /etc/netplan/50-cloud-init.yaml
         - netplan apply
 - id: n9
