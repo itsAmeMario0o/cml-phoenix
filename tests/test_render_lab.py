@@ -102,6 +102,15 @@ class TrackedLabsTest(unittest.TestCase):
                 if self.PASSWORD_LINE.search(line):
                     self.assertIn("__LAB_PASSWORD__", line, f"{lab.name}: {line.strip()}")
 
+    def test_placeholders_are_documented(self) -> None:
+        """A stray __WORD__ in a comment would block the import, so every
+        placeholder must be a key in config/labs.env.example."""
+        example = REPO / "config" / "labs.env.example"
+        keys = {ln.split("=", 1)[0] for ln in example.read_text().splitlines() if re.match(r"^[A-Z0-9_]+=", ln)}
+        for lab in LABS:
+            names = set(PLACEHOLDER.findall(lab.read_text())) - {"LAB_SSH_PUBKEY"}
+            self.assertTrue(names <= keys, f"{lab.name}: undocumented placeholders {sorted(names - keys)}")
+
     def test_every_lab_renders(self) -> None:
         with tempfile.TemporaryDirectory(prefix=".tmp.labs.", dir=REPO / "tests") as tmp:
             pubkey = Path(tmp) / "key.pub"

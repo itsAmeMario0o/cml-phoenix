@@ -9,8 +9,9 @@
 # labs/ftdv-cluster-fabric/. The FTDv day-0 is complete, including the
 # cdFMC registration from __CDFMC_HOST__ plus a key and NAT ID per node,
 # __CDFMC_REG_KEY_FTD1__ and __CDFMC_NAT_ID_FTD1__ and the FTD2 pair, since
-# Security Cloud Control issues one registration key per device. Render with scripts/60-import-lab.sh, which fills
-# every __NAME__ from config/mcp-env/labs.env (ADR 0006).
+# Security Cloud Control issues one registration key per device. Render
+# with scripts/60-import-lab.sh, which fills each placeholder from the
+# variable of the same name in config/mcp-env/labs.env (ADR 0006).
 #
 # Management on the NAT connector, 192.168.255.0/24, gateway .1:
 #   n9k1 .71  n9k2 .72  edge .73  ftd1 .81  ftd2 .82
