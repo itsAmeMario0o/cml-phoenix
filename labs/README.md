@@ -91,3 +91,35 @@ The `ftdv-10-0-0` image has been on the data disk since 2026-09-10.
 | ftd1, ftd2 | 192.168.255.81, .82 | admin |
 | inside-host | 10.10.0.100 on bond0, no mgmt | cisco |
 | outside-host | 203.0.113.100 on the edge LAN, no mgmt | cisco |
+
+## ips-ha.yaml
+
+Inline IPS on a Threat Defense HA pair. One Nexus 9300v as the switch,
+a cat8000v edge as the internet with the inside gateway and a DHCP
+scope, ftd1 and ftd2 in high availability each with an inline set
+bridging VLAN 10 to VLAN 20, Kali and an Ubuntu server inside, two
+Ubuntu servers outside. Managed by cdFMC; no FMCv. Spec:
+`docs/superpowers/specs/2026-09-11-ips-ha-lab-design.md`. Replaces the
+FTDv cluster lab, which could not run inline sets.
+
+Every node boots configured. Needs `FTD_ADMIN_PASSWORD` and the five
+cdFMC values in `config/mcp-env/labs.env`, and the `kali-2026-2` image
+with its `kali` node definition on the controller
+(`config/node-definitions/kali.yaml`). After both firewalls register:
+in cdFMC add the HA pair with the failover link on GigabitEthernet0/0,
+then the inline set from 0/1 and 0/2 on the pair, an allow-all access
+control policy with an intrusion policy, deploy. Pair first, inline
+set second, or both standalone units bridge the segments at once.
+
+| Node | address | user |
+|---|---|---|
+| n9k1 | 192.168.255.71 mgmt0 | admin |
+| edge | 192.168.255.73 mgmt, 10.10.0.1 inside gateway, 203.0.113.1 outside | admin |
+| ftd1, ftd2 | 192.168.255.81, .82 mgmt | admin, FTD_ADMIN_PASSWORD |
+| kali | DHCP from 10.10.0.100 | kali / kali |
+| insrv | 10.10.0.10 | cisco |
+| extsrv, esrv | 203.0.113.101, .251 | cisco |
+
+From Kali, `nmap -sS 203.0.113.101` or a ping to 198.51.100.1 crosses
+the active unit; pull the active unit's power in CML and the standby
+takes over with its inline interfaces coming up.

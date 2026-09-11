@@ -1,0 +1,13 @@
+#
+# Kali 2026.2 image definition, from the official QEMU image
+# kali-linux-2026.2-qemu-amd64.7z, unpacked and renamed. Virtual disk
+# 80 GiB, so the node definition's boot disk is 96. Registered through
+# POST /api/v0/image_definitions with the file in the dropfolder.
+#
+id: kali-2026-2
+node_definition_id: kali
+description: Kali Linux 2026.2, official QEMU image
+label: Kali 2026.2
+disk_image: kali-2026-2.qcow2
+read_only: false
+schema_version: 0.0.1
