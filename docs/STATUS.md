@@ -3,7 +3,24 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
-## 2026-09-11
+## 2026-09-11, afternoon
+
+Rebuilt in the afternoon: preflight 55 OK, 13 resources, API ready
+about a minute after the build printed its URL, smoke test 10 OK on
+the first run this time, connector installed over SSH with four
+connections, front door answering. The persistence hook kept all
+twelve images, Kali and FTDv included, and both custom definitions
+were still registered. Both labs reimported with `60-import-lab.sh`
+and the IPS lab is starting, firewalls last.
+
+The rebuild wiped the CML users, as every rebuild does. The lab user
+mruiznet@gmail.com no longer exists and its lab rights could not be
+re-granted. Either recreate it in the UI, or add a row to
+`config/mcp-env/users.csv` and run `70-users.sh`; the script's
+username rule does not allow an @, so a plain username with the email
+in the email column is the fit.
+
+## 2026-09-11, early morning
 
 Torn down at 03:33 UTC. Both labs exported to blob under
 `exports/20260911T033320Z` (the first attempt refused a 2.10-shaped
