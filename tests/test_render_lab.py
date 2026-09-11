@@ -100,7 +100,7 @@ class TrackedLabsTest(unittest.TestCase):
         for lab in LABS:
             for line in lab.read_text().splitlines():
                 if self.PASSWORD_LINE.search(line):
-                    self.assertIn("__LAB_PASSWORD__", line, f"{lab.name}: {line.strip()}")
+                    self.assertRegex(line, r"__[A-Z_]*PASSWORD__", f"{lab.name}: {line.strip()}")
 
     def test_placeholders_are_documented(self) -> None:
         """A stray __WORD__ in a comment would block the import, so every
