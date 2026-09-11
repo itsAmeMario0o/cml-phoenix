@@ -411,3 +411,21 @@ time to learn them.
   anywhere in the file. The fake API exports one lab in the 2.10 shape
   so the test covers it. The refusal itself was the right behaviour:
   nothing was destroyed with an export in doubt.
+
+## After a rebuild cml-mcp cannot reach any node console
+
+- Symptom: `send_cli_command` failed on every node with "failed to
+  connect via proxy" while the API, the smoke test, and the repo's
+  own SSH all worked. Seen 2026-09-11, first console use after a
+  rebuild.
+- Cause: pyATS reaches consoles through the CML console server on
+  port 22 with the Mac's system ssh, which checks `~/.ssh/known_hosts`.
+  The rebuilt host has new keys, and the old line for the public IP
+  is still there from an earlier manual console session. The repo's
+  scripts are immune because they use `keys/known_hosts`, which
+  `20-up.sh` clears before each build; the user's own file is not
+  touched by anything in the kit.
+- Fix: `ssh-keygen -R 20.114.184.195` on the Mac, by hand, after every
+  rebuild that precedes console work. The kit does not edit files
+  outside the repo, so this stays a manual step until cml-mcp can be
+  pointed at its own known_hosts.
