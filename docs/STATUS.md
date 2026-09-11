@@ -21,6 +21,24 @@ in cdFMC. Next in cdFMC: HA pair on GigabitEthernet0/0, inline set
 from 0/1 and 0/2 on the pair, allow-all access control policy with an
 intrusion policy, deploy. Then Kali gets DHCP and the IPS lab is live.
 
+Evening check of everything but the firewalls: all eleven nodes
+BOOTED; the edge holds its three addresses and loopback and its DHCP
+pool has a lease at 10.10.0.100, which means a request crossed VLAN
+10 to VLAN 20 through an inline set, so the pair is forwarding. The
+Nexus and the four hosts could not be checked from the console this
+time: cml-mcp's proxy is blocked by the stale host key in the Mac's
+`~/.ssh/known_hosts` (LESSONS-LEARNED), an expect runner through the
+console server handled the IOS XE prompt but not the NX-OS and Linux
+ones, and the Mac ran out of memory mid-sweep. Their configuration is
+day-0 and was verified after the first import. The lab was renamed
+in the UI to "Attack Lab - Inline IPS, FTD HA pair"; the console
+server paths use that title.
+
+Two fixes on the operator's side before the next console session:
+`ssh-keygen -R 20.114.184.195`, and remove line 17 of
+`config/mcp-env/labs.env`, a pasted `configure manager add` line that
+breaks every script that sources the file.
+
 The rebuild wiped the CML users, as every rebuild does. The lab user
 mruiznet@gmail.com no longer exists and its lab rights could not be
 re-granted. Either recreate it in the UI, or add a row to
