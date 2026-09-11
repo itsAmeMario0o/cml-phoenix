@@ -28,44 +28,46 @@ assert_contains() {
     echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
 }
 
-out="$(bash "${SCRIPT}" class netsec 3 example.com)"
+out="$(bash "${SCRIPT}" class netsec 3 cisco.com)"
 assert_eq "class prints a header and three rows" "4" "$(echo "${out}" | wc -l | tr -d ' ')"
-assert_contains "class row shape" "netsec02,netsec02@example.com,Netsec 02,user,netsec" "${out}"
+assert_contains "class row shape" "netsec02@cisco.com,Netsec 02,user" "${out}"
 echo "${out}" > "${TMP}/users.csv"
-echo "jdoe,jdoe@example.com,Jane Doe,admin," >> "${TMP}/users.csv"
+echo "jdoe@example.com,Jane Doe,admin" >> "${TMP}/users.csv"
 
 out="$(bash "${SCRIPT}" --dry-run 2>&1)"
-assert_contains "dry run plans the group" "would create group netsec" "${out}"
-assert_contains "dry run plans a user" "would create netsec01 (user, group netsec)" "${out}"
-assert_contains "dry run plans the admin" "would create jdoe (admin)" "${out}"
-assert_contains "dry run lists policy emails" "Access policy emails: jdoe@example.com, netsec01@example.com" "${out}"
+assert_contains "dry run plans the group" "would create group lab-users" "${out}"
+assert_contains "dry run plans a user" "would create netsec01@cisco.com (user)" "${out}"
+assert_contains "dry run plans the admin" "would create jdoe@example.com (admin)" "${out}"
+assert_contains "dry run plans the lab grant" "would grant lab-users lab_exec on 3 lab(s)" "${out}"
+assert_contains "dry run lists policy emails" "Access policy emails: jdoe@example.com, netsec01@cisco.com" "${out}"
 assert_eq "dry run writes no credentials" "no" "$([[ -f "${TMP}/creds.csv" ]] && echo yes || echo no)"
 
 out="$(bash "${SCRIPT}" 2>&1)"
-assert_contains "real run creates the group" "created group netsec" "${out}"
-assert_contains "real run creates users" "created netsec03 (user, group netsec)" "${out}"
+assert_contains "real run creates the group" "created group lab-users" "${out}"
+assert_contains "real run creates users" "created netsec03@cisco.com (user)" "${out}"
+assert_contains "real run grants labs" "lab-users: 3 member(s), lab_exec on 3 lab(s)" "${out}"
 assert_contains "real run reports the sheet" "4 password(s) written to ${TMP}/creds.csv" "${out}"
 assert_eq "credentials file is private" "600" "$(stat -f %Lp "${TMP}/creds.csv" 2>/dev/null || stat -c %a "${TMP}/creds.csv")"
 assert_eq "credentials has four users" "5" "$(wc -l < "${TMP}/creds.csv" | tr -d ' ')"
-if grep -qE "^[a-z0-9]+,.*,[A-Za-z0-9]{16}$" <<<"$(tail -1 "${TMP}/creds.csv")"; then echo "[OK]    password column is 16 alphanumerics"; else
+if grep -qE "^[^,]+@[^,]+,.*,[A-Za-z0-9]{16}$" <<<"$(tail -1 "${TMP}/creds.csv")"; then echo "[OK]    password column is 16 alphanumerics"; else
   echo "[FAIL]  password column shape"; failures=$((failures + 1)); fi
 if grep -qE "[A-Za-z0-9]{16}" <<<"${out}"; then echo "[FAIL]  a password leaked into stdout"; failures=$((failures + 1)); else
   echo "[OK]    no password on stdout"; fi
 
-printf 'old\n' > "${TMP}/creds.csv.keep"; cp "${TMP}/creds.csv" "${TMP}/creds.csv.keep"
+cp "${TMP}/creds.csv" "${TMP}/creds.csv.keep"
 out="$(bash "${SCRIPT}" 2>&1)"
-assert_contains "rerun leaves users alone" "netsec01 exists, left alone" "${out}"
-assert_contains "rerun keeps the sheet" "nothing to create; credentials file untouched" "${out}"
+assert_contains "rerun leaves users alone" "netsec01@cisco.com exists, left alone" "${out}"
+assert_contains "rerun keeps the sheet" "no new users; credentials file untouched" "${out}"
 assert_eq "sheet unchanged after rerun" "same" "$(cmp -s "${TMP}/creds.csv" "${TMP}/creds.csv.keep" && echo same || echo changed)"
 
 rc=0; out="$(USERS_CSV="${TMP}/missing.csv" bash "${SCRIPT}" 2>&1)" || rc=$?
 assert_eq "missing csv exits 1" "1" "${rc}"
 assert_contains "missing csv names the example" "config/users.csv.example" "${out}"
 
-printf 'username,email,fullname,role,group\nbad user,,B,user,\n' > "${TMP}/bad.csv"
+printf 'email,fullname,role\nnotanemail,B,user\n' > "${TMP}/bad.csv"
 rc=0; out="$(bash "${SCRIPT}" --csv "${TMP}/bad.csv" 2>&1)" || rc=$?
 assert_eq "bad csv exits 1" "1" "${rc}"
-assert_contains "bad csv names the line" "line 2: bad username" "${out}"
+assert_contains "bad csv names the line" "line 2: 'notanemail' is not an email" "${out}"
 
 rc=0; bash "${SCRIPT}" --bogus >/dev/null 2>&1 || rc=$?
 assert_eq "bad flag exits 2" "2" "${rc}"

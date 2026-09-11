@@ -87,7 +87,8 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(body)
             gid = f"g-{len(STATE['groups']) + 1}"
             STATE["groups"][gid] = {"id": gid, "name": data["name"], "description": data.get("description", ""),
-                                    "members": list(data.get("members", []))}
+                                    "members": list(data.get("members", [])),
+                                    "associations": list(data.get("associations", []))}
             self._send(200, STATE["groups"][gid])
             return
         if self.path.startswith("/api/v0/import"):
@@ -96,6 +97,26 @@ class Handler(BaseHTTPRequestHandler):
             title = parse_qs(urlparse(self.path).query).get("title", ["Imported"])[0]
             STATE["labs"]["lab-new"] = {"lab_title": title, "state": "STOPPED", "topology": body.decode()}
             self._send(200, {"id": "lab-new", "warnings": []})
+            return
+        self._send(404, {})
+
+    def do_PATCH(self) -> None:  # noqa: N802
+        if not self._authorized():
+            self._send(401, {})
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        data = json.loads(self.rfile.read(length)) if length else {}
+        if self.path.startswith("/api/v0/groups/"):
+            gid = self.path.split("/")[4]
+            group = STATE["groups"].get(gid)
+            if group is None:
+                self._send(404, {})
+                return
+            if "members" in data:
+                group["members"] = list(data["members"])
+            if "associations" in data:
+                group["associations"] = list(data["associations"])
+            self._send(200, group)
             return
         self._send(404, {})
 

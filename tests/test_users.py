@@ -1,5 +1,5 @@
 """Tests for scripts/lib/users.py: CSV parsing, passwords, class rows, and
-the apply flow against tests/fake_cml_api.py."""
+the apply flow (users, one managed group, every lab) against the fake API."""
 import csv
 import os
 import stat
@@ -19,22 +19,21 @@ import users  # noqa: E402
 PORT = 18006
 CSV_TEXT = (
     "# comment\n"
-    "username,email,fullname,role,group\n"
-    "jdoe,jdoe@example.com,Jane Doe,admin,\n"
-    "student01,student01@example.com,Netsec 01,user,netsec\n"
+    "email,fullname,role\n"
+    "jdoe@example.com,Jane Doe,admin\n"
+    "astudent@example.com,A Student,user\n"
     "\n"
-    "student02,,Netsec 02,user,netsec\n"
+    "bstudent@example.com,B Student,user\n"
 )
 
 
 class LoadRowsTest(unittest.TestCase):
     def test_parses_rows_and_skips_comments(self) -> None:
         rows = users.load_rows(CSV_TEXT)
-        self.assertEqual([r.username for r in rows], ["jdoe", "student01", "student02"])
+        self.assertEqual([r.email for r in rows], ["jdoe@example.com", "astudent@example.com", "bstudent@example.com"])
         self.assertTrue(rows[0].admin)
         self.assertFalse(rows[1].admin)
-        self.assertEqual(rows[1].group, "netsec")
-        self.assertEqual(rows[2].email, "")
+        self.assertEqual(rows[1].username, "astudent@example.com")
 
     def test_bad_header(self) -> None:
         with self.assertRaisesRegex(users.UsersError, "header must be exactly"):
@@ -42,23 +41,24 @@ class LoadRowsTest(unittest.TestCase):
 
     def test_bad_role(self) -> None:
         with self.assertRaisesRegex(users.UsersError, "line 2: role"):
-            users.load_rows("username,email,fullname,role,group\njdoe,,J,root,\n")
+            users.load_rows("email,fullname,role\na@b.com,A,root\n")
 
-    def test_bad_username(self) -> None:
-        with self.assertRaisesRegex(users.UsersError, "bad username"):
-            users.load_rows("username,email,fullname,role,group\njane doe,,J,user,\n")
+    def test_not_an_email(self) -> None:
+        with self.assertRaisesRegex(users.UsersError, "not an email"):
+            users.load_rows("email,fullname,role\njdoe,J,user\n")
 
-    def test_duplicate_username(self) -> None:
-        with self.assertRaisesRegex(users.UsersError, "duplicate username"):
-            users.load_rows("username,email,fullname,role,group\na,,A,user,\na,,A,user,\n")
+    def test_email_too_long(self) -> None:
+        long = "a" * 30 + "@cisco.com"
+        with self.assertRaisesRegex(users.UsersError, "caps a username at 32"):
+            users.load_rows(f"email,fullname,role\n{long},A,user\n")
 
-    def test_email_without_at(self) -> None:
-        with self.assertRaisesRegex(users.UsersError, "has no @"):
-            users.load_rows("username,email,fullname,role,group\na,nope,A,user,\n")
+    def test_duplicate_email(self) -> None:
+        with self.assertRaisesRegex(users.UsersError, "duplicate email"):
+            users.load_rows("email,fullname,role\na@b.com,A,user\nA@B.com,A,user\n")
 
     def test_empty(self) -> None:
         with self.assertRaisesRegex(users.UsersError, "no user rows"):
-            users.load_rows("username,email,fullname,role,group\n")
+            users.load_rows("email,fullname,role\n")
 
 
 class PasswordAndClassTest(unittest.TestCase):
@@ -70,18 +70,17 @@ class PasswordAndClassTest(unittest.TestCase):
             self.assertTrue(p.isalnum())
 
     def test_class_rows(self) -> None:
-        rows = users.class_rows("netsec", 3, "example.com")
-        self.assertEqual(rows[0], "netsec01,netsec01@example.com,Netsec 01,user,netsec")
-        self.assertEqual(rows[2], "netsec03,netsec03@example.com,Netsec 03,user,netsec")
-        self.assertEqual(users.class_rows("lab", 1)[0], "lab01,,Lab 01,user,lab")
-        for row in users.class_rows("netsec", 10):
-            users.load_rows("username,email,fullname,role,group\n" + row + "\n")
+        rows = users.class_rows("netsec", 3, "cisco.com")
+        self.assertEqual(rows[0], "netsec01@cisco.com,Netsec 01,user")
+        self.assertEqual(rows[2], "netsec03@cisco.com,Netsec 03,user")
+        for row in users.class_rows("netsec", 10, "cisco.com"):
+            users.load_rows("email,fullname,role\n" + row + "\n")
 
-    def test_class_limits(self) -> None:
+    def test_class_needs_domain(self) -> None:
         with self.assertRaises(users.UsersError):
-            users.class_rows("net sec", 3)
+            users.class_rows("netsec", 3, "notadomain")
         with self.assertRaises(users.UsersError):
-            users.class_rows("netsec", 0)
+            users.class_rows("netsec", 0, "cisco.com")
 
 
 class ApplyAgainstFakeApiTest(unittest.TestCase):
@@ -95,8 +94,7 @@ class ApplyAgainstFakeApiTest(unittest.TestCase):
                 with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/v0/labs", timeout=1):
                     pass
                 break
-            except urllib.error.HTTPError as exc:  # 401 means the server is up
-                exc.close()
+            except urllib.error.HTTPError:
                 break
             except OSError:
                 time.sleep(0.1)
@@ -115,30 +113,40 @@ class ApplyAgainstFakeApiTest(unittest.TestCase):
         with self.assertRaisesRegex(users.UsersError, "HTTP 403"):
             users.CmlApi(f"http://127.0.0.1:{PORT}", "admin", "wrong")
 
+    def test_bad_permission(self) -> None:
+        with self.assertRaisesRegex(users.UsersError, "permission must be"):
+            users.apply(self.rows, self.api, "lab-users", "root", dry_run=True, log=self.log.append)
+
     def test_dry_run_then_apply_then_idempotent(self) -> None:
-        outcome = users.apply(self.rows, self.api, dry_run=True, log=self.log.append)
+        outcome = users.apply(self.rows, self.api, "lab-users", "lab_exec", dry_run=True, log=self.log.append)
         self.assertEqual(len(outcome.created), 3)
-        self.assertEqual(outcome.groups_created, ["netsec"])
+        self.assertTrue(outcome.group_created)
         self.assertEqual(set(self.api.users()), {"admin"}, "dry run must not create")
         self.assertEqual(self.api.groups(), {})
 
-        outcome = users.apply(self.rows, self.api, dry_run=False, log=self.log.append)
-        self.assertEqual([r.username for r, _ in outcome.created], ["jdoe", "student01", "student02"])
+        outcome = users.apply(self.rows, self.api, "lab-users", "lab_exec", dry_run=False, log=self.log.append)
+        self.assertEqual([r.email for r, _ in outcome.created],
+                         ["jdoe@example.com", "astudent@example.com", "bstudent@example.com"])
         live = self.api.users()
-        self.assertTrue(live["jdoe"]["admin"])
-        self.assertFalse(live["student01"]["admin"])
-        group = self.api.groups()["netsec"]
-        self.assertEqual(live["student01"]["groups"], [group["id"]])
-        self.assertEqual(live["jdoe"]["groups"], [])
+        self.assertTrue(live["jdoe@example.com"]["admin"])
+        self.assertFalse(live["astudent@example.com"]["admin"])
+        group = self.api.groups()["lab-users"]
+        # both students are members, the admin is not
         self.assertEqual(len(group["members"]), 2)
+        self.assertIn(live["astudent@example.com"]["id"], group["members"])
+        self.assertNotIn(live["jdoe@example.com"]["id"], group["members"])
+        # the group holds one association per lab the fake serves (3)
+        self.assertEqual(len(group["associations"]), 3)
+        self.assertEqual({p for a in group["associations"] for p in a["permissions"]}, {"lab_exec"})
         for row, password in outcome.created:
-            users.CmlApi(f"http://127.0.0.1:{PORT}", row.username, password)
+            users.CmlApi(f"http://127.0.0.1:{PORT}", row.email, password)
 
-        again = users.apply(self.rows, self.api, dry_run=False, log=self.log.append)
+        again = users.apply(self.rows, self.api, "lab-users", "lab_exec", dry_run=False, log=self.log.append)
         self.assertEqual(again.created, [])
         self.assertEqual(len(again.existing), 3)
-        self.assertEqual(again.groups_created, [])
-        self.assertIn("[OK]    jdoe exists, left alone", self.log)
+        self.assertFalse(again.group_created)
+        self.assertEqual(again.labs_granted, 0)
+        self.assertIn("[OK]    jdoe@example.com exists, left alone", self.log)
 
     def test_write_credentials_private(self) -> None:
         with tempfile.TemporaryDirectory(prefix=".tmp.users.", dir=REPO / "tests") as tmp:
@@ -149,9 +157,9 @@ class ApplyAgainstFakeApiTest(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             with path.open(newline="") as handle:
                 sheet = list(csv.DictReader(handle))
-            self.assertEqual([r["username"] for r in sheet], ["jdoe", "student01"])
+            self.assertEqual([r["email"] for r in sheet], ["jdoe@example.com", "astudent@example.com"])
             self.assertEqual(sheet[1]["password"], "Pw2")
-            self.assertEqual(sheet[1]["group"], "netsec")
+            self.assertEqual(sheet[1]["role"], "user")
 
 
 if __name__ == "__main__":

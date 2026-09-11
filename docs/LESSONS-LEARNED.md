@@ -436,3 +436,19 @@ time to learn them.
   rebuild that precedes console work. The kit does not edit files
   outside the repo, so this stays a manual step until cml-mcp can be
   pointed at its own known_hosts.
+
+## A shared user sees no labs until you pass show_all
+
+- Symptom: after 70-users.sh granted a user's group lab_exec on every
+  lab, the user authenticated fine but GET /labs returned an empty
+  list, which looked like the grant had failed. Seen 2026-09-11.
+- Cause: GET /labs defaults to labs the user owns. Shared labs, the
+  ones reached through an association, appear only with
+  GET /labs?show_all=true. The CML web UI passes show_all, so the
+  person sees the labs in the browser; a bare API check does not.
+- Fix: nothing to change in the grant. The group association on the
+  lab is the right mechanism and it works. When verifying a user's
+  access from the API, use show_all=true. Both the group-side write
+  (PATCH /groups/{id} associations) and the lab-side write
+  (PATCH /labs/{id}/associations groups) set the same underlying
+  association; the script uses the group side, one write for all labs.

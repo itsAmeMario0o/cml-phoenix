@@ -1,10 +1,16 @@
 # Copy to config/mcp-env/users.csv (gitignored) and edit. Read by
-# scripts/70-users.sh, which creates each user in CML with a generated
-# password and writes the passwords to config/mcp-env/users-credentials.csv.
-# role is admin or user. group is optional and is created when missing.
-# The email is what the Cloudflare Access policy checks; the script prints
-# the list to add. For a class: scripts/70-users.sh class netsec 10 >> this file
-username,email,fullname,role,group
-jdoe,jdoe@example.com,Jane Doe,admin,
-student01,student01@example.com,Netsec 01,user,netsec
-student02,,Netsec 02,user,netsec
+# scripts/70-users.sh, which creates each user in CML and gives every
+# non-admin user access to every lab on the controller, then writes the
+# generated passwords to config/mcp-env/users-credentials.csv.
+#
+# email is the CML username: a person logs in to CML with the same
+# address the Cloudflare Access policy checks. role is admin or user.
+# Admins see every lab already, so only users get the lab grant. Rerun
+# the script after importing a new lab to grant it to everyone.
+#
+# The email must be 32 characters or fewer, which every Cisco CEC
+# address is. Synthetic class: scripts/70-users.sh class netsec 10 cisco.com
+email,fullname,role
+jdoe@example.com,Jane Doe,admin
+astudent@example.com,A Student,user
+bstudent@example.com,B Student,user

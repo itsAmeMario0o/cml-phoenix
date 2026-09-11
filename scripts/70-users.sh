@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Create CML users and groups from a CSV, one generated password each.
+# Create CML users from a CSV and grant every lab to every non-admin user.
 #
 #   scripts/70-users.sh [--dry-run] [--csv FILE]
-#   scripts/70-users.sh class NAME COUNT [DOMAIN]   # print rows for a class
+#   scripts/70-users.sh class NAME COUNT DOMAIN     # print rows for a class
 #
-# Reads config/mcp-env/users.csv by default (columns: username, email,
-# fullname, role, group) and the controller login from cml.env. Users
-# that already exist are left alone, so run it after every rebuild.
-# Generated passwords go to config/mcp-env/users-credentials.csv, mode
-# 0600, and nowhere else. Each email still needs its Access policy entry;
-# the script prints the list. ADR 0007, docs/ACCESS.md "Adding a person".
+# Reads config/mcp-env/users.csv by default (columns: email, fullname,
+# role) and the controller login from cml.env. The email is the CML
+# username. Every non-admin user joins one managed group (LAB_GROUP,
+# default lab-users) that holds LAB_PERMISSION (default lab_exec) on
+# every lab on the controller, so rerunning after importing a lab grants
+# it to everyone. Users that already exist are left alone. Generated
+# passwords go to config/mcp-env/users-credentials.csv, mode 0600, and
+# nowhere else. Each email still needs its Access policy entry; the
+# script prints the list. ADR 0007, docs/ACCESS.md "Adding a person".
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
@@ -22,7 +25,7 @@ USERS_PY="${REPO_ROOT}/scripts/lib/users.py"
 
 usage() {
   echo "usage: scripts/70-users.sh [--dry-run] [--csv FILE]" >&2
-  echo "       scripts/70-users.sh class NAME COUNT [DOMAIN]" >&2
+  echo "       scripts/70-users.sh class NAME COUNT DOMAIN" >&2
   exit 2
 }
 
@@ -38,7 +41,7 @@ main() {
   local dry_run=() csv="${USERS_CSV}"
   if [[ "${1:-}" == "class" ]]; then
     shift
-    [[ $# -ge 2 && $# -le 3 ]] || usage
+    [[ $# -eq 3 ]] || usage
     exec python3 "${USERS_PY}" class "$@"
   fi
   while [[ $# -gt 0 ]]; do

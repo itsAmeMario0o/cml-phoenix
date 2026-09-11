@@ -34,6 +34,20 @@ day-0 and was verified after the first import. The lab was renamed
 in the UI to "Attack Lab - Inline IPS, FTD HA pair"; the console
 server paths use that title.
 
+User provisioning revamped (ADR 0007, revised). The CSV is now keyed on
+email, since a person logs in to CML with the same address Cloudflare
+Access checks, so `email` is the CML username. Columns are email,
+fullname, role. `scripts/70-users.sh` creates each user, then puts every
+non-admin in one managed group (`lab-users`) that holds lab_exec on
+every lab on the controller, so one run gives everyone every lab and a
+rerun after importing a lab grants it too. Verified live: a probe user
+was created, logged in, and saw both labs under show_all (the UI's
+default). The MCP server's create_cml_user works too but passes the
+password as a chat argument, so the script stays the path for real
+people. `docs/USER-GUIDE.md` is the page to hand an end user: the
+Cloudflare email prompt, the one-time code, then the CML login with the
+same email. The show_all gotcha is a lesson.
+
 Full verification of every non-FTD node, all correct:
 
 - n9k1: VLAN 10 and 20 up, all seven access ports connected in the

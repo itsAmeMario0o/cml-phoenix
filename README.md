@@ -30,7 +30,7 @@ over SSH. Claude Code drives the controller through
     scripts/20-up.sh             # build, prompts before each apply
     scripts/90-smoke-test.sh     # prove it
     scripts/60-import-lab.sh labs/<scenario>.yaml   # load a topology
-    scripts/70-users.sh          # create users from the CSV, passwords to a sheet
+    scripts/70-users.sh          # create users from the CSV, grant every lab, passwords to a sheet
     ...work...
     scripts/40-down.sh           # export labs, release license, destroy VM
 
@@ -46,4 +46,5 @@ things stand today. `CLAUDE.md` has the rules for working in the repo,
 `docs/superpowers/specs/` has the design, and `docs/decisions/` explains
 why it is built this way. `docs/ACCESS.md` is optional: a name and a
 trusted certificate for the web UI through a zero trust front door.
-`docs/ROADMAP.md` lists what is agreed but not yet specified.
+`docs/USER-GUIDE.md` is the page to hand someone you have given an
+account. `docs/ROADMAP.md` lists what is agreed but not yet specified.
