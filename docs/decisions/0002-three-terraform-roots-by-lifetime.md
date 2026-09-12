@@ -6,10 +6,10 @@ Status: accepted, 2026-09-02
 
 The CML VM is rebuilt per session. The refplat images, the lab exports, the
 static public IP, the SSH key, the VNet, and the Terraform state itself must
-not be rebuilt. One root with `prevent_destroy` on the precious resources
-is tempting. But a single `terraform destroy` still tries, and one state
-mishap takes everything with it. The blast radius has to be structural, not
-a lifecycle flag.
+not be rebuilt. Putting everything in one root with `prevent_destroy` on
+the precious resources is tempting, but a single `terraform destroy` still
+attempts it, and one state mishap would take everything with it. The blast
+radius has to be structural, not a lifecycle flag.
 
 ## Decision
 
