@@ -1,8 +1,9 @@
 # Roadmap
 
-Ideas that have been agreed on but have no spec yet. Nothing here is in
-scope until it has one. Order inside each section is rough priority. When
-an item gets a spec, link it and move the item to the bottom under Done.
+This is the backlog of ideas that have been agreed on but do not yet have a
+spec. Nothing here is in scope until it does. Within each section the order
+reflects rough priority, and once an item has a spec, it is linked and
+moved to the Done section at the bottom.
 
 ## Operator experience
 

@@ -1,16 +1,18 @@
 # Reaching the lab by name, with a trusted certificate
 
-How to put a name and a valid certificate in front of the CML web UI
-without opening anything in Azure and without paying. The worked example
-is Cloudflare, because that is the DNS provider this lab uses, but the
-shape is any zero trust front door: an agent on the controller dials out
-to the provider, the provider terminates TLS with a real certificate and
-asks who you are, then forwards to the local nginx.
+This guide explains how to put a hostname and a valid certificate in front
+of the CML web interface, without opening anything in Azure and at no cost.
+The worked example uses Cloudflare, since that is the DNS provider this lab
+relies on, but the pattern applies to any zero trust front door: an agent
+on the controller dials out to the provider, the provider terminates TLS
+with a real certificate and verifies who you are, and it then forwards the
+request to the local nginx.
 
-Nothing in this repo needs any of this. The scripts, cml-mcp, the smoke
-test, and Terraform's readiness check all talk to the persistent public IP
-over 443 with certificate checks off, and they keep doing so after this
-procedure. What you get here is a second way in, for a browser.
+None of this is required by the repo itself. The scripts, cml-mcp, the
+smoke test, and Terraform's readiness check all reach the persistent public
+IP over port 443 with certificate checks disabled, and they continue to do
+so after this procedure. What the front door adds is a second,
+browser-friendly way in.
 
 ## When you want it
 

@@ -1,7 +1,7 @@
 # Status
 
-Dated handoff, newest entry first. Read this before doing anything else in
-a new session.
+A dated handoff log, newest entry first. Read it before doing anything else
+at the start of a new session.
 
 ## 2026-09-11, current state
 

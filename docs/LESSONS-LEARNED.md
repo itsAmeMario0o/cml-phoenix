@@ -1,9 +1,9 @@
 # Lessons learned
 
-Symptom, cause, fix. Add an entry the moment something bites, while the
-fix is still fresh. The first few came out of the design phase and the
-build's code reviews, before anything ran in Azure, which is the cheapest
-time to learn them.
+Each entry records a symptom, its cause, and the fix. Add one as soon as
+something bites, while the fix is still fresh. The earliest entries came
+out of the design phase and the build's code reviews, before anything ran
+in Azure, which is the cheapest place to learn them.
 
 ## SSH to the CML host on port 22 gives a console menu, not a shell
 
