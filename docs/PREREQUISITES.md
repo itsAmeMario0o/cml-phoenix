@@ -1,9 +1,10 @@
 # What you need to provide before the first CML build
 
-Written 2026-09-02, updated 2026-09-04. Everything on this list is
-something only you can do: buy, download, log in, or approve. None of it
-blocked building the repo, and section 5 says what exists already. The
-quota is done. The downloads are the slow part now.
+Written 2026-09-02, updated 2026-09-04. This is the short list of things
+only you can do: buy the license, download the software, sign in, and
+approve the Azure quota. None of it blocked building the repo itself. The
+quota is already approved, so the Cisco downloads are the one slow step
+that remains, and section 5 lays out what already exists.
 
 ## 1. Cisco license and software
 
