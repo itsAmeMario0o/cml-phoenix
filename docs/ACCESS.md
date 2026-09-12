@@ -135,6 +135,12 @@ user; use the Emails selector with exact addresses for shared domains.
 
 ## Adding a person
 
+The walkthrough to hand a new person is `docs/USER-GUIDE.md`, also
+published as a page at https://itsamemario0o.github.io/cml-phoenix/
+(GitHub Pages from `docs/`, served plain by `docs/.nojekyll`).
+`scripts/70-users.sh` makes the CML accounts and prints the emails to
+add to the policy below.
+
 Two doors, and both must open. Their email goes into the Access policy,
 as an exact address under the Emails selector, so Cloudflare lets them
 through to the login page. Their CML account comes from

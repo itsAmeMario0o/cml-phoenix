@@ -3,6 +3,38 @@
 Dated handoff, newest entry first. Read this before doing anything else in
 a new session.
 
+## 2026-09-11, current state
+
+Both labs are on the controller and reachable through the front door.
+
+- Cilium EVPN fabric: running. The six-switch eBGP EVPN fabric is
+  deployed and verified, every BGP session established and all four VNIs
+  up. The kind host and the Cilium install are the hands-on work left,
+  done inside the lab.
+- Attack Lab, inline IPS: all eleven nodes up, and both FTDv are
+  registered to cdFMC (Completed). The HA pair and the inline set are
+  not built yet; ftd1 still shows failover Disabled and no inline set,
+  so VLAN 10 and 20 stay separate and Kali has no DHCP. Building the
+  pair and the inline set in cdFMC is the one step left before the lab
+  is fully live.
+
+Access and users:
+
+- Five people created, all admin, each with the shared LAB_USER_PASSWORD.
+  The Cloudflare Access policy now lists all five emails, four cisco.com
+  and one gmail, so the front door is open for them.
+- The Zero Trust team domain was renamed from money-honey to rooez, so
+  the login page now reads rooez.cloudflareaccess.com. The tunnel and the
+  server were untouched, and lab.rooez.com is unchanged.
+- The end-user guide is published as a GitHub Pages site at
+  https://itsamemario0o.github.io/cml-phoenix/, linked from the top of
+  the README. docs/USER-GUIDE.md is the source, docs/index.html the page.
+
+Still worth doing:
+
+- Finish the FTD HA pair and inline set in cdFMC.
+- Rotate the Cloudflare tunnel token, which passed through a chat session.
+
 ## 2026-09-11, afternoon
 
 Rebuilt in the afternoon: preflight 55 OK, 13 resources, API ready
