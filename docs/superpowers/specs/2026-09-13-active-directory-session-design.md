@@ -52,7 +52,7 @@ In scope:
 - A one tier Enterprise Root CA on the DC, named `corp-rooez-CA`.
 - A tracked CSV of lab users and groups in a Nintendo theme, plus one
   service account for ISE to join the domain with.
-- Operator scripts `24-ad-up.sh`, `44-ad-down.sh`, and `27-ad-ca.sh`, with
+- Operator scripts `24-ad-up.sh`, `46-ad-down.sh`, and `27-ad-ca.sh`, with
   dry run tests, and a runbook `docs/AD.md`.
 - Changes to the ISE walkthrough so ISE is deployed with the DC as its DNS
   server and reached over its public IP from the operator's allowed
@@ -111,11 +111,14 @@ RPC dynamic range 49152 to 65535, and RDP 3389. The default rules deny
 everything else inbound. Nothing from the internet reaches the DC on any
 port.
 
-RDP from inside the VNet covers both ways the operator will use it: Azure
-Bastion Developer, which is free in East US 2, needs no subnet, and opens an
-RDP session in the portal browser to a VM by private address; and the SSH
-forward through the CML host that `scripts/50-tunnels.sh` already manages,
-kept as the documented fallback. The runbook describes both.
+RDP from inside the VNet covers the one supported path: an SSH forward
+through the CML host that `scripts/50-tunnels.sh` already manages, the same
+pattern the kit uses for every other lab VM. Azure Bastion is out of scope
+per `CLAUDE.md` and this design does not depend on it. An operator who wants
+a browser RDP session can turn on the free Developer SKU from the portal on
+their own initiative; it needs no subnet and nothing from this repo, but
+nothing here assumes it is there. The runbook documents the SSH forward
+only.
 
 ### ISE reachability
 
@@ -152,9 +155,11 @@ Key Storage Provider, five year validity, and a common name of
 filter to 127 with `certutil -setreg`, points the CRL and AIA URLs at the
 DC's own `CertEnroll` share, publishes the first CRL, and restarts the CA
 service. If the CA role is already installed it logs that and exits. The
-built in `WebServer` template is what ISE's certificate is issued from; it
-takes the subject from the request, so the subject alternative names in
-ISE's CSR are honored without any registry flag.
+built in `WebServer` template is what ISE's certificate is issued from, but
+a Windows CA strips subject alternative names from a request by default, so
+the script also sets `EDITF_ATTRIBSUBJECTALTNAME2` with `certutil -setreg
+policy\EditFlags` and restarts the CA service a second time. Without that
+flag ISE's SAN never survives signing, no matter what the request asks for.
 
 `30-create-identities.ps1` takes the CSV content as a parameter, creates the
 groups it names, creates each user with the shared lab password and adds it
@@ -224,9 +229,13 @@ rule, as `AD_ADMIN_PASSWORD`, `AD_SVC_ISE_PASSWORD`, and
 scripts that need them. The restore mode password is never written out;
 nothing outside the VM needs it.
 
-The local state file holds the four passwords, as the fork root's state
-holds the CML passwords under ADR 0004. It is gitignored and lives only on
-the Mac.
+The local state file holds the four passwords, generated with the same
+`random_password` pattern ADR 0004 established, but as this root's local
+state rather than the persistent root's blob state that ADR 0004 actually
+uses for CML's admin passwords. That is a narrower guarantee: no Azure AD
+authentication, versioning, or soft delete behind it, only `.gitignore` and
+the Mac's disk. It is accepted because the root itself, and everything it
+protects, does not outlive the session.
 
 `TRUSTSEC_TEST_USERNAME` becomes `mario` and `TRUSTSEC_TEST_PASSWORD` is read
 from `AD_LAB_USER_PASSWORD` once ISE authenticates against the domain. Until
@@ -251,10 +260,12 @@ then the ISE internal user path still works and the env example says so.
    `scripts/27-ad-ca.sh sign <csr file>`, bind the result, and join the
    domain as `svc-ise`. The walkthrough gains a section with these steps.
 5. Labs as today.
-6. Teardown: `scripts/45-ise-down.sh` first, then `scripts/44-ad-down.sh`,
+6. Teardown: `scripts/45-ise-down.sh` first, then `scripts/46-ad-down.sh`,
    which runs `terraform destroy` in `terraform/ad/` and removes `ad.env`
    and the exported certificate. ISE goes first because it depends on the
-   DC; the reverse order only matters if a session is torn down halfway.
+   DC; the script numbers follow that same order so a reader cannot run
+   them the wrong way round by pattern-matching the numbering everywhere
+   else in `scripts/`.
 
 `27-ad-ca.sh` is two subcommands over `az vm run-command invoke`, so it
 needs no network path to the DC. `export-root` runs `certutil -ca.cert` on
@@ -273,8 +284,8 @@ or `[FAIL]` in the kit's style:
    zone and the forwarder.
 3. `certutil -ping` reaches `corp-rooez-CA`.
 
-After a real build, the manual proof is an RDP session through Bastion
-Developer as `labadmin`, then ISE resolving `dc1.corp.rooez.com` from its
+After a real build, the manual proof is an RDP session through the CML host
+SSH forward as `labadmin`, then ISE resolving `dc1.corp.rooez.com` from its
 CLI, then the TrustSec `test aaa` as `mario` returning Access-Accept once
 ISE is joined. The pyATS TrustSec verification already asserts the last of
 those and only needs its credentials pointed at `ad.env`.
@@ -290,7 +301,7 @@ Local, in `tests/run.sh`:
   not, the same rule the verify venv follows. PowerShell 7.5 is already on
   the Mac; the analyzer module is not, and installing it is a human gated
   step the plan calls out.
-- Bash dry run tests for `24-ad-up.sh`, `44-ad-down.sh`, and `27-ad-ca.sh`
+- Bash dry run tests for `24-ad-up.sh`, `46-ad-down.sh`, and `27-ad-ca.sh`
   against the existing `terraform` and `az` stubs, asserting the commands
   they would run and that `ad.env` is written with mode 0600 and never
   echoed.
@@ -307,12 +318,6 @@ is a roadmap item alongside CI.
 - A run command's inline script has a size limit of 256 KB. Three scripts of
   a few hundred lines are far under it.
 - If Azure retires the `smalldisk` SKU the image reference is one variable.
-- Bastion Developer supports one VM session at a time and is not available
-  in every region. East US 2 is on the list today; the CML host forward is
-  the fallback and needs nothing new. Microsoft documents only that the VM
-  must accept RDP inbound; if the shared pool's source address turns out
-  not to fall under the `VirtualNetwork` tag, the RDP rule widens to the
-  source Microsoft names and nothing else changes.
 - ISE's `test aaa` against AD depends on ISE being joined, which is manual
   this round. The verification keeps working against the ISE internal user
   until then.
