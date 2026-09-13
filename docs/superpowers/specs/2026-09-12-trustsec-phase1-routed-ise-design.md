@@ -1,5 +1,13 @@
 # TrustSec Phase 1: the routed path and a disposable ISE
 
+> **Partly superseded, 2026-09-13.** The ISE deploy method in this spec has
+> since evolved twice: the `terraform/ise` root it describes was dropped for a
+> `az deployment group create` deploy (ADR 0008), which was then itself retired
+> when ISE terminally failed Azure OS provisioning. ISE is now deployed by hand
+> through the portal (ADR 0008 amendment; `docs/ISE-MARKETPLACE-DEPLOY.md`).
+> The routed-path design (the transit bridge, the C8000v edge, the no-NAT
+> requirement) still stands; only the ISE deploy mechanism changed.
+
 Status: draft, 2026-09-12.
 
 This is the first of two specs for a Cisco TrustSec lab. Phase 1 builds

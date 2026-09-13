@@ -90,6 +90,28 @@ moved to the Done section at the bottom.
     not anyone connects, and it needs its own `/26` subnet named
     `AzureBastionSubnet` in the persistent VNet. Not needed while the
     CML host jump remains the access path (ADR 0003, ADR 0008).
+18. Cisco ISE configuration as code with the official `cisco.ise` Ansible
+    collection, as the default ISE config layer. It manages the full
+    TrustSec object set over the ERS and OpenAPI: network devices, policy
+    sets, authorization rules, SGTs, SGACLs, and the egress matrix, which
+    is far more than the hand-rolled `scripts/lib/ise_config.py` covers.
+    Decided 2026-09-13 to adopt it, later. It is another non-stdlib
+    dependency, so it follows the same shape as the pyATS verification
+    layer: its own venv and an ADR for the exception. Once in, it
+    supersedes or shrinks `ise_config.py`, and the per-session policy is
+    reapplied as idempotent playbooks. `1homas/ISE_Ansible_Sandbox` is the
+    reference for patterns built on this collection.
+19. Ephemeral ISE with the ISE Eternal Evaluation (ISEEE) approach. The
+    automated ARM deploy of ISE fails, so a fresh per-session deploy is
+    only reliable by hand through the portal (ADR 0008,
+    `docs/ISE-MARKETPLACE-DEPLOY.md`), which is too much friction to repeat
+    every session. ISEEE, from `1homas/ISE_Ansible_Sandbox`, is the closest
+    existing pattern for standing ISE up and down repeatably. The likely
+    shape is to deploy ISE once by hand, capture a specialized image or a
+    config backup, and rebuild each session from that rather than from the
+    Marketplace, restoring or reapplying config with the `cisco.ise`
+    collection (item 18). Needs its own spec, and study of what ISEEE
+    actually automates, before any code.
 
 ## Images and scenarios
 
@@ -120,6 +142,20 @@ moved to the Done section at the bottom.
     logic is upstream: a skip-existing option on cloud-cml's copy
     routine, off by default, offered as a pull request to CiscoDevNet.
     Slow, and the only option that makes the fork smaller.
+20. NX-OS to IOS-XR data center interconnect lab. An NX-OS BGP EVPN VXLAN
+    fabric, spine and leaves, handing off to an IOS-XR node that acts as the
+    data center interconnect and terminates internet and WAN routes. In CML
+    the fabric is `nexus9300v` and the interconnect is `xrv9k`, both of which
+    do EVPN, so the topology is buildable. The handoff has two forms: a
+    VRF-lite or L3 handoff at a border leaf, which is reliable on the CML
+    images and is the one to build first; and full EVPN VXLAN-to-MPLS or SR
+    stitching on the XR gateway, which is real on ASR 9000 and NCS hardware
+    but whose support on the CML `xrv9k` image must be confirmed before it is
+    trusted, with VRF-lite as the fallback. The constraint is resources:
+    `xrv9k` is about 4 vCPU and 16 GB and each `nexus9300v` about 2 vCPU and
+    12 GB, so a spine, two leaves, the interconnect, and a WAN or internet
+    simulator need sizing against the host or boot waves, which ties to the
+    lab calculator, item 5. Needs its own spec.
 
 ## From the design spec, still deferred
 

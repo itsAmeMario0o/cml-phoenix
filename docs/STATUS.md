@@ -3,7 +3,65 @@
 A dated handoff log, newest entry first. Read it before doing anything else
 at the start of a new session.
 
+## 2026-09-13, pyATS lab-verification layer landed
+
+A pyATS lab-verification layer (ADR 0009) landed on the `pyats-and-ise-pivot`
+branch and merged to `main`. It is a `verify/` tree with its own pinned venv
+(`verify/requirements.txt`, `pyats[full]==26.8`, gitignored `verify/.venv`),
+so the core kit stays stdlib only. `verify/lib/gen_testbed.py` (stdlib) pulls
+a lab's pyATS testbed from CML at verify time; `scripts/80-verify-lab.sh
+<scenario>` generates the testbed and runs the scenario's easypy jobfile in
+the venv. Two verifications shipped: `verify/cilium-evpn/` (BGP EVPN sessions
+Established, all VNIs up) and `verify/trustsec-phase1/` (the C8000v edge:
+RADIUS reachable, `test aaa` Access-Accept, CoA received). Preflight warns,
+without failing, when the venv is absent.
+
+Not run yet, the human-gated step: bootstrap the venv
+(`python3 -m venv verify/.venv && verify/.venv/bin/pip install -r
+verify/requirements.txt`), then `scripts/80-verify-lab.sh cilium-evpn`
+against the running Cilium fabric. The TrustSec verification runs once that
+lab is deployed. Both AEtest scripts carry documented verify-at-live
+assumptions (Genie parser keys, the `os` testbed tags, the `show aaa
+servers` parse, `radius` vs `ISE-GROUP`, the CoA counter command), and the
+TrustSec run needs `TRUSTSEC_TEST_USERNAME` / `TRUSTSEC_TEST_PASSWORD`
+exported (a throwaway ISE test identity; see `config/labs.env.example`).
+
+The same branch also carried the ISE deploy pivot reconciliation, below.
+
+## 2026-09-13, ISE deploy: automated ARM fails, pivot to the portal
+
+The first real ISE deploy ran `scripts/25-ise-up.sh`. The NSG and the VM
+were created, but the VM reached a terminal `OSProvisioningTimedOut` state
+and ISE never served: TCP 443 never opened in about 50 minutes, and Azure
+marked the VM non-recoverable. The ISE appliance image does not complete
+Azure's OS-provisioning handshake, so `az deployment group create` fails
+even though the portal's Marketplace flow deploys the same image and lets
+ISE boot. This matches the operator's cross-project experience: ISE deploys
+by hand, not through provisioning tools.
+
+All ISE resources were deleted. The persistent root stayed clean: `rt-apps`
+is still associated with `snet-apps` and `terraform -chdir=terraform/
+persistent plan` shows no changes, so the failed deploy left nothing behind.
+
+The deploy step is now by hand through the portal, documented with our
+environment's fields in `docs/ISE-MARKETPLACE-DEPLOY.md`. The automated
+`az deployment group create` path in `25-ise-up.sh` is retired for the
+create (ADR 0008 amendment); the NSG, tagging, readiness, policy, and
+teardown tooling still apply after the portal deploy.
+
+Two directions were set, both deferred and on the roadmap (items 18 and 19):
+adopt the `cisco.ise` Ansible collection as the default ISE config layer,
+and use the ISE Eternal Evaluation (ISEEE) patterns to make a per-session
+ISE practical. Also in flight: a pyATS lab-verification layer (ADR 0009 and
+a spec) on the `pyats-and-ise-pivot` branch.
+
 ## 2026-09-13, TrustSec Phase 1 and ISE by the Azure solution template
+
+> Superseded on the ISE deploy method by the newer 2026-09-13 entry above:
+> the `scripts/25-ise-up.sh` `az deployment group create` deploy described
+> here was retired (ISE terminally fails Azure OS provisioning). ISE is now
+> deployed by hand through the portal (ADR 0008 amendment;
+> `docs/ISE-MARKETPLACE-DEPLOY.md`). The rest of this entry still holds.
 
 The TrustSec Phase 1 foundation and a new ISE deploy method landed on the
 `trustsec-phase1` branch and merged to `main`. Nothing has been deployed to

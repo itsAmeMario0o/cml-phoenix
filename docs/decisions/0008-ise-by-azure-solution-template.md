@@ -95,3 +95,29 @@ address requires no firewall update.
    holds the exact resource shape Cisco tested, the tags survive every
    deploy, and the diff against the source template stays small enough to
    review at a glance.
+
+## Amendment, 2026-09-13: the automated deploy is retired
+
+The core decision stands: deploy Cisco's solution template, not the raw VM
+image. What does not work is deploying that template with
+`az deployment group create`. On the first real run the ISE VM reached a
+terminal `OSProvisioningTimedOut` state: the ISE appliance image does not
+complete Azure's OS-provisioning handshake, so ARM fails the VM as
+non-recoverable even though the portal's Marketplace flow deploys the same
+image and lets ISE boot. This matches long-standing, cross-project
+experience that ISE deploys by hand through the portal and fails through
+provisioning tools.
+
+So the deploy step moves to the portal. The reliable procedure, with our
+environment's exact fields, is `docs/ISE-MARKETPLACE-DEPLOY.md`. The
+`az deployment group create` path in `scripts/25-ise-up.sh` is retired for
+the create; the NSG, tagging, readiness, policy, and teardown tooling still
+apply after the portal deploy. The failed run left the persistent root
+clean: `rt-apps` stayed associated with `snet-apps` and the persistent plan
+showed no changes, so the subnet-write risk noted above did not bite this
+time, though the check stays a deploy-time gate.
+
+Two directions follow, both deferred and tracked on the roadmap: make the
+`cisco.ise` Ansible collection the default ISE configuration layer, and adopt
+the ISE Eternal Evaluation (ISEEE) patterns to make a per-session ISE
+practical without a fresh portal deploy every time.
