@@ -135,6 +135,11 @@ create_nsg() {
     -n allow-radius --priority 100 --direction Inbound --access Allow \
     --protocol Udp --destination-port-ranges 1812 1813 \
     --source-address-prefixes "${LAB_SUMMARY_CIDR}"
+  # Belt and suspenders, not the normal path: CoA is ISE-initiated outbound
+  # to the NAD on 1700, and Azure NSGs are stateful, so the return traffic
+  # for that flow needs no inbound rule here. This inbound allow is kept,
+  # scoped to the lab summary, only to cover a NAD-initiated
+  # disconnect/CoA-request edge case.
   run az network nsg rule create -g "${RESOURCE_GROUP}" --nsg-name "${NSG_NAME}" \
     -n allow-coa --priority 110 --direction Inbound --access Allow \
     --protocol Udp --destination-port-ranges 1700 \
@@ -247,6 +252,9 @@ close_ise_forward() {
 # the EXIT trap.
 apply_ise_policy() {
   local ise_ip="$1" jump="$2" key="$3"
+  # Process-wide EXIT trap. Safe only because this is main()'s last
+  # substantive step; if a later step needs its own EXIT trap, consolidate
+  # both in main() instead of stacking traps here.
   trap close_ise_forward EXIT
   open_ise_forward "${ise_ip}" "${jump}" "${key}"
   ISE_API_BASE="https://127.0.0.1:${ISE_FORWARD_LOCAL_PORT}" \
@@ -264,8 +272,8 @@ main() {
   load_ise_env
   resolve_network
   render_userdata
-  create_nsg
   confirm "Create the ISE VM (${ISE_VM_SIZE}, ${ISE_IMAGE_SKU}) at ${ISE_PRIVATE_IP} on the apps subnet?" || die "declined"
+  create_nsg
   create_vm
   tag_nic
   wait_for_ise_ready "${ISE_PRIVATE_IP}" "${CML_PUBLIC_IP}" "${REPO_ROOT}/keys/cml-lab"

@@ -91,7 +91,7 @@ main() {
     DRY_RUN=1
   fi
   require_env ARM_SUBSCRIPTION_ID
-  require_cmd az
+  require_cmd az terraform jq
   rows="$(find_ise_resources)" || die "cannot list ISE resources by tag"
   if [[ -z "${rows}" ]]; then
     pass "no ISE resources tagged role=ise found"

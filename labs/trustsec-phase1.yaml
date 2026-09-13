@@ -74,6 +74,9 @@ nodes:
       aaa group server radius ISE-GROUP
        server name ISE
       aaa authentication login default local
+      ! Inert until the Phase 2 802.1X edge: no dot1x system-auth-control
+      ! and no 802.1X access port exist yet. Phase 1 proves only the
+      ! routed path plus RADIUS and CoA.
       aaa authentication dot1x default group ISE-GROUP
       aaa authorization network default group ISE-GROUP
       aaa authorization exec default group ISE-GROUP local
