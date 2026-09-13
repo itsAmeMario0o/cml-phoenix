@@ -11,11 +11,14 @@
 #   7. Package and every listed refplat image present in the cml container
 #      (skipped with a WARN until the persistent root has been applied)
 #   8. Estimated copy time versus SAS validity (WARN only)
+#   9. ISE Marketplace terms accepted (skipped with a WARN when
+#      config/mcp-env/ise.env is absent; ISE is optional until Phase 1)
 #
 # Writes .preflight-ok in the repo root when nothing FAILs; 20-up.sh refuses
 # to run without a fresh marker. Exit 1 on any FAIL.
 #
-# Overrides: LOCATION (eastus2), CML_TFVARS, REFPLAT_FILE, ASSUMED_MBPS (50).
+# Overrides: LOCATION (eastus2), CML_TFVARS, REFPLAT_FILE, ASSUMED_MBPS (50),
+# ISE_ENV_FILE.
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
@@ -25,6 +28,7 @@ LOCATION="${LOCATION:-eastus2}"
 CML_TFVARS="${CML_TFVARS:-${REPO_ROOT}/config/cml.tfvars}"
 REFPLAT_FILE="${REFPLAT_FILE:-${REPO_ROOT}/config/refplat.txt}"
 ASSUMED_MBPS="${ASSUMED_MBPS:-50}"
+ISE_ENV_FILE="${ISE_ENV_FILE:-${REPO_ROOT}/config/mcp-env/ise.env}"
 TFVARS_PY="${REPO_ROOT}/scripts/lib/tfvars.py"
 MARKER="${REPO_ROOT}/.preflight-ok"
 
@@ -209,6 +213,32 @@ check_blobs() {
   fi
 }
 
+# check_ise_marketplace: confirm the Cisco ISE Marketplace offer's terms
+# are accepted. ISE deploys by az CLI, not Terraform, and is optional
+# until its own build task runs, so an absent ISE_ENV_FILE only WARNs.
+# See ADR 0003 for the routed network ISE lands on.
+check_ise_marketplace() {
+  local accepted
+  if [[ ! -f "${ISE_ENV_FILE}" ]]; then
+    warn "config/mcp-env/ise.env missing, skipping ISE Marketplace check. Copy config/ise.env.example"
+    return 0
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "${ISE_ENV_FILE}"
+  set +a
+  accepted="$(az vm image terms show \
+    --publisher "${ISE_IMAGE_PUBLISHER:-}" \
+    --offer "${ISE_IMAGE_OFFER:-}" \
+    --plan "${ISE_IMAGE_SKU:-}" \
+    --query accepted -o tsv 2>/dev/null || true)"
+  if [[ "${accepted}" == "true" ]]; then
+    pass "ISE Marketplace terms accepted"
+  else
+    miss "ISE Marketplace terms not accepted. Run: az vm image terms accept --publisher ${ISE_IMAGE_PUBLISHER:-} --offer ${ISE_IMAGE_OFFER:-} --plan ${ISE_IMAGE_SKU:-}"
+  fi
+}
+
 main() {
   rm -f "${MARKER}"
   check_login
@@ -222,6 +252,7 @@ main() {
     check_quota
     check_blobs
   fi
+  check_ise_marketplace
   if [[ "${fail}" -eq 0 ]]; then
     touch "${MARKER}"
   fi
