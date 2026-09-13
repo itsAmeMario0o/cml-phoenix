@@ -1,0 +1,7 @@
+# This file is the tracked contract for the pyATS lab-verification venv.
+# verify/.venv is built from this file and is never committed; see ADR 0009.
+# Bootstrap: python3 -m venv verify/.venv && verify/.venv/bin/pip install -r verify/requirements.txt
+#
+# Pin exact versions. Bump this file deliberately and re-run the bootstrap
+# rather than letting the venv drift from what is tracked here.
+pyats[full]==26.8
