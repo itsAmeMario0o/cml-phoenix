@@ -1,5 +1,11 @@
 # FTDv cluster lab, fabric configuration
 
+**Retired, 2026-09-11.** `labs/ftdv-cluster.yaml` is not a build
+target; see its header and `labs/README.md`. Kept for reference, since
+the vPC, HSRP, eBGP, and ECMP configs here did come up clean before
+the lab was retired for an unrelated reason (a Threat Defense Virtual
+cluster cannot run inline sets).
+
 Day-1 configuration for the Nexus pair and the edge in
 `labs/ftdv-cluster.yaml`, one file per device. No usernames or
 passwords; day-0 already set those. The FTDv nodes are not here: their

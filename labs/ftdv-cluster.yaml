@@ -1,3 +1,8 @@
+# RETIRED, 2026-09-11. Do not import this lab (see docs/STATUS.md,
+# 2026-09-11 early morning, and labs/README.md). A Threat Defense
+# Virtual cluster cannot run inline sets; labs/ips-ha.yaml replaced
+# this design. Kept for its reference configs, not as a build target.
+#
 # FTDv cluster behind a Nexus vPC pair. Two Nexus 9300v in a vPC domain
 # with routed uplinks to a cat8000v edge, two Threat Defense Virtual
 # nodes (one per Nexus) that form a cluster under cloud-delivered

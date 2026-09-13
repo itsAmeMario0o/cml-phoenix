@@ -350,6 +350,12 @@ the fake API; not yet run against a real controller.
    the edge and `nmap 203.0.113.101` crosses the active unit.
 3. Push the twenty-odd unpushed commits.
 
+> Superseded on step 6 below by the 2026-09-11, early morning entry
+> above: the FTDv cluster lab ran, could not run inline sets, and was
+> wiped and deleted from the controller. Do not run
+> `scripts/60-import-lab.sh labs/ftdv-cluster.yaml`; import
+> `labs/ips-ha.yaml` instead. The rest of this order still holds.
+
 The original order for cycling the box follows; the Cilium lab is
 stopped, not wiped, and the FTDv image is already on the disk. When it is
 time to cycle the box for the FTDv image, this is the order:

@@ -1,5 +1,14 @@
 # FTDv cluster behind a Nexus vPC pair
 
+> Status: retired, 2026-09-11. The lab this spec describes was built,
+> ran for an hour, and proved the vPC/HSRP/eBGP/ECMP fabric, but a
+> Threat Defense Virtual cluster cannot run inline sets, which the
+> operator needs. It was wiped and deleted from the controller
+> (`docs/STATUS.md`, 2026-09-11 early morning). `labs/ips-ha.yaml` and
+> `docs/superpowers/specs/2026-09-11-ips-ha-lab-design.md` replaced
+> it. Kept for the fabric design and address plan, not as a build
+> target; do not import `labs/ftdv-cluster.yaml`.
+
 Status: draft, 2026-09-10. The `ftdv-10-0-0` image is on the data disk
 and registered with the controller; no rebuild is needed.
 

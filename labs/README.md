@@ -63,6 +63,15 @@ tabled until the blank one has been worked through by hand.
 
 ## ftdv-cluster.yaml
 
+**Retired, 2026-09-11. Do not import this lab.** It ran for an hour,
+proved the vPC, HSRP, eBGP, and ECMP fabric, then hit a design dead
+end: a Threat Defense Virtual cluster cannot run inline sets, and the
+operator wants an IPS lab. The cluster was wiped and deleted from the
+controller (`docs/STATUS.md`, 2026-09-11 early morning). Its files
+stay here as a retired design, not a build target;
+`labs/ips-ha.yaml` below is what replaced it. The rest of this
+section is historical.
+
 Two Nexus 9300v in a vPC domain with routed uplinks to a cat8000v
 edge, two Threat Defense Virtual nodes, one per Nexus, that form a
 cluster under cloud-delivered management from the operator's Security
