@@ -136,6 +136,12 @@ class RadiusAccessAccept(aetest.Testcase):
             # instead is confirmed at the Task 7 live run, and is where to
             # change it if not.
             checked_any = True
+            # The test password appears in cleartext in this exec command's
+            # console output, which pyATS archives under verify/.archive and
+            # the device may log. IOS has no test-aaa form that hides it. Use
+            # a throwaway, rotatable ISE test account for TRUSTSEC_TEST_*,
+            # never a real user's credential, and treat the archive as
+            # sensitive. Confirmed and applied at the Task 7 live run.
             output = device.execute(f"test aaa group radius {username} {password} new-code")
             if "successfully authenticated" not in output.lower():
                 failures.append(f"{device.name}: {output.strip()!r}")
