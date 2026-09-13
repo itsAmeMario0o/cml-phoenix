@@ -25,7 +25,7 @@ class EnsureNetworkDeviceTest(unittest.TestCase):
         cls.proc = subprocess.Popen([sys.executable, str(REPO / "tests" / "fake_ise_api.py"), str(PORT)])
         for _ in range(50):
             try:
-                req = urllib.request.Request(f"http://127.0.0.1:{PORT}/ers/config/policyset")
+                req = urllib.request.Request(f"http://127.0.0.1:{PORT}/ers/config/networkdevice")
                 with urllib.request.urlopen(req, timeout=1):
                     pass
                 break

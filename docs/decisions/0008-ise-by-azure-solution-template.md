@@ -65,6 +65,21 @@ address requires no firewall update.
 - If Cisco revises the template's plan or image version, this file must be
   re-copied and re-tagged by hand; nothing here auto-updates from the
   Marketplace listing.
+- Cisco's template attaches the ISE network security group to the
+  `snet-apps` subnet, not to the NIC: the NIC's inline `subnet.properties`
+  block is what sets the association, so every deploy writes to the subnet.
+  The template does not touch the route table, but because it writes to the
+  subnet at all, the `rt-apps` association (the lab-summary-to-CML route
+  from ADR 0003) needs to be re-checked after the first real deploy: confirm
+  `rt-apps` is still associated with `snet-apps`, and that
+  `terraform -chdir=terraform/persistent plan` shows no changes. If the
+  association is gone, either re-apply the persistent root to put it back,
+  or move the NSG from the subnet to the NIC in `config/ise/template.json`.
+- A subnet-level NSG applies to everything on `snet-apps`, not only ISE's
+  NIC. That is harmless in Phase 1, where ISE is the only node on the
+  subnet. It stops being harmless once a Phase 2 FTD lands on the same
+  subnet: it will inherit ISE's rules, and the Phase 2 spec has to account
+  for that.
 
 ## Options considered
 
