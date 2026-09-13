@@ -9,7 +9,8 @@ PORT=18001
 PORT_DEREGISTER_FAILS=18002
 PORT_NO_LABS=18003
 PORT_COMPLETED=18004
-failures=0
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT}" &
 API_PID=$!
@@ -24,12 +25,6 @@ sleep 1
 
 printf 'CFG_APP_USER="admin"\nCFG_APP_PASS="secret"\n' > "${TMP}/vars.sh"
 export CML_API="http://127.0.0.1:${PORT}/api/v0" VARS_FILE="${TMP}/vars.sh"
-
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
-}
 
 out="$(bash "${SCRIPT}" list-labs)"
 assert_eq "list-labs three lines" "3" "$(echo "${out}" | wc -l | tr -d ' ')"
@@ -69,5 +64,4 @@ assert_eq "list-labs with no labs is empty" "" "${out}"
 out="$(CML_API="http://127.0.0.1:${PORT_NO_LABS}/api/v0" bash "${SCRIPT}" export-labs "${TMP}/exports-empty")"
 assert_eq "export-labs with no labs" "exported 0 labs to ${TMP}/exports-empty" "${out}"
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_cml_remote: ${failures} failure(s)"; exit 1; fi
-echo "test_cml_remote: all passed"
+finish "test_cml_remote"

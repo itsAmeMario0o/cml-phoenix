@@ -3,17 +3,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-failures=0
-
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then
-    echo "[OK]    ${label}"
-  else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"
-    failures=$((failures + 1))
-  fi
-}
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 # Each case runs in a subshell so counters and exit codes stay isolated.
 
@@ -85,8 +76,45 @@ assert_eq "cml_ssh uses the repo known_hosts" "yes" "$(grep -q -- "-o UserKnownH
 assert_eq "cml_ssh accepts new keys only" "yes" "$(grep -q -- "-o StrictHostKeyChecking=accept-new" <<<"${out}" && echo yes || echo no)"
 assert_eq "cml_ssh targets sysadmin on 1122" "yes" "$(grep -q -- "-p 1122 .*sysadmin@203.0.113.9 hostname" <<<"${out}" && echo yes || echo no)"
 
-if [[ "${failures}" -gt 0 ]]; then
-  echo "test_common: ${failures} failure(s)"
-  exit 1
-fi
-echo "test_common: all passed"
+# run: DRY_RUN gates real execution vs echoing the plan.
+out="$(bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; DRY_RUN=1; run echo hi")"
+assert_eq "run echoes the plan under DRY_RUN=1" "+ echo hi" "${out}"
+out="$(bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; DRY_RUN=0; run echo hi")"
+assert_eq "run executes for real under DRY_RUN=0" "hi" "${out}"
+
+# out_or_placeholder: DRY_RUN=1 falls back to <NAME> instead of dying.
+out="$(bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; tf_out() { return 1; }; DRY_RUN=1; out_or_placeholder resource_group_name")"
+assert_eq "out_or_placeholder falls back under DRY_RUN=1" "<resource_group_name>" "${out}"
+rc=0
+bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; tf_out() { return 1; }; DRY_RUN=0; out_or_placeholder resource_group_name" >/dev/null 2>&1 || rc=$?
+assert_eq "out_or_placeholder dies under DRY_RUN=0" "1" "${rc}"
+
+# parse_dry_run_only: the shared parser for the single-flag scripts. A typo
+# must die, not fall through and run for real (the bug it was added to fix).
+out="$(bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; parse_dry_run_only --dry-run")"
+assert_eq "parse_dry_run_only accepts --dry-run" "1" "${out}"
+out="$(bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; parse_dry_run_only")"
+assert_eq "parse_dry_run_only defaults to 0" "0" "${out}"
+rc=0
+bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; parse_dry_run_only --bogus" >/dev/null 2>&1 || rc=$?
+assert_eq "parse_dry_run_only dies on an unrecognized flag" "1" "${rc}"
+
+# azcopy_env_init: logs and job plans stay inside the repo, never $HOME.
+out="$(bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; azcopy_env_init; echo \"\${AZCOPY_LOG_LOCATION}\"")"
+assert_eq "azcopy_env_init stays inside the repo" "${REPO_ROOT}/.azcopy" "${out}"
+
+# load_cml_env: cml.env is mandatory; labs.env is optional unless
+# --require-labs. Every key is exported for a python3/curl child to read.
+TMP2="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+printf 'CML_URL=https://example\nCML_USERNAME=admin\nCML_PASSWORD=secret\n' > "${TMP2}/cml.env"
+out="$(CML_ENV_FILE="${TMP2}/cml.env" LAB_ENV_FILE="${TMP2}/no-labs.env" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; load_cml_env; echo \"\${CML_URL}\"")"
+assert_eq "load_cml_env exports CML_URL from cml.env" "https://example" "${out}"
+rc=0
+CML_ENV_FILE="${TMP2}/cml.env" LAB_ENV_FILE="${TMP2}/no-labs.env" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; load_cml_env --require-labs" >/dev/null 2>&1 || rc=$?
+assert_eq "load_cml_env --require-labs dies without labs.env" "1" "${rc}"
+rc=0
+CML_ENV_FILE="${TMP2}/missing.env" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; load_cml_env" >/dev/null 2>&1 || rc=$?
+assert_eq "load_cml_env dies without cml.env" "1" "${rc}"
+rm -rf "${TMP2}"
+
+finish "test_common"

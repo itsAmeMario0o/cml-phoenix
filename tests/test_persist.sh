@@ -8,29 +8,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/vendor/cloud-cml/modules/deploy/data/05-persist.sh"
 TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
 trap 'rm -rf "${TMP}"' EXIT
-failures=0
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then
-    echo "[OK]    ${label}"
-  else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1))
-  fi
-}
-assert_not_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then
-    echo "[FAIL]  ${label}: unexpected '${needle}'"; failures=$((failures + 1))
-  else
-    echo "[OK]    ${label}"
-  fi
-}
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
-}
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 common_env="DRY_RUN=1 LOG_DIR=${TMP} DATA_MNT=${TMP}/data IMAGES_DIR=${TMP}/images REFPLAT_JSON=${TMP}/refplat FSTAB=${TMP}/fstab WAIT_SECS=1"
 echo '{"definitions":["alpine"],"images":["alpine-base-3-21-3"]}' > "${TMP}/refplat"
@@ -108,5 +87,4 @@ if command -v shellcheck >/dev/null 2>&1; then
     echo "[FAIL]  shellcheck"; failures=$((failures + 1)); fi
 fi
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_persist: ${failures} failure(s)"; exit 1; fi
-echo "test_persist: all passed"
+finish "test_persist"

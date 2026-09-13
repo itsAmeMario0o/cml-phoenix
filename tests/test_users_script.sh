@@ -6,8 +6,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/70-users.sh"
 TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
-PORT=18007
-failures=0
+# 18007 is also tests/test_gen_testbed.py's port; distinct so the two
+# never collide if a future change runs them concurrently.
+PORT=18009
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT}" &
 API_PID=$!
@@ -19,17 +22,6 @@ export CML_ENV_FILE="${TMP}/cml.env" USERS_CSV="${TMP}/users.csv" USERS_CREDENTI
 # LAB_ENV_FILE points at a path that does not exist, so the wrapper does
 # not read the operator's real labs.env and the test controls its own env.
 export LAB_ENV_FILE="${TMP}/labs.env"
-
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
-}
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
-}
 
 out="$(bash "${SCRIPT}" class netsec 3 cisco.com)"
 assert_eq "class prints a header and three rows" "4" "$(echo "${out}" | wc -l | tr -d ' ')"
@@ -86,5 +78,4 @@ assert_contains "bad csv names the line" "line 2: 'notanemail' is not an email" 
 rc=0; bash "${SCRIPT}" --bogus >/dev/null 2>&1 || rc=$?
 assert_eq "bad flag exits 2" "2" "${rc}"
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_users_script: ${failures} failure(s)"; exit 1; fi
-echo "test_users_script: all passed"
+finish "test_users_script"

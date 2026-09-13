@@ -5,7 +5,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/00-preflight.sh"
-failures=0
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 # Never destroy an operator's real preflight marker. Save it aside and
 # restore it no matter how this test exits. Also clear the scratch
@@ -23,22 +24,6 @@ cleanup() {
 trap cleanup EXIT
 rm -rf "${ISE_TMP_DIR}"
 mkdir -p "${ISE_TMP_DIR}"
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
-}
-
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then
-    echo "[OK]    ${label}"
-  else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"
-    failures=$((failures + 1))
-  fi
-}
 
 # sas_seconds is a pure parser; source the script (common.sh's counters are
 # harmless here) to unit test it directly without touching Azure.
@@ -111,5 +96,4 @@ if [[ "${RUN_AZ_TESTS:-0}" == "1" ]]; then
   assert_contains "quota check ran" "quota" "${out}"
 fi
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_preflight: ${failures} failure(s)"; exit 1; fi
-echo "test_preflight: all passed"
+finish "test_preflight"

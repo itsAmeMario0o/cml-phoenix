@@ -6,8 +6,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/20-up.sh"
-chmod +x "${REPO_ROOT}/tests/stubs/az"
-failures=0
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 # Never destroy an operator's real preflight marker. Save it aside and
 # restore it no matter how this test exits.
@@ -16,18 +16,6 @@ if [[ -f "${MARKER}" ]]; then
   mv "${MARKER}" "${MARKER}.saved"
   trap 'mv "${MARKER}.saved" "${MARKER}" 2>/dev/null || true' EXIT
 fi
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
-}
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
-}
-line_of() { grep -nF -- "$1" <<<"$2" | head -1 | cut -d: -f1; }
 
 rc=0
 out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 ASSUME_YES=1 bash "${SCRIPT}" --dry-run 2>&1)" || rc=$?
@@ -80,5 +68,4 @@ rc=0; out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x bash 
 assert_eq "refuses without marker" "1" "${rc}"
 assert_contains "names the remedy" "scripts/00-preflight.sh" "${out}"
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_up_dry_run: ${failures} failure(s)"; exit 1; fi
-echo "test_up_dry_run: all passed"
+finish "test_up_dry_run"

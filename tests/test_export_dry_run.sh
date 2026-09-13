@@ -2,14 +2,8 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/30-export-labs.sh"
-chmod +x "${REPO_ROOT}/tests/stubs/"*
-failures=0
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
-}
-line_of() { grep -nF -- "$1" <<<"$2" | head -1 | cut -d: -f1; }
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" bash "${SCRIPT}" --dry-run 2>&1)"
 assert_contains "remote export planned" "+ cml_remote export-labs /data/exports/" "${out}"
@@ -19,5 +13,4 @@ e="$(line_of "cml_remote export-labs /data/exports/" "${out}")"; s="$(line_of "+
 if [[ "${e}" -lt "${s}" && "${s}" -lt "${u}" ]]; then echo "[OK]    order export < scp < upload"; else
   echo "[FAIL]  order: ${e} ${s} ${u}"; failures=$((failures + 1)); fi
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_export_dry_run: ${failures} failure(s)"; exit 1; fi
-echo "test_export_dry_run: all passed"
+finish "test_export_dry_run"

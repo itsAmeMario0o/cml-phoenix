@@ -9,8 +9,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 UP_SCRIPT="${REPO_ROOT}/scripts/25-ise-up.sh"
 DOWN_SCRIPT="${REPO_ROOT}/scripts/45-ise-down.sh"
-chmod +x "${REPO_ROOT}/tests/stubs/"*
-failures=0
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 # Fake secrets, distinct enough that an accidental leak cannot be
 # mistaken for anything else. If either string appears anywhere in the
@@ -34,25 +34,6 @@ ISE_ADMIN_SOURCE_CIDR=10.20.1.10/32
 ISE_ADMIN_PASSWORD=${FAKE_PASSWORD}
 RADIUS_SECRET=${FAKE_RADIUS_SECRET}
 EOF
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
-}
-assert_not_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then
-    echo "[FAIL]  ${label}: found forbidden '${needle}'"; failures=$((failures + 1))
-  else
-    echo "[OK]    ${label}"
-  fi
-}
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
-}
 
 # --post-deploy is required: no other invocation is accepted.
 rc=0
@@ -131,5 +112,4 @@ else
   echo "[OK]    45-ise-down.sh touches only role=ise resources"
 fi
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_ise_dry_run: ${failures} failure(s)"; exit 1; fi
-echo "test_ise_dry_run: all passed"
+finish "test_ise_dry_run"

@@ -19,26 +19,8 @@ TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
 FAKE_PASSWORD="Sup3rSecretTestOnly-DoNotLeak"
 printf 'CML_URL=https://198.51.100.9\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${FAKE_PASSWORD}" > "${TMP}/cml.env"
 export CML_ENV_FILE="${TMP}/cml.env" LAB_ENV_FILE="${TMP}/no-such-labs.env"
-failures=0
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
-}
-assert_not_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then
-    echo "[FAIL]  ${label}: found forbidden '${needle}'"; failures=$((failures + 1))
-  else
-    echo "[OK]    ${label}"
-  fi
-}
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
-}
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 # 80-verify-lab.sh checks the real verify/.venv and verify/<scenario>/
 # paths directly, with no override variable (unlike ISE_ENV_FILE for the
@@ -98,5 +80,4 @@ unknown_out="$(bash "${RUN_SCRIPT}" no-such-scenario --dry-run 2>&1)" || rc=$?
 assert_eq "unknown scenario exits nonzero" "1" "${rc}"
 assert_contains "unknown scenario names itself" "unknown scenario 'no-such-scenario'" "${unknown_out}"
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_verify_run: ${failures} failure(s)"; exit 1; fi
-echo "test_verify_run: all passed"
+finish "test_verify_run"

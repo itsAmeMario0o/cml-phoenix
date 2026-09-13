@@ -2,14 +2,8 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/40-down.sh"
-chmod +x "${REPO_ROOT}/tests/stubs/"*
-failures=0
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
-}
-line_of() { grep -nF -- "$1" <<<"$2" | head -1 | cut -d: -f1; }
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x ASSUME_YES=1 bash "${SCRIPT}" --dry-run 2>&1)"
 assert_contains "export first" "30-export-labs.sh --dry-run" "${out}"
@@ -46,5 +40,4 @@ assert_license_blocked "empty blocks" "" 0
 assert_license_blocked "two-line value blocks" "$(printf 'REGISTERED\nREGISTERED')" 0
 assert_license_blocked "NOT_REGISTERED does not block" "NOT_REGISTERED" 1
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_down_dry_run: ${failures} failure(s)"; exit 1; fi
-echo "test_down_dry_run: all passed"
+finish "test_down_dry_run"

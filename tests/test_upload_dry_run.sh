@@ -4,20 +4,10 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/10-upload-images.sh"
+# shellcheck source=tests/lib/asserts.sh
+source "${REPO_ROOT}/tests/lib/asserts.sh"
 TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
 trap 'rm -rf "${TMP}"' EXIT
-failures=0
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  if grep -qF -- "${needle}" <<<"${haystack}"; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: missing '${needle}'"; failures=$((failures + 1)); fi
-}
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [[ "${expected}" == "${actual}" ]]; then echo "[OK]    ${label}"; else
-    echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
-}
 
 # Fake ISO contents and software folder.
 mkdir -p "${TMP}/iso/node-definitions" "${TMP}/iso/virl-base-images/alpine-base-3-21-3" "${TMP}/iso/virl-base-images/iosv-159-3-m10" "${TMP}/software"
@@ -73,5 +63,4 @@ rc=0; out="$(find_iso_in "${TMP}/sw-two-base")" || rc=$?
 assert_eq "two base ISOs are refused" "1" "${rc}"
 assert_eq "REFPLAT_ISO override wins" "${TMP}/sw-addon-only/refplat-20260611-supplemental.iso" "$(find_iso_in "${TMP}/sw-both" "REFPLAT_ISO=${TMP}/sw-addon-only/refplat-20260611-supplemental.iso")"
 
-if [[ "${failures}" -gt 0 ]]; then echo "test_upload_dry_run: ${failures} failure(s)"; exit 1; fi
-echo "test_upload_dry_run: all passed"
+finish "test_upload_dry_run"
