@@ -182,46 +182,23 @@ Already present: terraform 1.5.7, az 2.89, jq, uv, pre-commit, gh, python3.
 Terraform 1.5.7 is old enough that every root pins `required_version =
 ">= 1.5"` and avoids newer syntax, so do not upgrade it without a reason.
 
-## 5. What has been built, and what still gates the first build
+## 5. What has been built
 
-The repo is built. This is what is true today:
-
-- `terraform/bootstrap` is applied in Azure: resource group
-  `rg-cml-lab-tfstate`, storage account `st792kcotfstate`. It costs cents.
-- `terraform/persistent` is validated and planned, 19 to add, but not
-  applied. It is held until the images are on the Mac, because the 512 GB
-  Premium data disk bills about 75 USD a month from the moment it is
-  created.
-- The fork branch `azure-lab` carries patches 0 to 10 plus three fix
-  commits, pinned as the submodule. The last one teaches the persistence
-  hook to find the data disk on NVMe sizes, which the default v6 size is.
-  `validate` passes against the rendered config template with placeholder
-  values.
-- All seven scripts (00, 10, 20, 30, 40, 50, 90), `CLAUDE.md`,
-  `.claude/settings.json`, pre-commit, gitleaks rules, four ADRs,
-  `STATUS.md`, `LESSONS-LEARNED.md`, and the `tests/run.sh` gate all exist
-  and pass.
-- An upload script for the `.pkg` and the selected refplat images, tested
-  against an empty folder.
-- `00-preflight.sh` runs today and fails on the missing token, images, and
-  quota. That is what it is for. Watching it go green one line at a time is
-  the checklist.
-- No CML VM has ever been built from this repo.
-
-What still gates the first build: sections 1 and 2 above, in full. Until
-then, the persistent apply, the CML build itself, `20-up.sh` past the
-persistent root, the smoke test, export, down, and cml-mcp stay out of
-reach. Those are spec success steps 2 through 7.
+This section used to track day-to-day build progress and went stale fast;
+`docs/STATUS.md` is the dated, current source of truth for what state the
+build is actually in. What holds as a durable fact, not a point-in-time
+status: the repo, both durable Terraform roots, the fork submodule, the
+full script pipeline (`00` through `90`), and `tests/run.sh` all exist and
+pass, and a real CML VM has been built and torn down from this repo more
+than once. If you are new here, read `docs/STATUS.md` before this section.
 
 ## 6. Checklist
 
 - [x] License in the Smart Account: Enterprise, base plus a 2000 node pool
-- [ ] Smart License token generated, pasted into `config/cml.tfvars`
-- [ ] `cml2_2.10.0-13_amd64-17.pkg`, `refplat-20260409-fcs.iso`, and
-      `checksum.txt` in `software/`, checksums verified. Downloading as of
-      2026-09-04.
-- [x] Quota approved: Edsv6 family 64 and regional 118 in eastus2
-- [ ] `ARM_SUBSCRIPTION_ID` exported in shell profile
-- [ ] Public IP known for the two allowed-subnet lists
+- [x] Smart License token generated, in `config/cml.tfvars` (gitignored)
+- [x] CML package and refplat images in `software/`, checksums verified
+- [x] Quota approved: Edsv6 family in eastus2
+- [x] `ARM_SUBSCRIPTION_ID` exported in shell profile
+- [x] Public IP known for the two allowed-subnet lists
 - [x] Fork created, branch `azure-lab` at v2.9.0
 - [x] azcopy, shellcheck, gitleaks installed

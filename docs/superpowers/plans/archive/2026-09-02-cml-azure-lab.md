@@ -1,5 +1,13 @@
 # cml-azure-lab: repo skeleton and CML tier Implementation Plan
 
+> Archived, 2026-09-13. Every task below is done; the spec's own success
+> criteria (`docs/superpowers/specs/2026-09-02-cml-azure-lab-design.md`)
+> are met. Moved here to get it out of the active specs/plans directory.
+> The full file bodies quoted below (`CLAUDE.md`, `README.md`,
+> `scripts/lib/common.sh`, `tests/run.sh`, the Terraform roots) are
+> snapshots from the day this was written and have since diverged from
+> what is actually on disk; read the real files, not these copies.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the repo, the two durable Terraform roots, the cloud-cml fork patches, and the seven operator scripts so a CML instance can be built and destroyed per session with its images and lab exports surviving on a persistent data disk.

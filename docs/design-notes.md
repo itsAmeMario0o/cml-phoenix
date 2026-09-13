@@ -1,5 +1,13 @@
 # CML on Azure: on-demand lab notes
 
+> Superseded, 2026-09-13. Every decision recorded here either landed in
+> an ADR (`docs/decisions/0001` through `0005`) or was later reversed:
+> the VM sizes in section 4 are v5, replaced by v6 in ADR 0005 after the
+> v5 family's quota could not be raised; section 9's "ISE: deallocate
+> between sessions" was reversed to a fully disposable ISE in ADR 0008.
+> Kept for the reasoning behind those first decisions, not as a current
+> reference; read the ADRs for what actually shipped.
+
 Working notes from the design conversation, 2026-09-01 to 2026-09-02.
 Repo under study: `Projects/cloud-cml` (clone of CiscoDevNet/cloud-cml, tag v2.9.0 plus two commits).
 Companion MCP server: https://github.com/xorrkaz/cml-mcp
