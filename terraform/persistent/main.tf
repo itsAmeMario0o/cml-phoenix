@@ -17,7 +17,7 @@ resource "random_string" "suffix" {
 }
 
 resource "azurerm_storage_account" "lab" {
-  name                            = "stcmllab${random_string.suffix.result}"
+  name                            = "${local.storage_account_prefix}${random_string.suffix.result}"
   resource_group_name             = azurerm_resource_group.lab.name
   location                        = azurerm_resource_group.lab.location
   account_tier                    = "Standard"
@@ -33,13 +33,13 @@ resource "azurerm_storage_account" "lab" {
 }
 
 resource "azurerm_storage_container" "cml" {
-  name                  = "cml"
+  name                  = local.cml_container_name
   storage_account_id    = azurerm_storage_account.lab.id
   container_access_type = "private"
 }
 
 resource "azurerm_storage_container" "exports" {
-  name                  = "exports"
+  name                  = local.exports_container_name
   storage_account_id    = azurerm_storage_account.lab.id
   container_access_type = "private"
 }
@@ -55,7 +55,7 @@ resource "azurerm_role_assignment" "lab_blob" {
 # ---- Identity and addressing that must not change between builds ---------
 
 resource "azurerm_ssh_public_key" "cml" {
-  name                = "sshkey-cml-lab"
+  name                = local.ssh_key_name
   resource_group_name = azurerm_resource_group.lab.name
   location            = azurerm_resource_group.lab.location
   public_key          = file("${path.root}/${var.ssh_public_key_file}")
@@ -65,7 +65,7 @@ resource "azurerm_ssh_public_key" "cml" {
 # Standard SKU is required for a static IP that survives VM deletion. The
 # cml-mcp config on the Mac points at this address. ADR 0003.
 resource "azurerm_public_ip" "cml" {
-  name                = "pip-cml-lab"
+  name                = local.public_ip_name
   resource_group_name = azurerm_resource_group.lab.name
   location            = azurerm_resource_group.lab.location
   allocation_method   = "Static"
@@ -76,7 +76,7 @@ resource "azurerm_public_ip" "cml" {
 # ---- Data disk: refplat images and exports live here -----------------------
 
 resource "azurerm_managed_disk" "data" {
-  name                 = "disk-cml-lab-data"
+  name                 = local.data_disk_name
   resource_group_name  = azurerm_resource_group.lab.name
   location             = azurerm_resource_group.lab.location
   storage_account_type = "Premium_LRS"
@@ -93,7 +93,7 @@ resource "azurerm_managed_disk" "data" {
 # ---- Network -----------------------------------------------------------------
 
 resource "azurerm_virtual_network" "lab" {
-  name                = "vnet-cml-lab"
+  name                = local.vnet_name
   resource_group_name = azurerm_resource_group.lab.name
   location            = azurerm_resource_group.lab.location
   address_space       = [var.vnet_cidr]
@@ -101,35 +101,35 @@ resource "azurerm_virtual_network" "lab" {
 }
 
 resource "azurerm_subnet" "cml" {
-  name                 = "snet-cml"
+  name                 = local.cml_subnet_name
   resource_group_name  = azurerm_resource_group.lab.name
   virtual_network_name = azurerm_virtual_network.lab.name
   address_prefixes     = [var.cml_subnet_cidr]
 }
 
 resource "azurerm_subnet" "apps" {
-  name                 = "snet-apps"
+  name                 = local.apps_subnet_name
   resource_group_name  = azurerm_resource_group.lab.name
   virtual_network_name = azurerm_virtual_network.lab.name
   address_prefixes     = [var.apps_subnet_cidr]
 }
 
 resource "azurerm_subnet" "fw_mgmt" {
-  name                 = "snet-fw-mgmt"
+  name                 = local.fw_mgmt_subnet_name
   resource_group_name  = azurerm_resource_group.lab.name
   virtual_network_name = azurerm_virtual_network.lab.name
   address_prefixes     = [var.fw_mgmt_subnet_cidr]
 }
 
 resource "azurerm_subnet" "fw_inside" {
-  name                 = "snet-fw-inside"
+  name                 = local.fw_inside_subnet_name
   resource_group_name  = azurerm_resource_group.lab.name
   virtual_network_name = azurerm_virtual_network.lab.name
   address_prefixes     = [var.fw_inside_subnet_cidr]
 }
 
 resource "azurerm_subnet" "fw_outside" {
-  name                 = "snet-fw-outside"
+  name                 = local.fw_outside_subnet_name
   resource_group_name  = azurerm_resource_group.lab.name
   virtual_network_name = azurerm_virtual_network.lab.name
   address_prefixes     = [var.fw_outside_subnet_cidr]
@@ -140,14 +140,14 @@ resource "azurerm_subnet" "fw_outside" {
 # route and is dropped. The CML NIC must also have IP forwarding on, which
 # the fork sets. ADR 0003.
 resource "azurerm_route_table" "apps" {
-  name                          = "rt-apps"
+  name                          = local.apps_route_table_name
   resource_group_name           = azurerm_resource_group.lab.name
   location                      = azurerm_resource_group.lab.location
   bgp_route_propagation_enabled = false
   tags                          = local.common_tags
 
   route {
-    name                   = "lab-summary-via-cml"
+    name                   = local.lab_summary_route_name
     address_prefix         = var.lab_summary_cidr
     next_hop_type          = "VirtualAppliance"
     next_hop_in_ip_address = var.cml_private_ip

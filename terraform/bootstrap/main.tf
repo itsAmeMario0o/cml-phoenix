@@ -9,6 +9,15 @@ locals {
     expires = var.expires
     purpose = "terraform-state"
   }
+
+  # Exported by terraform/persistent/backend.tf's literal backend block
+  # (a backend cannot read a variable) and by scripts/20-up.sh's check
+  # that backend.tf still names this account, so these are contract
+  # surface, not cosmetic labels (CLAUDE.md: no magic strings).
+  resource_group_name    = "rg-cml-lab-tfstate"
+  storage_account_prefix = "st"
+  storage_account_suffix = "tfstate"
+  state_container_name   = "tfstate"
 }
 
 variable "location" {
@@ -34,7 +43,7 @@ variable "soft_delete_retention_days" {
 }
 
 resource "azurerm_resource_group" "tfstate" {
-  name     = "rg-cml-lab-tfstate"
+  name     = local.resource_group_name
   location = var.location
   tags     = local.common_tags
 }
@@ -51,7 +60,7 @@ resource "random_string" "suffix" {
 }
 
 resource "azurerm_storage_account" "tfstate" {
-  name                            = "st${random_string.suffix.result}tfstate"
+  name                            = "${local.storage_account_prefix}${random_string.suffix.result}${local.storage_account_suffix}"
   resource_group_name             = azurerm_resource_group.tfstate.name
   location                        = azurerm_resource_group.tfstate.location
   account_tier                    = "Standard"
@@ -83,7 +92,7 @@ resource "azurerm_storage_account" "tfstate" {
 }
 
 resource "azurerm_storage_container" "tfstate" {
-  name                  = "tfstate"
+  name                  = local.state_container_name
   storage_account_id    = azurerm_storage_account.tfstate.id
   container_access_type = "private"
 }
