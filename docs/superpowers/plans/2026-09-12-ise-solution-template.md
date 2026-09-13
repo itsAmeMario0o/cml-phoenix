@@ -201,7 +201,7 @@ class TestIseParams(unittest.TestCase):
         self.assertEqual(params["instanceType"]["value"], "Standard_D8s_v4")
         self.assertEqual(params["publicIpNewOrExisting"]["value"], "new")
         self.assertEqual(params["publicIpSku"]["value"], "Standard")
-        self.assertEqual(params["publicIPAllocationMethod"]["value"], "Static")
+        self.assertEqual(params["publicIpAllocationMethod"]["value"], "Static")
         self.assertEqual(params["primaryNTPServer"]["value"], "time.google.com")
         self.assertEqual(params["systemPassword"]["value"], "Sup3rSecret-Test")
 
@@ -237,7 +237,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 3: Run it, expect failure** (module missing): `python3 -m unittest tests/test_ise_params.py`.
 
-- [ ] **Step 4: Write `scripts/lib/ise_params.py`.** Stdlib only, type hints. `render_parameters(env, pubkey, nsg_name)` builds the full parameters object matching `config/ise/template.json`'s parameter names: `hostName`, `SSHKeyPairName` (=pubkey), `managementNetwork` (`vnet-cml-lab`), `managementSubnet` (`snet-apps`), `managementNSG` (=nsg_name), `managementPrivateIP` (=`ISE_PRIVATE_IP`), `publicIpName` (=`ISE_PUBLIC_IP_NAME`), `publicIpNewOrExisting`=`new`, `publicIpResourceGroupName`=`rg-cml-lab`, `publicIPAllocationMethod`=`Static`, `publicIpSku`=`Standard`, `timeZone`, `instanceType` (=`ISE_VM_SIZE`), `storageType`, `volumeSize` (int), `DNSDomain`, `primaryNameServer`, `primaryNTPServer`, `ERS`, `PXGrid`, `systemPassword` (=`ISE_ADMIN_PASSWORD`, raise `KeyError` if unset). Wrap each as `{"value": ...}`. The CLI: `main(argv)` reads the out path and `--nsg`, reads the pubkey from `ISE_PUBKEY_FILE` (default `keys/cml-lab.pub`), writes JSON with `os.umask(0o077)` before create then `os.chmod(path, 0o600)`, prints only a non-secret confirmation. Secrets come from `os.environ`, never argv.
+- [ ] **Step 4: Write `scripts/lib/ise_params.py`.** Stdlib only, type hints. `render_parameters(env, pubkey, nsg_name)` builds the full parameters object matching `config/ise/template.json`'s parameter names: `hostName`, `SSHKeyPairName` (=pubkey), `managementNetwork` (`vnet-cml-lab`), `managementSubnet` (`snet-apps`), `managementNSG` (=nsg_name), `managementPrivateIP` (=`ISE_PRIVATE_IP`), `publicIpName` (=`ISE_PUBLIC_IP_NAME`), `publicIpNewOrExisting`=`new`, `publicIpResourceGroupName`=`rg-cml-lab`, `publicIpAllocationMethod`=`Static`, `publicIpSku`=`Standard`, `timeZone`, `instanceType` (=`ISE_VM_SIZE`), `storageType`, `volumeSize` (int), `DNSDomain`, `primaryNameServer`, `primaryNTPServer`, `ERS`, `PXGrid`, `systemPassword` (=`ISE_ADMIN_PASSWORD`, raise `KeyError` if unset). Wrap each as `{"value": ...}`. The CLI: `main(argv)` reads the out path and `--nsg`, reads the pubkey from `ISE_PUBKEY_FILE` (default `keys/cml-lab.pub`), writes JSON with `os.umask(0o077)` before create then `os.chmod(path, 0o600)`, prints only a non-secret confirmation. Secrets come from `os.environ`, never argv.
 
 - [ ] **Step 5: Run it, expect pass.** `python3 -m unittest tests/test_ise_params.py -v`.
 
