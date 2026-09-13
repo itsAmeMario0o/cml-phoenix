@@ -125,6 +125,10 @@ ensure_nsg() {
 # holds the password in plain JSON, so it must not outlive this run.
 render_params() {
   PARAMS_FILE="$(mktemp "${REPO_ROOT}/config/mcp-env/ise-params.XXXXXX")"
+  # Anchor the pubkey lookup to REPO_ROOT: ise_params.py otherwise
+  # resolves ISE_PUBKEY_FILE's default relative to cwd, which breaks a
+  # real deploy launched from anywhere but the repo root.
+  export ISE_PUBKEY_FILE="${REPO_ROOT}/keys/cml-lab.pub"
   run python3 "${REPO_ROOT}/scripts/lib/ise_params.py" "${PARAMS_FILE}" --nsg "${NSG_NAME}"
 }
 
