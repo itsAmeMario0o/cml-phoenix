@@ -22,5 +22,11 @@ assert_eq "no state exits 1" "1" "${rc}"
 assert_contains "explains" "persistent output public_ip_address" "${out}"
 assert_contains "summary printed" "summary:" "${out}"
 
+# The transit bridge (ADR 0003) needs a live controller, so its SSH checks
+# cannot run here. Assert the checks exist in the source instead.
+src="$(cat "${SCRIPT}")"
+assert_contains "checks br-transit address" "10.100.0.1" "${src}"
+assert_contains "checks ip_forward" "net.ipv4.ip_forward" "${src}"
+
 if [[ "${failures}" -gt 0 ]]; then echo "test_smoke: ${failures} failure(s)"; exit 1; fi
 echo "test_smoke: all passed"
