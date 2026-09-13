@@ -3,6 +3,31 @@
 A dated handoff log, newest entry first. Read it before doing anything else
 at the start of a new session.
 
+## 2026-09-13, pyATS lab-verification layer landed
+
+A pyATS lab-verification layer (ADR 0009) landed on the `pyats-and-ise-pivot`
+branch and merged to `main`. It is a `verify/` tree with its own pinned venv
+(`verify/requirements.txt`, `pyats[full]==26.8`, gitignored `verify/.venv`),
+so the core kit stays stdlib only. `verify/lib/gen_testbed.py` (stdlib) pulls
+a lab's pyATS testbed from CML at verify time; `scripts/80-verify-lab.sh
+<scenario>` generates the testbed and runs the scenario's easypy jobfile in
+the venv. Two verifications shipped: `verify/cilium-evpn/` (BGP EVPN sessions
+Established, all VNIs up) and `verify/trustsec-phase1/` (the C8000v edge:
+RADIUS reachable, `test aaa` Access-Accept, CoA received). Preflight warns,
+without failing, when the venv is absent.
+
+Not run yet, the human-gated step: bootstrap the venv
+(`python3 -m venv verify/.venv && verify/.venv/bin/pip install -r
+verify/requirements.txt`), then `scripts/80-verify-lab.sh cilium-evpn`
+against the running Cilium fabric. The TrustSec verification runs once that
+lab is deployed. Both AEtest scripts carry documented verify-at-live
+assumptions (Genie parser keys, the `os` testbed tags, the `show aaa
+servers` parse, `radius` vs `ISE-GROUP`, the CoA counter command), and the
+TrustSec run needs `TRUSTSEC_TEST_USERNAME` / `TRUSTSEC_TEST_PASSWORD`
+exported (a throwaway ISE test identity; see `config/labs.env.example`).
+
+The same branch also carried the ISE deploy pivot reconciliation, below.
+
 ## 2026-09-13, ISE deploy: automated ARM fails, pivot to the portal
 
 The first real ISE deploy ran `scripts/25-ise-up.sh`. The NSG and the VM

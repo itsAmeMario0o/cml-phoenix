@@ -38,9 +38,11 @@ rest of the kit uses.
 
 ## Adding a scenario
 
-Each scenario is a directory under `verify/`, named for the lab it checks,
-for example `verify/cilium/` or `verify/trustsec/`. A scenario directory
-holds:
+Each scenario is a directory under `verify/`, and its name is load-bearing:
+it must match the `scripts/80-verify-lab.sh` scenario case and the `labs/`
+file stem, for example `verify/cilium-evpn/` (checks `labs/cilium-evpn-blank.yaml`)
+or `verify/trustsec-phase1/` (checks `labs/trustsec-phase1.yaml`). A scenario
+directory holds:
 
 - `verify.py`: the AEtest testscript, with a `CommonSetup` that connects to
   the devices from the generated testbed, one `Testcase` per thing being
