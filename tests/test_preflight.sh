@@ -79,7 +79,7 @@ assert_contains "ise.env absent does not fail preflight" "FAIL_COUNT=0" "${out}"
 cat > "${ISE_TMP_DIR}/ise.env" <<'EOF'
 ISE_IMAGE_PUBLISHER=cisco
 ISE_IMAGE_OFFER=cisco-ise-virtual
-ISE_IMAGE_SKU=cisco-ise_3_4
+ISE_IMAGE_SKU=cisco-ise_3_5
 ISE_IMAGE_VERSION=latest
 EOF
 out="$(ise_of "${ISE_TMP_DIR}/ise.env")"

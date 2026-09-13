@@ -38,7 +38,7 @@ trap cleanup EXIT
 cat > "${FIXTURE_DIR}/ise.env" <<EOF
 ISE_IMAGE_PUBLISHER=cisco
 ISE_IMAGE_OFFER=cisco-ise-virtual
-ISE_IMAGE_SKU=cisco-ise_3_4
+ISE_IMAGE_SKU=cisco-ise_3_5
 ISE_IMAGE_VERSION=latest
 ISE_VM_SIZE=Standard_D8s_v4
 ISE_PRIVATE_IP=10.20.2.20
@@ -88,8 +88,8 @@ assert_contains "radius rule planned" "1812 1813" "${up_out}"
 assert_contains "coa rule planned" "1700" "${up_out}"
 assert_contains "admin rule scoped to operator address" "203.0.113.10/32" "${up_out}"
 assert_not_contains "no 0.0.0.0/0 anywhere" "0.0.0.0/0" "${up_out}"
-assert_contains "vm create image" "--image cisco:cisco-ise-virtual:cisco-ise_3_4:latest" "${up_out}"
-assert_contains "vm create plan" "--plan-name cisco-ise_3_4 --plan-product cisco-ise-virtual --plan-publisher cisco" "${up_out}"
+assert_contains "vm create image" "--image cisco:cisco-ise-virtual:cisco-ise_3_5:latest" "${up_out}"
+assert_contains "vm create plan" "--plan-name cisco-ise_3_5 --plan-product cisco-ise-virtual --plan-publisher cisco" "${up_out}"
 assert_contains "vm create size" "--size Standard_D8s_v4" "${up_out}"
 assert_contains "vm create subnet" "--subnet <apps_subnet_id>" "${up_out}"
 assert_contains "vm create private ip" "--private-ip-address 10.20.2.20" "${up_out}"
