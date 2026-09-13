@@ -44,3 +44,7 @@ config/tunnels.conf
 
 # Python bytecode from the test suite
 __pycache__/
+
+# pyATS verification layer (ADR 0009): the venv and generated testbeds
+verify/.venv/
+verify/.testbed/
