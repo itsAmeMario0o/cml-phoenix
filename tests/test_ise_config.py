@@ -71,6 +71,11 @@ class EnsureNetworkDeviceTest(unittest.TestCase):
 
 
 class EnsureAuthorizationRuleTest(unittest.TestCase):
+    """Policy sets and authorization rules live under the ISE OpenAPI on
+    real ISE (ADR 0008, Phase 1 review), not ERS, so these tests exercise
+    IseOpenApiClient against the fake's OpenAPI endpoints and their
+    plain-array response shape."""
+
     proc: subprocess.Popen
 
     @classmethod
@@ -78,7 +83,9 @@ class EnsureAuthorizationRuleTest(unittest.TestCase):
         cls.proc = subprocess.Popen([sys.executable, str(REPO / "tests" / "fake_ise_api.py"), str(PORT + 1)])
         for _ in range(50):
             try:
-                req = urllib.request.Request(f"http://127.0.0.1:{PORT + 1}/ers/config/policyset")
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{PORT + 1}/api/v1/policy/network-access/policy-set"
+                )
                 with urllib.request.urlopen(req, timeout=1):
                     pass
                 break
@@ -93,7 +100,12 @@ class EnsureAuthorizationRuleTest(unittest.TestCase):
         cls.proc.wait(timeout=5)
 
     def setUp(self) -> None:
-        self.client = ise_config.IseErsClient(f"http://127.0.0.1:{PORT + 1}", "admin", "secret")
+        self.client = ise_config.IseOpenApiClient(f"http://127.0.0.1:{PORT + 1}", "admin", "secret")
+
+    def test_bad_login(self) -> None:
+        bad = ise_config.IseOpenApiClient(f"http://127.0.0.1:{PORT + 1}", "admin", "wrong")
+        with self.assertRaisesRegex(ise_config.IseConfigError, "HTTP 401"):
+            ise_config.find_policy_set_id(bad, "Default")
 
     def test_find_policy_set_id_by_name(self) -> None:
         self.assertEqual(ise_config.find_policy_set_id(self.client, "Default"), "ps-default")
@@ -102,11 +114,22 @@ class EnsureAuthorizationRuleTest(unittest.TestCase):
         with self.assertRaisesRegex(ise_config.IseConfigError, "not found"):
             ise_config.find_policy_set_id(self.client, "No Such Set")
 
+    def test_find_missing_rule_returns_none(self) -> None:
+        policy_set_id = ise_config.find_policy_set_id(self.client, "Default")
+        self.assertIsNone(
+            ise_config.find_authorization_rule_id(self.client, policy_set_id, "not-created-yet")
+        )
+
     def test_ensure_creates_when_absent_and_returns_an_id(self) -> None:
         rule_id = ise_config.ensure_authorization_rule(
             self.client, "Default", "trustsec-poc-1", "10.100.0.2", "PermitAccess"
         )
         self.assertTrue(rule_id)
+        policy_set_id = ise_config.find_policy_set_id(self.client, "Default")
+        self.assertEqual(
+            ise_config.find_authorization_rule_id(self.client, policy_set_id, "trustsec-poc-1"),
+            rule_id,
+        )
 
     def test_ensure_is_idempotent_on_rerun(self) -> None:
         first_id = ise_config.ensure_authorization_rule(
@@ -116,6 +139,19 @@ class EnsureAuthorizationRuleTest(unittest.TestCase):
             self.client, "Default", "trustsec-poc-2", "10.100.0.2", "PermitAccess"
         )
         self.assertEqual(first_id, second_id)
+
+    def test_ensure_does_not_post_when_already_present(self) -> None:
+        # A second POST for the same name would 400 in the fake (mirrors
+        # test_ensure_does_not_post_when_already_present for the NAD).
+        ise_config.ensure_authorization_rule(
+            self.client, "Default", "trustsec-poc-3", "10.100.0.2", "PermitAccess"
+        )
+        try:
+            ise_config.ensure_authorization_rule(
+                self.client, "Default", "trustsec-poc-3", "10.100.0.2", "PermitAccess"
+            )
+        except ise_config.IseConfigError as exc:
+            self.fail(f"rerun should not attempt a create: {exc}")
 
 
 class MainEntryPointTest(unittest.TestCase):

@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
-"""Minimal stand-in for ISE's ERS (External RESTful Services) API, for
-tests of scripts/lib/ise_config.py. Shaped like tests/fake_cml_api.py:
-serves on 127.0.0.1 at the port given as argv[1], state lives in memory.
+"""Minimal stand-in for ISE's ERS (External RESTful Services) API and its
+OpenAPI, for tests of scripts/lib/ise_config.py. Shaped like
+tests/fake_cml_api.py: serves on 127.0.0.1 at the port given as argv[1],
+state lives in memory.
+
+Real ISE 3.x splits these two object kinds across two APIs (ADR 0008 and
+the Phase 1 review): network devices stay under ERS
+(/ers/config/networkdevice, wrapped in a "NetworkDevice" key, list
+endpoints wrapped in a "SearchResult"), while policy sets and
+authorization rules are served under the OpenAPI
+(/api/v1/policy/network-access/...) as plain JSON arrays with no
+envelope. This fake mirrors that split so the tests catch a client that
+guesses the wrong shape for either API, which is exactly the gap a prior
+review found (authorization rules were being read and written through
+the ERS shape against a server that never serves them that way).
 
 Serves plain HTTP, not HTTPS. ise_config.py's verify-off SSL context only
 changes hostname and certificate checks, both irrelevant to a plain http
 connection, so the fake does not need a certificate to stand in for the
-real ERS endpoint.
+real endpoints.
 
 State starts empty: no network devices, one default policy set with no
 authorization rules, unless overridden by environment variables read at
 startup:
 
 - FAKE_ISE_USER / FAKE_ISE_PASSWORD: the Basic auth credentials the fake
-  checks (default admin/secret).
+  checks (default admin/secret), for both APIs.
 """
 from __future__ import annotations
 
@@ -68,15 +80,18 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send(200, {"NetworkDevice": device})
             return
-        if path == "/ers/config/policyset":
+        # Policy sets and authorization rules: OpenAPI, plain arrays, no
+        # SearchResult envelope. Real ISE 3.x does not serve these under
+        # ERS at all; see the module docstring.
+        if path == "/api/v1/policy/network-access/policy-set":
             resources = [{"id": ps["id"], "name": ps["name"]} for ps in STATE["policy_sets"].values()]
-            self._send(200, {"SearchResult": {"total": len(resources), "resources": resources}})
+            self._send(200, resources)
             return
-        if path.startswith("/ers/config/policyset/") and path.endswith("/authorizationrule"):
-            policy_set_id = path.split("/")[4]
+        if path.startswith("/api/v1/policy/network-access/policy-set/") and path.endswith("/authorization"):
+            policy_set_id = path.split("/")[6]
             rules = STATE["authorization_rules"].get(policy_set_id, {})
-            resources = [{"id": rule["id"], "name": name} for name, rule in rules.items()]
-            self._send(200, {"SearchResult": {"total": len(resources), "resources": resources}})
+            resources = [rule for rule in rules.values()]
+            self._send(200, resources)
             return
         self._send(404, {})
 
@@ -98,24 +113,22 @@ class Handler(BaseHTTPRequestHandler):
             location = f"https://ise.example.invalid/ers/config/networkdevice/{device_id}"
             self._send(201, None, {"Location": location})
             return
-        if path.startswith("/ers/config/policyset/") and path.endswith("/authorizationrule"):
-            policy_set_id = path.split("/")[4]
+        if path.startswith("/api/v1/policy/network-access/policy-set/") and path.endswith("/authorization"):
+            policy_set_id = path.split("/")[6]
             if policy_set_id not in STATE["policy_sets"]:
                 self._send(404, {})
                 return
-            rule = body["rule"]
-            name = rule["name"]
+            name = body["name"]
             rules = STATE["authorization_rules"].setdefault(policy_set_id, {})
             if name in rules:
                 self._send(400, {"description": "authorization rule already exists"})
                 return
             rule_id = _next_id()
-            rules[name] = {**rule, "id": rule_id}
-            location = (
-                "https://ise.example.invalid/ers/config/policyset/"
-                f"{policy_set_id}/authorizationrule/{rule_id}"
-            )
-            self._send(201, None, {"Location": location})
+            created = {**body, "id": rule_id}
+            rules[name] = created
+            # OpenAPI create returns the created object directly, no
+            # Location header and no SearchResult wrapper.
+            self._send(201, created)
             return
         self._send(404, {})
 
