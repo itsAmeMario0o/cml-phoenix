@@ -81,6 +81,15 @@ moved to the Done section at the bottom.
     existing patterns. The same shape extends to the other cloud
     managers the labs depend on, which is why it is worth building once
     and reusing. Needs a short spec before any code.
+17. Azure Bastion for browser-based access. Optional. It lets an
+    operator open a lab VM's SSH or RDP session from the Azure portal,
+    and reach any other port with `az network bastion tunnel`, without
+    the CML host jump and without giving that VM its own public IP.
+    Access is controlled by RBAC on the Bastion resource rather than an
+    IP allow-list. It is a persistent resource that bills whether or
+    not anyone connects, and it needs its own `/26` subnet named
+    `AzureBastionSubnet` in the persistent VNet. Not needed while the
+    CML host jump remains the access path (ADR 0003, ADR 0008).
 
 ## Images and scenarios
 
