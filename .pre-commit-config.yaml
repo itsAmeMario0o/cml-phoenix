@@ -8,6 +8,11 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: ["--maxkb=1024"]
+      # Parses every Python file with the stdlib ast module. verify/*.py
+      # imports pyats and genie, so it is never imported by tests/run.sh's
+      # unittest discovery; this and that file's py_compile pass are the
+      # only two checks that catch a syntax error in it before a live run.
+      - id: check-ast
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.96.1
@@ -24,7 +29,10 @@ repos:
     rev: v0.10.0.1
     hooks:
       - id: shellcheck
-        files: \.sh$
+        # tests/stubs/az and tests/stubs/terraform are tracked bash with no
+        # .sh extension; every dry-run test trusts them, so they get the
+        # same lint as every other script.
+        files: \.sh$|^tests/stubs/(az|terraform)$
         args: ["--severity=warning", "--external-sources"]
 
   - repo: https://github.com/gitleaks/gitleaks
