@@ -97,11 +97,14 @@ check_exports_writable() {
 # rebuild of the disposable CML VM.
 check_transit_bridge() {
   local addr fwd
-  addr="$(cml_ssh "ip -o addr show br-transit" 2>/dev/null || true)"
-  if [[ "${addr}" == *"10.100.0.1"* ]]; then
-    pass "br-transit holds 10.100.0.1"
+  # ADR 0003 fixes br-transit at 10.100.0.1/24. Extract the address field
+  # and compare exactly, a substring match would also pass for any other
+  # host in the same /24 and miss drift from the fixed address.
+  addr="$(cml_ssh "ip -o -4 addr show br-transit | awk '{print \$4}'" 2>/dev/null || true)"
+  if [[ "${addr}" == "10.100.0.1/24" ]]; then
+    pass "br-transit holds 10.100.0.1/24"
   else
-    miss "br-transit missing or lacks 10.100.0.1 (see ADR 0003)"
+    miss "br-transit address '${addr:-none}', expected 10.100.0.1/24 (see ADR 0003)"
   fi
   fwd="$(cml_ssh "sysctl -n net.ipv4.ip_forward" 2>/dev/null || true)"
   if [[ "${fwd}" == "1" ]]; then

@@ -25,7 +25,9 @@ assert_contains "summary printed" "summary:" "${out}"
 # The transit bridge (ADR 0003) needs a live controller, so its SSH checks
 # cannot run here. Assert the checks exist in the source instead.
 src="$(cat "${SCRIPT}")"
-assert_contains "checks br-transit address" "10.100.0.1" "${src}"
+assert_contains "check_transit_bridge defined" "check_transit_bridge() {" "${src}"
+assert_contains "check_transit_bridge called from main" "  check_transit_bridge" "${src}"
+assert_contains "checks br-transit address exactly" "10.100.0.1/24" "${src}"
 assert_contains "checks ip_forward" "net.ipv4.ip_forward" "${src}"
 
 if [[ "${failures}" -gt 0 ]]; then echo "test_smoke: ${failures} failure(s)"; exit 1; fi
