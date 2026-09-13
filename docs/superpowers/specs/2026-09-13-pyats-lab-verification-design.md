@@ -35,13 +35,21 @@ In scope:
   verify time, into a gitignored runtime file.
 - A verify runner, `scripts/80-verify-lab.sh <scenario>`, that generates the
   testbed, runs the scenario's easypy jobfile, and archives the report.
-- One worked example end to end: the Cilium EVPN fabric, which is running and
-  has clear, verifiable state.
+- Two scenarios retrofitted to the convention:
+  - The Cilium EVPN fabric, which is running and has clear, verifiable state.
+    This is the end-to-end worked example, authored and run now.
+  - The TrustSec Phase 1 lab. Its verification is authored now and runs once
+    the lab is deployed, since ISE and the transit bridge are not up yet.
+    The checks target the C8000v edge, a CML node: the RADIUS server
+    reachable, a `test aaa` returning Access-Accept, and a CoA received.
 
 Out of scope, deferred:
 
-- Retrofitting the IPS and TrustSec labs to the convention. They follow once
-  the pattern is proven, and TrustSec once it is actually deployed.
+- Retrofitting the IPS and FTD lab to the convention. It follows once the
+  two focus labs are done.
+- TrustSec's ISE-side checks, such as the live authentication log showing a
+  per-device source. Those read ISE, not a CML node, so they belong to the
+  `cisco.ise` layer on the roadmap, not to pyATS.
 - Blitz, the low-code YAML path. ADR 0009 chose AEtest for now.
 - CI. The runner produces a report that CI can consume later.
 
@@ -106,7 +114,10 @@ that connects to the testbed, testcases that use Genie parsers and learned
 state to assert the lab's health, and a common cleanup. For the worked
 example, Cilium EVPN, the testcases assert that every eBGP EVPN session is
 Established and that all four VNIs are up, which is the state the lab is
-already checked for by hand.
+already checked for by hand. The TrustSec testscript is written to the same
+shape but targets the C8000v edge: the RADIUS server reachable, a `test aaa`
+returning Access-Accept, and a CoA received. It is authored alongside the
+Cilium example and runs once the TrustSec lab is deployed.
 
 ### What stays stdlib
 
@@ -130,7 +141,10 @@ stdlib tests and a dry-run so their plumbing is covered without a live lab.
 3. Against the running Cilium EVPN lab, `scripts/80-verify-lab.sh
    cilium-evpn` generates the testbed, runs the AEtest script, and reports
    every BGP session Established and all VNIs up, with a saved report.
-4. `tests/run.sh` still passes and does not require pyATS.
+4. The TrustSec testscript exists and is well-formed. Its structure is
+   checked now (it imports and lists its testcases); the live run against
+   the edge waits until the TrustSec lab is deployed.
+5. `tests/run.sh` still passes and does not require pyATS.
 
 ## Risks and fallback
 
