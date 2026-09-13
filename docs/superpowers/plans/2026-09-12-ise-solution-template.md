@@ -1,5 +1,14 @@
 # ISE Deploy by the Azure Solution Template Implementation Plan
 
+> **Superseded, 2026-09-13.** This plan built the automated `az deployment
+> group create` deploy, which was then retired: ISE terminally fails Azure OS
+> provisioning on that path. ISE is now deployed by hand through the portal
+> (ADR 0008 amendment; `docs/ISE-MARKETPLACE-DEPLOY.md`). The code this plan
+> produced (`scripts/25-ise-up.sh`, `scripts/lib/ise_params.py`,
+> `config/ise/template.json`) is marked tentative-obsolete, kept in case
+> roadmap item 19 (ISEEE ephemeral ISE) revives an automated deploy. This
+> plan is a historical record, not a current work item.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the raw VM-image ISE deploy with Cisco's Azure Marketplace solution template, run by `az deployment group create`, disposable and torn down by tag.

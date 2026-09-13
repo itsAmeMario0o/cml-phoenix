@@ -1,5 +1,13 @@
 # ISE deployment by the Azure solution template
 
+> **Superseded, 2026-09-13.** The automated `az deployment group create` deploy
+> this spec describes was retired: ISE terminally fails Azure OS provisioning
+> on that path. ISE is now deployed by hand through the portal. See the ADR
+> 0008 amendment (`docs/decisions/0008-ise-by-azure-solution-template.md`) and
+> the walkthrough (`docs/ISE-MARKETPLACE-DEPLOY.md`). This document is kept as
+> the design record of the automated approach, which roadmap item 19 (ISEEE
+> ephemeral ISE) may revisit.
+
 Status: draft, 2026-09-12.
 
 This spec replaces the way TrustSec Phase 1 deploys ISE. Phase 1 built a raw

@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# TENTATIVE-OBSOLETE (2026-09-13). The az deployment group create deploy step
+# below is retired: ISE terminally fails Azure OS provisioning on that path
+# (ADR 0008 amendment). Deploy ISE by hand through the portal instead, per
+# docs/ISE-MARKETPLACE-DEPLOY.md. Kept, not deleted, because roadmap item 19
+# (ISEEE ephemeral ISE) may revive an automated deploy from a captured image,
+# and because ensure_nsg, tag_osdisk, wait_for_ise_ready, and apply_ise_policy
+# are still the right post-portal-deploy steps. Do not treat this as the
+# current deploy method.
+#
 # Bring up the disposable ISE VM from Cisco's Azure solution template
 # (ADR 0008), by az CLI, not Terraform. The operator chose az CLI over a
 # terraform/ise root after a bad ISE-on-Terraform experience; see the

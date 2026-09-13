@@ -142,6 +142,20 @@ moved to the Done section at the bottom.
     logic is upstream: a skip-existing option on cloud-cml's copy
     routine, off by default, offered as a pull request to CiscoDevNet.
     Slow, and the only option that makes the fork smaller.
+20. NX-OS to IOS-XR data center interconnect lab. An NX-OS BGP EVPN VXLAN
+    fabric, spine and leaves, handing off to an IOS-XR node that acts as the
+    data center interconnect and terminates internet and WAN routes. In CML
+    the fabric is `nexus9300v` and the interconnect is `xrv9k`, both of which
+    do EVPN, so the topology is buildable. The handoff has two forms: a
+    VRF-lite or L3 handoff at a border leaf, which is reliable on the CML
+    images and is the one to build first; and full EVPN VXLAN-to-MPLS or SR
+    stitching on the XR gateway, which is real on ASR 9000 and NCS hardware
+    but whose support on the CML `xrv9k` image must be confirmed before it is
+    trusted, with VRF-lite as the fallback. The constraint is resources:
+    `xrv9k` is about 4 vCPU and 16 GB and each `nexus9300v` about 2 vCPU and
+    12 GB, so a spine, two leaves, the interconnect, and a WAN or internet
+    simulator need sizing against the host or boot waves, which ties to the
+    lab calculator, item 5. Needs its own spec.
 
 ## From the design spec, still deferred
 

@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# TENTATIVE-OBSOLETE (2026-09-13). This module only serves the retired
+# `az deployment group create` path (ADR 0008 amendment); the portal deploy
+# in docs/ISE-MARKETPLACE-DEPLOY.md does not use it. Kept, not deleted,
+# because roadmap item 19 (ISEEE ephemeral ISE) may revive an automated
+# deploy that renders parameters again.
 """Render the Azure deployment parameters file for config/ise/template.json
 (ADR 0008: ISE deploys by `az deployment group create` against Cisco's
 Azure solution template, not by hand-rolled userData). scripts/25-ise-up.sh

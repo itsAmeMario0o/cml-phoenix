@@ -32,6 +32,12 @@ a spec) on the `pyats-and-ise-pivot` branch.
 
 ## 2026-09-13, TrustSec Phase 1 and ISE by the Azure solution template
 
+> Superseded on the ISE deploy method by the newer 2026-09-13 entry above:
+> the `scripts/25-ise-up.sh` `az deployment group create` deploy described
+> here was retired (ISE terminally fails Azure OS provisioning). ISE is now
+> deployed by hand through the portal (ADR 0008 amendment;
+> `docs/ISE-MARKETPLACE-DEPLOY.md`). The rest of this entry still holds.
+
 The TrustSec Phase 1 foundation and a new ISE deploy method landed on the
 `trustsec-phase1` branch and merged to `main`. Nothing has been deployed to
 Azure yet; this is code and docs, ready to run.
