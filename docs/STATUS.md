@@ -3,6 +3,47 @@
 A dated handoff log, newest entry first. Read it before doing anything else
 at the start of a new session.
 
+## 2026-09-13, TrustSec Phase 1 and ISE by the Azure solution template
+
+The TrustSec Phase 1 foundation and a new ISE deploy method landed on the
+`trustsec-phase1` branch and merged to `main`. Nothing has been deployed to
+Azure yet; this is code and docs, ready to run.
+
+What is in the kit now:
+
+- ISE deploys from Cisco's Azure Marketplace solution template, not the raw
+  VM image (ADR 0008). The earlier VM-image path kept failing to boot; the
+  cause was a hand-rolled user-data file with the wrong NTP key and address
+  keys ISE on Azure does not accept. `scripts/25-ise-up.sh` now runs
+  `az deployment group create` against `config/ise/template.json`, ISE 3.5
+  (`cisco-ise_3_5`, `3.5.527`), with a scoped NSG, a static `10.20.2.20`, our
+  SSH key, and the admin password rendered into a `0600` parameters file.
+  `scripts/45-ise-down.sh` deletes every `role=ise` resource. ISE keeps a
+  Standard public IP for outbound to Security Cloud Control and Entra;
+  operator and policy access go through the CML host jump, so a changing
+  operator IP never matters.
+- ISE policy is code (`scripts/lib/ise_config.py`): the C8000v edge as one
+  network device over ERS, one authorization rule over the ISE OpenAPI.
+- The Phase 1 proof topology is `labs/trustsec-phase1.yaml` (a C8000v edge as
+  the RADIUS client), and the post-build smoke test now checks the host
+  transit bridge.
+
+Not yet done, the human-gated deploy lane:
+
+- The host transit bridge itself is not built. The fork customize script
+  `06-transit-bridge.sh` and its wiring under `vendor/` were left for the
+  gated deploy and never landed. Without it the lab-side RADIUS path from
+  `10.100.0.0/16` to ISE does not exist yet. This is the first real step.
+- No real ISE deploy has run. When it does, verify two things: that the
+  Cisco template's subnet write did not drop the `rt-apps` route-table
+  association (ADR 0003), by checking `terraform -chdir=terraform/persistent
+  plan` shows no changes, and that the ISE OpenAPI authorization-rule payload
+  shape matches the live 3.5 node. Both are recorded in ADR 0008 and the
+  `ise_config.py` comments.
+
+Also new: roadmap item 16, reclaiming cloud-manager licenses at teardown
+(near-term, cdFMC first), and item 17, an optional Azure Bastion.
+
 ## 2026-09-11, current state
 
 Both labs are on the controller and reachable through the front door.
