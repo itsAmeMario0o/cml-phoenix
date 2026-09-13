@@ -19,6 +19,15 @@ extends that rule to ISE's own admin password and the RADIUS shared
 secret. scripts/25-ise-up.sh sources config/mcp-env/ise.env with `set -a`
 before calling this, so those names are already exported.
 
+ISE_PRIVATE_IP is a private Azure address (ADR 0003): this script runs on
+the Mac, not on the CML host or ISE itself, so it cannot reach that
+address directly. scripts/25-ise-up.sh's apply_ise_policy opens an SSH
+local port forward through the CML host jump and sets ISE_API_BASE to
+the forwarded https://127.0.0.1:<port> URL instead. When ISE_API_BASE is
+set, it wins over ISE_PRIVATE_IP as the client's base URL; ISE_PRIVATE_IP
+alone still works for anything that already has a direct route to it
+(the fake-server unit tests, for one).
+
 ISE's ERS (External RESTful Services) API terminates TLS with a
 self-signed certificate on this disposable lab node; there is no CA to
 verify against and no certificate to pin, so verification is turned off
@@ -207,13 +216,22 @@ def main(argv: list[str]) -> int:
     # both stay out of argv (see module docstring, ADR 0004).
     del argv
     ise_ip = os.environ.get("ISE_PRIVATE_IP", "")
+    # ADR 0003: ISE_PRIVATE_IP is not reachable from the Mac directly.
+    # scripts/25-ise-up.sh sets ISE_API_BASE to a forwarded 127.0.0.1
+    # URL after tunneling through the CML host jump; it wins when set.
+    api_base = os.environ.get("ISE_API_BASE", "")
     admin_user = os.environ.get("ISE_ADMIN_USERNAME", "admin")
     admin_password = os.environ.get("ISE_ADMIN_PASSWORD", "")
     radius_secret = os.environ.get("RADIUS_SECRET", "")
-    if not ise_ip or not admin_password or not radius_secret:
-        print("ise_config: ISE_PRIVATE_IP, ISE_ADMIN_PASSWORD, and RADIUS_SECRET must be set", file=sys.stderr)
+    if not (ise_ip or api_base) or not admin_password or not radius_secret:
+        print(
+            "ise_config: set ISE_PRIVATE_IP or ISE_API_BASE, and ISE_ADMIN_PASSWORD "
+            "and RADIUS_SECRET must be set",
+            file=sys.stderr,
+        )
         return 1
-    client = IseErsClient(f"https://{ise_ip}", admin_user, admin_password)
+    base_url = api_base or f"https://{ise_ip}"
+    client = IseErsClient(base_url, admin_user, admin_password)
     try:
         device_id = ensure_network_device(client, NAD_NAME, NAD_IP_ADDRESS, radius_secret)
         print(f"[OK]    network device {NAD_NAME} ({device_id})")

@@ -97,11 +97,19 @@ assert_contains "vm create no public ip" "--public-ip-address" "${up_out}"
 assert_contains "vm create tags" "--tags project=cml-azure-lab role=ise" "${up_out}"
 assert_contains "nic tagged too" "+ az network nic update" "${up_out}"
 assert_contains "readiness wait planned" "+ poll https://10.20.2.20/admin/API/mnt/Version through 203.0.113.5:1122" "${up_out}"
+assert_contains "ise forward planned" "+ ssh -p 1122 -i ${REPO_ROOT}/keys/cml-lab" "${up_out}"
+assert_contains "ise forward local port and target" "-N -L 18443:10.20.2.20:443" "${up_out}"
+assert_contains "ise forward jump host" "sysadmin@203.0.113.5" "${up_out}"
 assert_contains "ise policy step planned" "+ python3 ${REPO_ROOT}/scripts/lib/ise_config.py" "${up_out}"
 
 assert_not_contains "admin password never printed" "${FAKE_PASSWORD}" "${up_out}"
 assert_not_contains "no --custom-data content inlined" "password=${FAKE_PASSWORD}" "${up_out}"
 assert_not_contains "radius secret never printed" "${FAKE_RADIUS_SECRET}" "${up_out}"
+# ISE_API_BASE carries no secret (it is just the forwarded local URL),
+# and apply_ise_policy sets it as a prefix assignment on the run() call
+# rather than an argument, so it never appears in the dry-run plan at
+# all, secret or not.
+assert_not_contains "ISE_API_BASE never appears in the plan" "ISE_API_BASE" "${up_out}"
 
 # --- 45-ise-down.sh --dry-run ---
 

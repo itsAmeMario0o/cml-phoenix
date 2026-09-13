@@ -46,6 +46,12 @@ NSG_NAME="ise-nsg"
 VM_NAME="ise"
 READY_TIMEOUT_S="${ISE_READY_TIMEOUT_S:-2700}"
 READY_INTERVAL_S="${ISE_READY_INTERVAL_S:-30}"
+# An arbitrary high local port for the SSH forward to ISE's ERS API
+# (ADR 0003: ISE has no public address, only the CML host jump reaches
+# it). Fixed rather than picked at random so a dry run prints one
+# deterministic plan.
+ISE_FORWARD_LOCAL_PORT="${ISE_FORWARD_LOCAL_PORT:-18443}"
+ISE_FORWARD_PID=""
 DRY_RUN=0
 
 run() {
@@ -193,16 +199,60 @@ wait_for_ise_ready() {
   die "ISE did not answer within $((READY_TIMEOUT_S / 60)) minutes"
 }
 
+# open_ise_forward: a local SSH port forward through the CML host jump
+# (ADR 0003, the same jump wait_for_ise_ready uses) from
+# 127.0.0.1:ISE_FORWARD_LOCAL_PORT to ISE's private address on 443.
+# ise_config.py stays on the Mac rather than running over an SSH exec, so
+# ISE_ADMIN_PASSWORD and RADIUS_SECRET never cross a remote command line
+# (ADR 0004); this forward is what lets it reach ISE's private address
+# anyway. Backgrounded so apply_ise_policy can run ise_config.py against
+# it and then close it again; the plan is printed by hand in a dry run
+# since run() cannot both echo a plan and background a real command.
+open_ise_forward() {
+  local ise_ip="$1" jump="$2" key="$3"
+  local cmd=(ssh -p 1122 -i "${key}" "${CML_SSH_OPTS[@]}" -o ConnectTimeout=10 \
+    -N -L "${ISE_FORWARD_LOCAL_PORT}:${ise_ip}:443" "sysadmin@${jump}")
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ ${cmd[*]}"
+    return 0
+  fi
+  "${cmd[@]}" &
+  ISE_FORWARD_PID=$!
+  # Give the forward a moment to establish before ise_config.py dials it.
+  sleep 2
+}
+
+# close_ise_forward: kill the background ssh from open_ise_forward, if
+# one is running. Guarded so a dry run (no PID recorded) and a second
+# call after an already-closed forward are both no-ops, never an
+# unguarded kill.
+close_ise_forward() {
+  if [[ -n "${ISE_FORWARD_PID}" ]] && kill -0 "${ISE_FORWARD_PID}" 2>/dev/null; then
+    kill "${ISE_FORWARD_PID}" 2>/dev/null || true
+    wait "${ISE_FORWARD_PID}" 2>/dev/null || true
+  fi
+  ISE_FORWARD_PID=""
+}
+
 # apply_ise_policy: the minimal TrustSec Phase 1 policy, one network
 # device and one authorization rule (scripts/lib/ise_config.py). Runs
 # only after ISE answers, since the ERS API needs a fully booted node.
-# ISE_PRIVATE_IP, ISE_ADMIN_PASSWORD, and RADIUS_SECRET are already in
-# this shell's environment from load_ise_env's `set -a` source, so
-# ise_config.py reads them from its own environment; none of the three is
-# ever passed as an argument, so none can appear on a command line or in
-# --dry-run output (ADR 0004).
+# ISE_ADMIN_PASSWORD and RADIUS_SECRET are already in this shell's
+# environment from load_ise_env's `set -a` source, so ise_config.py reads
+# them from its own environment; neither is ever passed as an argument,
+# so neither can appear on a command line or in --dry-run output
+# (ADR 0004). ISE_API_BASE points ise_config.py at the forwarded local
+# port instead of ISE's unreachable private address (ADR 0003); the
+# forward is torn down on the way out even if ise_config.py fails, via
+# the EXIT trap.
 apply_ise_policy() {
-  run python3 "${REPO_ROOT}/scripts/lib/ise_config.py"
+  local ise_ip="$1" jump="$2" key="$3"
+  trap close_ise_forward EXIT
+  open_ise_forward "${ise_ip}" "${jump}" "${key}"
+  ISE_API_BASE="https://127.0.0.1:${ISE_FORWARD_LOCAL_PORT}" \
+    run python3 "${REPO_ROOT}/scripts/lib/ise_config.py"
+  close_ise_forward
+  trap - EXIT
 }
 
 main() {
@@ -219,7 +269,7 @@ main() {
   create_vm
   tag_nic
   wait_for_ise_ready "${ISE_PRIVATE_IP}" "${CML_PUBLIC_IP}" "${REPO_ROOT}/keys/cml-lab"
-  apply_ise_policy
+  apply_ise_policy "${ISE_PRIVATE_IP}" "${CML_PUBLIC_IP}" "${REPO_ROOT}/keys/cml-lab"
   pass "ISE ready. Reach it through the CML host jump (ADR 0003), never directly."
 }
 
