@@ -1,57 +1,54 @@
 #!/usr/bin/env bash
-# Bring up the disposable ISE VM by az CLI, not Terraform. The operator
-# chose az CLI over a terraform/ise root after a bad ISE-on-Terraform
-# experience; see the TrustSec Phase 1 plan. Run this after
-# scripts/20-up.sh: it reuses the persistent apps subnet and needs the
-# CML host as an SSH jump for the readiness check, since ADR 0003 keeps
-# ISE off any public address.
+# Bring up the disposable ISE VM from Cisco's Azure solution template
+# (ADR 0008), by az CLI, not Terraform. The operator chose az CLI over a
+# terraform/ise root after a bad ISE-on-Terraform experience; see the
+# TrustSec Phase 1 plan. Run this after scripts/20-up.sh: it joins the
+# persistent root's vnet/subnet by name and needs the CML host as an SSH
+# jump for the readiness check and policy apply, since ADR 0003 routes
+# operator administration of every lab node, ISE included, through that
+# jump (ADR 0008 keeps that even though ISE gets its own public IP).
 #
 #   scripts/25-ise-up.sh [--dry-run]
 #
 # Order:
 #   1. Read config/mcp-env/ise.env: Marketplace coordinates, size,
-#      private IP, hostname, admin password (ADR 0004, gitignored).
-#   2. Resolve resource_group_name, location, apps_subnet_id,
-#      apps_subnet_cidr, lab_summary_cidr, public_ip_address from the
-#      persistent root's outputs.
-#   3. Render the ISE custom-data (scripts/lib/ise-userdata.sh) to
-#      config/mcp-env/ise-userdata, mode 600. The admin password never
-#      appears on the az command line.
-#   4. Create the ISE NSG: RADIUS 1812/1813 UDP and CoA 1700 UDP from the
-#      lab summary, admin 443 TCP and SSH 22 TCP from the operator
-#      addresses in config/cml.tfvars. Never 0.0.0.0/0.
-#   5. az vm create: the Marketplace image and plan, the static private
-#      IP on the apps subnet, --custom-data the rendered file, no public
-#      IP, project/role tags.
-#   6. Tag the VM's auto-created NIC to match (az vm create tags only the
-#      VM itself).
+#      private IP, hostname, admin password, admin source CIDR
+#      (ADR 0004, gitignored).
+#   2. Resolve resource_group_name, location, lab_summary_cidr,
+#      public_ip_address from the persistent root's outputs.
+#   3. Create the ISE NSG: RADIUS 1812/1813 UDP from the lab summary,
+#      admin 443 TCP and SSH 22 TCP from ISE_ADMIN_SOURCE_CIDR only.
+#      Never 0.0.0.0/0.
+#   4. Render the deployment parameters file (scripts/lib/ise_params.py)
+#      to a 0600 mktemp path under config/mcp-env/, deleted on exit. The
+#      admin password never appears on the az command line.
+#   5. az deployment group create against config/ise/template.json,
+#      Cisco's solution template (ADR 0008). It builds the public IP,
+#      NIC, and VM, tagged project/role by the template itself.
+#   6. Tag the VM's OS disk to match (the template does not tag it).
 #   7. Poll https://<ise_private_ip>/admin/API/mnt/Version through the
 #      CML host jump (port 1122) until it answers. Typically 30-45 min.
+#   8. Apply the minimal TrustSec Phase 1 policy (scripts/lib/ise_config.py)
+#      through a local forward to the same jump.
 #
-# The create prompts unless ASSUME_YES=1. --dry-run prints the plan and
+# The deploy prompts unless ASSUME_YES=1. --dry-run prints the plan and
 # touches no Azure resource.
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
-# shellcheck source=scripts/lib/ise-userdata.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib/ise-userdata.sh"
 
 ISE_ENV_FILE="${ISE_ENV_FILE:-${REPO_ROOT}/config/mcp-env/ise.env}"
-CML_TFVARS="${CML_TFVARS:-${REPO_ROOT}/config/cml.tfvars}"
-TFVARS_PY="${REPO_ROOT}/scripts/lib/tfvars.py"
-USERDATA_FILE="${REPO_ROOT}/config/mcp-env/ise-userdata"
-SSH_PUBKEY="${REPO_ROOT}/keys/cml-lab.pub"
 NSG_NAME="ise-nsg"
-VM_NAME="ise"
 READY_TIMEOUT_S="${ISE_READY_TIMEOUT_S:-2700}"
 READY_INTERVAL_S="${ISE_READY_INTERVAL_S:-30}"
 # An arbitrary high local port for the SSH forward to ISE's ERS API
-# (ADR 0003: ISE has no public address, only the CML host jump reaches
-# it). Fixed rather than picked at random so a dry run prints one
-# deterministic plan.
+# (ADR 0003: operator administration of ISE goes through the CML host
+# jump, never ISE's own public IP). Fixed rather than picked at random so
+# a dry run prints one deterministic plan.
 ISE_FORWARD_LOCAL_PORT="${ISE_FORWARD_LOCAL_PORT:-18443}"
 ISE_FORWARD_PID=""
+PARAMS_FILE=""
 DRY_RUN=0
 
 run() {
@@ -81,100 +78,70 @@ load_ise_env() {
   # shellcheck disable=SC1090
   source "${ISE_ENV_FILE}"
   set +a
-  : "${ISE_IMAGE_PUBLISHER:?missing in ${ISE_ENV_FILE}}"
-  : "${ISE_IMAGE_OFFER:?missing in ${ISE_ENV_FILE}}"
   : "${ISE_IMAGE_SKU:?missing in ${ISE_ENV_FILE}}"
-  : "${ISE_IMAGE_VERSION:?missing in ${ISE_ENV_FILE}}"
   : "${ISE_VM_SIZE:?missing in ${ISE_ENV_FILE}}"
   : "${ISE_PRIVATE_IP:?missing in ${ISE_ENV_FILE}}"
   : "${ISE_HOSTNAME:?missing in ${ISE_ENV_FILE}, see config/ise.env.example}"
   : "${ISE_ADMIN_PASSWORD:?missing in ${ISE_ENV_FILE}, see config/ise.env.example}"
-  # Required up front, not just when the policy step runs: apply_ise_policy
-  # (scripts/lib/ise_config.py) is the RADIUS client secret for the NAD it
-  # registers, and a build should fail fast rather than 30-45 minutes into
+  # Scopes the ISE admin/SSH NSG rule. Required up front, same reasoning
+  # as RADIUS_SECRET below: fail fast, not 30-45 minutes into
   # wait_for_ise_ready.
+  : "${ISE_ADMIN_SOURCE_CIDR:?missing in ${ISE_ENV_FILE}, see config/ise.env.example}"
+  # apply_ise_policy (scripts/lib/ise_config.py) is the RADIUS client
+  # secret for the NAD it registers, and a build should fail fast rather
+  # than partway through the deploy.
   : "${RADIUS_SECRET:?missing in ${ISE_ENV_FILE}, see config/ise.env.example}"
-}
-
-# Operator addresses come from the same tfvars list that scopes the CML
-# host's own NSG, so ISE's admin/SSH rules never reach wider than CML's
-# already do. Falls back to a placeholder only when both the file is
-# absent and this is a dry run, so the plan still prints.
-operator_addresses() {
-  if [[ -f "${CML_TFVARS}" ]]; then
-    python3 "${TFVARS_PY}" "${CML_TFVARS}" allowed_ipv4_subnets_mgmt
-  elif [[ "${DRY_RUN}" == "1" ]]; then
-    echo "<allowed_ipv4_subnets_mgmt>"
-  else
-    die "config/cml.tfvars missing. Copy config/cml.tfvars.example and fill it in"
-  fi
 }
 
 resolve_network() {
   RESOURCE_GROUP="$(out_or_placeholder resource_group_name)"
   LOCATION="$(out_or_placeholder location)"
-  APPS_SUBNET_ID="$(out_or_placeholder apps_subnet_id)"
-  APPS_SUBNET_CIDR="$(out_or_placeholder apps_subnet_cidr)"
   LAB_SUMMARY_CIDR="$(out_or_placeholder lab_summary_cidr)"
   CML_PUBLIC_IP="$(out_or_placeholder public_ip_address)"
 }
 
-render_userdata() {
-  run render_ise_userdata "${USERDATA_FILE}"
-}
-
-# create_nsg: RADIUS and CoA from the lab summary (switches reaching ISE
-# and the return path for CoA, ADR 0003); admin and SSH from the operator
-# addresses only. Never 0.0.0.0/0.
-create_nsg() {
-  local mgmt
-  mgmt="$(operator_addresses)"
+# ensure_nsg: RADIUS from the lab summary (switches reaching ISE, ADR
+# 0003); admin and SSH from ISE_ADMIN_SOURCE_CIDR only, the CML host
+# address per ADR 0008. Never 0.0.0.0/0.
+ensure_nsg() {
   run az network nsg create -g "${RESOURCE_GROUP}" -n "${NSG_NAME}" -l "${LOCATION}" \
     --tags project=cml-azure-lab role=ise
   run az network nsg rule create -g "${RESOURCE_GROUP}" --nsg-name "${NSG_NAME}" \
     -n allow-radius --priority 100 --direction Inbound --access Allow \
     --protocol Udp --destination-port-ranges 1812 1813 \
     --source-address-prefixes "${LAB_SUMMARY_CIDR}"
-  # Belt and suspenders, not the normal path: CoA is ISE-initiated outbound
-  # to the NAD on 1700, and Azure NSGs are stateful, so the return traffic
-  # for that flow needs no inbound rule here. This inbound allow is kept,
-  # scoped to the lab summary, only to cover a NAD-initiated
-  # disconnect/CoA-request edge case.
   run az network nsg rule create -g "${RESOURCE_GROUP}" --nsg-name "${NSG_NAME}" \
-    -n allow-coa --priority 110 --direction Inbound --access Allow \
-    --protocol Udp --destination-port-ranges 1700 \
-    --source-address-prefixes "${LAB_SUMMARY_CIDR}"
-  # shellcheck disable=SC2086 # mgmt is a deliberately space-separated list
-  run az network nsg rule create -g "${RESOURCE_GROUP}" --nsg-name "${NSG_NAME}" \
-    -n allow-admin --priority 120 --direction Inbound --access Allow \
-    --protocol Tcp --destination-port-ranges 443 \
-    --source-address-prefixes ${mgmt}
-  # shellcheck disable=SC2086
-  run az network nsg rule create -g "${RESOURCE_GROUP}" --nsg-name "${NSG_NAME}" \
-    -n allow-ssh --priority 130 --direction Inbound --access Allow \
-    --protocol Tcp --destination-port-ranges 22 \
-    --source-address-prefixes ${mgmt}
+    -n allow-admin --priority 110 --direction Inbound --access Allow \
+    --protocol Tcp --destination-port-ranges 443 22 \
+    --source-address-prefixes "${ISE_ADMIN_SOURCE_CIDR}"
 }
 
-# create_vm: the platform login (--ssh-key-values) is a formality Azure
-# requires for every VM; ISE ignores it and never runs an SSH daemon on
-# the network-appliance side. ISE's real admin password reaches it only
-# through --custom-data, never this command line. No public IP: ADR 0003
-# reaches ISE by SSH-forwarding through the CML host only.
-create_vm() {
-  run az vm create -g "${RESOURCE_GROUP}" -n "${VM_NAME}" -l "${LOCATION}" \
-    --image "${ISE_IMAGE_PUBLISHER}:${ISE_IMAGE_OFFER}:${ISE_IMAGE_SKU}:${ISE_IMAGE_VERSION}" \
-    --plan-name "${ISE_IMAGE_SKU}" --plan-product "${ISE_IMAGE_OFFER}" --plan-publisher "${ISE_IMAGE_PUBLISHER}" \
-    --size "${ISE_VM_SIZE}" \
-    --subnet "${APPS_SUBNET_ID}" --private-ip-address "${ISE_PRIVATE_IP}" \
-    --nsg "${NSG_NAME}" --public-ip-address "" \
-    --custom-data "${USERDATA_FILE}" \
-    --authentication-type ssh --admin-username iseadmin --ssh-key-values "${SSH_PUBKEY}" \
-    --tags project=cml-azure-lab role=ise
+# render_params: scripts/lib/ise_params.py (Task 2) reads ISE_ADMIN_PASSWORD
+# and the rest of the ISE_* keys from this shell's environment, already
+# exported by load_ise_env's `set -a` source, so the password never
+# reaches this command line (ADR 0004, senior-secops). PARAMS_FILE is a
+# mktemp path under config/mcp-env/, the repo's one gitignored spot for
+# rendered secrets, and it is removed on exit by the trap in main(): it
+# holds the password in plain JSON, so it must not outlive this run.
+render_params() {
+  PARAMS_FILE="$(mktemp "${REPO_ROOT}/config/mcp-env/ise-params.XXXXXX")"
+  run python3 "${REPO_ROOT}/scripts/lib/ise_params.py" "${PARAMS_FILE}" --nsg "${NSG_NAME}"
 }
 
-tag_nic() {
-  run az network nic update -g "${RESOURCE_GROUP}" -n "${VM_NAME}VMNic" \
+# deploy: Cisco's solution template (ADR 0008) builds the public IP, NIC,
+# and VM in one deployment. --parameters @file, never inline values, so
+# nothing in PARAMS_FILE reaches the command line either.
+deploy() {
+  run az deployment group create -g "${RESOURCE_GROUP}" -n "ise-$(date +%s)" \
+    --template-file "${REPO_ROOT}/config/ise/template.json" \
+    --parameters "@${PARAMS_FILE}"
+}
+
+# tag_osdisk: the template tags the public IP, NIC, and VM (ADR 0008) but
+# not the OS disk it creates alongside them. Tag it too so every ISE
+# resource, the disk included, is disposable by role=ise.
+tag_osdisk() {
+  run az disk update -g "${RESOURCE_GROUP}" -n "${ISE_HOSTNAME}osdisk" \
     --set tags.project=cml-azure-lab tags.role=ise
 }
 
@@ -247,20 +214,32 @@ close_ise_forward() {
 # them from its own environment; neither is ever passed as an argument,
 # so neither can appear on a command line or in --dry-run output
 # (ADR 0004). ISE_API_BASE points ise_config.py at the forwarded local
-# port instead of ISE's unreachable private address (ADR 0003); the
-# forward is torn down on the way out even if ise_config.py fails, via
-# the EXIT trap.
+# port instead of ISE's private address (ADR 0003); the forward is torn
+# down on the way out even if ise_config.py fails, via the EXIT trap.
 apply_ise_policy() {
   local ise_ip="$1" jump="$2" key="$3"
-  # Process-wide EXIT trap. Safe only because this is main()'s last
-  # substantive step; if a later step needs its own EXIT trap, consolidate
-  # both in main() instead of stacking traps here.
-  trap close_ise_forward EXIT
   open_ise_forward "${ise_ip}" "${jump}" "${key}"
   ISE_API_BASE="https://127.0.0.1:${ISE_FORWARD_LOCAL_PORT}" \
     run python3 "${REPO_ROOT}/scripts/lib/ise_config.py"
   close_ise_forward
-  trap - EXIT
+}
+
+# cleanup_on_exit: the one EXIT trap for the whole script, set once in
+# main() rather than stacked per function (bash 3.2 traps replace, not
+# stack, so a second `trap ... EXIT` would silently drop the first).
+# Closes any still-open ISE forward and removes PARAMS_FILE, which holds
+# the ISE admin password in plain JSON (ADR 0004). Both halves are
+# already guarded no-ops when there is nothing to clean up, so this is
+# safe to run on every exit path, success or failure, at any stage.
+cleanup_on_exit() {
+  close_ise_forward
+  # `if`, not `[[ ... ]] && rm`: the trap's own exit status becomes the
+  # script's final exit code in bash, and a false `&&` short-circuit
+  # would silently turn an intended exit 0 into 1 whenever PARAMS_FILE is
+  # still empty (an early failure, before render_params runs).
+  if [[ -n "${PARAMS_FILE}" ]]; then
+    rm -f "${PARAMS_FILE}"
+  fi
 }
 
 main() {
@@ -268,14 +247,18 @@ main() {
     DRY_RUN=1
   fi
   require_env ARM_SUBSCRIPTION_ID
-  require_cmd terraform az python3 jq ssh
+  require_cmd az terraform jq python3 ssh
   load_ise_env
   resolve_network
-  render_userdata
-  confirm "Create the ISE VM (${ISE_VM_SIZE}, ${ISE_IMAGE_SKU}) at ${ISE_PRIVATE_IP} on the apps subnet?" || die "declined"
-  create_nsg
-  create_vm
-  tag_nic
+  # Set once, before PARAMS_FILE exists: cleanup_on_exit no-ops until
+  # render_params gives it something to remove, so an early failure is
+  # still safe to trap.
+  trap cleanup_on_exit EXIT
+  confirm "Deploy ISE ${ISE_IMAGE_SKU} (${ISE_VM_SIZE}) into ${RESOURCE_GROUP} at ${ISE_PRIVATE_IP}?" || die "declined"
+  ensure_nsg
+  render_params
+  deploy
+  tag_osdisk
   wait_for_ise_ready "${ISE_PRIVATE_IP}" "${CML_PUBLIC_IP}" "${REPO_ROOT}/keys/cml-lab"
   apply_ise_policy "${ISE_PRIVATE_IP}" "${CML_PUBLIC_IP}" "${REPO_ROOT}/keys/cml-lab"
   pass "ISE ready. Reach it through the CML host jump (ADR 0003), never directly."
