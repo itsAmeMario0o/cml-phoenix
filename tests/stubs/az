@@ -1,11 +1,35 @@
 #!/usr/bin/env bash
-# Stand-in for the Azure CLI in dry-run tests. Answers only what 20-up.sh
-# and scripts/00-preflight.sh ask.
+# Stand-in for the Azure CLI in dry-run tests. Answers only what 20-up.sh,
+# scripts/00-preflight.sh, 25-ise-up.sh, and 45-ise-down.sh ask.
 case "$*" in
   *"account show"*"--query id"*) echo "00000000-0000-0000-0000-000000000000" ;;
   *"account show"*"--query tenantId"*) echo "11111111-1111-1111-1111-111111111111" ;;
   *"account show"*) echo "stub-user" ;;
   *"vm image terms show"*"--query accepted"*) echo "true" ;;
+  # 45-ise-down.sh: find_ise_resources reads this directly, dry run
+  # included, so the plan can show exactly what would be deleted. Fixed
+  # ids for one of each resource type 25-ise-up.sh creates.
+  *"resource list"*"role=ise"*)
+    printf '%s\n' \
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/virtualMachines/ise	Microsoft.Compute/virtualMachines	ise" \
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/networkInterfaces/iseVMNic	Microsoft.Network/networkInterfaces	iseVMNic" \
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/networkSecurityGroups/ise-nsg	Microsoft.Network/networkSecurityGroups	ise-nsg" \
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/disks/ise_OsDisk	Microsoft.Compute/disks	ise_OsDisk" \
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/publicIPAddresses/isePublicIP	Microsoft.Network/publicIPAddresses	isePublicIP"
+    ;;
+  # 25-ise-up.sh mutating calls and 45-ise-down.sh deletes all go through
+  # run(), which only echoes "+ ..." in a dry run and never reaches this
+  # stub. These branches exist so the stub also answers a real (non-dry)
+  # invocation, e.g. from a future integration test.
+  *"network nsg create"*) ;;
+  *"network nsg rule create"*) ;;
+  *"vm create"*) echo '{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/virtualMachines/ise"}' ;;
+  *"network nic update"*) ;;
+  *"vm delete"*) ;;
+  *"network nic delete"*) ;;
+  *"network nsg delete"*) ;;
+  *"disk delete"*) ;;
+  *"network public-ip delete"*) ;;
   *"vm show"*)
     if [[ "${AZ_STUB_AUTH_FAIL:-0}" == "1" ]]; then
       echo "ERROR: Please run 'az login' to setup account." >&2
