@@ -8,8 +8,12 @@ case "$*" in
   *"output -raw public_ip_address"*) echo "203.0.113.5" ;;
   *"output -raw storage_account_name"*) echo "stfake" ;;
   *"output -raw resource_group_name"*) echo "rg-cml-lab" ;;
+  *"output -raw location"*) echo "eastus" ;;
+  *"output -raw lab_summary_cidr"*) echo "10.100.0.0/16" ;;
   *"output -raw"*) echo "stub-value" ;;
   *"output -json cml2info"*) echo '{"address":"203.0.113.5","url":"https://203.0.113.5","version":"2.9.0"}' ;;
-  *"output -json"*) echo '{"public_ip_address":{"value":"203.0.113.5"},"storage_account_name":{"value":"stfake"},"resource_group_name":{"value":"rg-cml-lab"}}' ;;
+  # location and lab_summary_cidr: scripts/25-ise-up.sh (ADR 0008) reads
+  # both, on top of the three outputs every other script here reads.
+  *"output -json"*) echo '{"public_ip_address":{"value":"203.0.113.5"},"storage_account_name":{"value":"stfake"},"resource_group_name":{"value":"rg-cml-lab"},"location":{"value":"eastus"},"lab_summary_cidr":{"value":"10.100.0.0/16"}}' ;;
   *) echo "terraform stub: unhandled: $*" >&2; exit 1 ;;
 esac

@@ -1,0 +1,414 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "hostName": {
+            "type": "string",
+            "metadata": {
+                "description": "This field only supports alphanumeric characters and hyphen (-). The length of the hostname must not exceed 19 characters."
+            }
+        },
+        "SSHKeyPairName": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The SSH key that must be used for authentication."
+            }
+        },
+        "managementNetwork": {
+            "type": "string",
+            "metadata": {
+                "description": "The virtual network (vNet) must belong to the same Resource Group in which you want to place the Cisco ISE instance."
+            }
+        },
+        "managementSubnet": {
+            "type": "string",
+            "metadata": {
+                "description": "The subnet must belong to the virtual network that you selected earlier."
+            }
+        },
+        "managementNSG": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The network security group must belong to the subnet you selected earlier."
+            }
+        },
+        "managementPrivateIP": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "(Optional) The IPv4 address must belong to the subnet that you selected earlier. If this field is left blank, the Azure DHCP server automatically assigns an IP address."
+            }
+        },
+        "publicIpNewOrExisting": {
+            "type": "string",
+            "defaultValue": "new",
+            "allowedValues": [
+                "none",
+                "new",
+                "existing"
+            ],
+            "metadata": {
+                "description": "Determines whether or not a new public ip should be provisioned."
+            }
+        },
+        "publicIpName": {
+            "type": "string",
+            "defaultValue": "PublicIp",
+            "metadata": {
+                "description": "Name of the public ip address"
+            }
+        },
+        "publicIpResourceGroupName": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().name]",
+            "metadata": {
+                "description": "Name of the resource group for the public ip address"
+            }
+        },
+        "publicIpAllocationMethod": {
+            "type": "string",
+            "defaultValue": "Dynamic",
+            "allowedValues": [
+                "Dynamic",
+                "Static",
+                ""
+            ],
+            "metadata": {
+                "description": "Allocation method for the public ip address"
+            }
+        },
+        "publicIpSku": {
+            "type": "string",
+            "defaultValue": "Basic",
+            "allowedValues": [
+                "Basic",
+                "Standard",
+                ""
+            ],
+            "metadata": {
+                "description": "Name of the resource group for the public ip address"
+            }
+        },
+        "timeZone": {
+            "type": "string",
+            "defaultValue": "Etc/UTC",
+            "metadata": {
+                "description": "We recommend that you set all Cisco ISE nodes to the Coordinated Universal Time (UTC) time zone, especially if your Cisco ISE nodes are installed in a distributed deployment.This ensures that the timestamps of the reports and logs from the various nodes in your deployment are always synchronized."
+            }
+        },
+        "instanceType": {
+            "type": "string",
+            "defaultValue": "Standard_F16s_v2",
+            "allowedValues": [
+                "Standard_F16s_v2",
+                "Standard_F32s_v2",
+                "Standard_D8s_v4",
+                "Standard_D32s_v4",
+                "Standard_D64s_v4"
+            ],
+            "metadata": {
+                "description": "Choose the required Cisco ISE instance type."
+            }
+        },
+        "storageType": {
+            "type": "string",
+            "allowedValues": [
+                "StandardSSD_LRS",
+                "Standard_LRS",
+                "Premium_LRS"
+            ],
+            "metadata": {
+                "description": "Choose a storage type for the data disks. For more information on Azure storage types, see the Azure Storage document."
+            }
+        },
+        "diskEncryptionSetId": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "diskEncryptionSetId url."
+            }
+        },
+        "volumeSize": {
+            "type": "int",
+            "defaultValue": 600,
+            "minValue": 300,
+            "maxValue": 2400,
+            "metadata": {
+                "description": "Specify the storage volume in GB. The valid range is 300GB to 2400GB. 300 GB to 600GB is for evaluation purpose only. 600GB is the minimum storage volume required for a production environment. When you terminate an instance, its volume is deleted."
+            }
+        },
+        "DNSDomain": {
+            "type": "string",
+            "defaultValue": "rainyday.com",
+            "metadata": {
+                "description": "The valid characters for this field are ASCII characters, numerals, hyphen (-), and period (.) (for example, cisco.com). If you use the wrong syntax, Cisco ISE services might not come up on launch."
+            }
+        },
+        "primaryNameServer": {
+            "type": "string",
+            "defaultValue": "172.31.31.254",
+            "metadata": {
+                "description": "The IP address of the name server in correct syntax. If you use the wrong syntax, Cisco ISE services might not come up on launch."
+            }
+        },
+        "secondaryNameServer": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The IP address of the name server in correct syntax. If you use the wrong syntax, Cisco ISE services might not come up on launch."
+            }
+        },
+        "tertiaryNameServer": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The IP address of the name server in correct syntax. If you use the wrong syntax, Cisco ISE services might not come up on launch."
+            }
+        },
+        "primaryNTPServer": {
+            "type": "string",
+            "defaultValue": "169.254.169.123",
+            "metadata": {
+                "description": "The IP address or hostname of the NTP server in correct syntax (for example, time.nist.gov). Your entry is not verified on submission. If you use the wrong syntax, Cisco ISE services might not come up on launch."
+            }
+        },
+        "secondaryNTPServer": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The IP address or hostname of the NTP server in correct syntax (for example, time.nist.gov). Your entry is not verified on submission. If you use the wrong syntax, Cisco ISE services might not come up on launch."
+            }
+        },
+        "tertiaryNTPServer": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The IP address or hostname of the NTP server in correct syntax (for example, time.nist.gov). Your entry is not verified on submission. If you use the wrong syntax, Cisco ISE services might not come up on launch."
+            }
+        },
+        "ERS": {
+            "type": "string",
+            "defaultValue": "no",
+            "allowedValues": [
+                "yes",
+                "no"
+            ],
+            "metadata": {
+                "description": "Do you want to enable ERS services in Cisco ISE at launch?"
+            }
+        },
+        "PXGrid": {
+            "type": "string",
+            "defaultValue": "no",
+            "allowedValues": [
+                "yes",
+                "no"
+            ],
+            "metadata": {
+                "description": "Do you want to enable pxGrid services in Cisco ISE at launch?"
+            }
+        },
+        "adminUsername": {
+            "type": "string",
+            "defaultValue": "iseadmin",
+            "metadata": {
+                "description": "The default admin username."
+            }
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Location for the resources."
+            }
+        },
+        "systemPassword": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Enter a password for the username \"iseadmin\", for Cisco ISE GUI access. The password must comply with the Cisco ISE password policy."
+            }
+        }
+    },
+    "variables": {
+        "varSSHKeyID": "[parameters('SSHKeyPairName')]",
+        "publicIpAddressId": {
+            "id": "[resourceId(parameters('publicIpResourceGroupName'), 'Microsoft.Network/publicIPAddresses', parameters('publicIpName'))]"
+        },
+        "varNICName": "[concat(parameters('hostName'), 'nic')]",
+        "varSubnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('managementNetwork'), parameters('managementSubnet'))]",
+        "varDefaultUserName": "[parameters('adminUsername')]",
+        "varOSDiskName": "[concat(parameters('hostName'), 'osdisk')]",
+        "varStorageAccountType": "[parameters('storageType')]",
+        "emptyProperties": {},
+        "properties": {
+            "networkSecurityGroup": {
+                "id": "[if(equals(parameters('managementNSG'), ''), '', resourceId('Microsoft.Network/networkSecurityGroups', parameters('managementNSG')))]"
+            }
+        },
+        "varManagementNSG": "[if(equals(parameters('managementNSG'), ''), variables('emptyProperties'), variables('properties'))]",
+        "varHostName": "[concat('hostname=', parameters('hostName'),'\n')]",
+        "varDNSDomain": "[concat('dnsdomain=', parameters('DNSDomain'),'\n')]",
+        "varPrimaryNameServer": "[concat('primarynameserver=', parameters('primaryNameServer'),'\n')]",
+        "varSecondaryNameServer": "[concat('secondarynameserver=', parameters('secondaryNameServer'),'\n')]",
+        "varTertiaryNameServer": "[concat('tertiarynameserver=', parameters('tertiaryNameServer'),'\n')]",
+        "varPrimaryNTPServer": "[concat('primaryntpserver=', parameters('primaryNTPServer'),'\n')]",
+        "varSecondaryNTPServer": "[concat('secondaryntpserver=', parameters('secondaryNTPServer'),'\n')]",
+        "varTertiaryNTPServer": "[concat('tertiaryntpserver=', parameters('tertiaryNTPServer'),'\n')]",
+        "varTimeZone": "[concat('timezone=', parameters('timeZone'),'\n')]",
+        "varUserName": "[concat('username=', variables('varDefaultUserName'),'\n')]",
+        "varUserCred": "[concat('password=', parameters('systemPassword'),'\n')]",
+        "varERS": "[concat('ersapi=', parameters('ERS'),'\n')]",
+        "varPXGrid": "[concat('pxGrid=', parameters('PXGrid'),'\n')]",
+        "varUserData": "[concat(variables('varHostName'),variables('varDNSDomain'),variables('varPrimaryNameServer'),variables('varSecondaryNameServer'),variables('varTertiaryNameServer'),variables('varPrimaryNTPServer'),variables('varSecondaryNTPServer'),variables('varTertiaryNTPServer'),variables('varTimeZone'),variables('varUserName'),variables('varUserCred'),variables('varERS'),variables('varPXGrid'))]",
+        "varUserDataOutput": "[concat(variables('varHostName'),variables('varDNSDomain'),variables('varPrimaryNameServer'),variables('varSecondaryNameServer'),variables('varTertiaryNameServer'),variables('varPrimaryNTPServer'),variables('varSecondaryNTPServer'),variables('varTertiaryNTPServer'),variables('varTimeZone'),variables('varUserName'),variables('varERS'),variables('varPXGrid'))]"
+    },
+    "resources": [
+        {
+            "name": "pid-b1b10abb-5c8f-4b28-aad1-69ba66519a02-partnercenter",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2020-10-01",
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "resources": []
+                }
+            }
+        },
+        {
+            "condition": "[equals(parameters('publicIpNewOrExisting'), 'new')]",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2021-02-01",
+            "name": "[parameters('publicIpName')]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "project": "cml-azure-lab",
+                "role": "ise"
+            },
+            "sku": {
+                "name": "[parameters('publicIpSku')]"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "[parameters('publicIpAllocationMethod')]"
+            }
+        },
+        {
+            "apiVersion": "2021-02-01",
+            "type": "Microsoft.Network/networkInterfaces",
+            "name": "[variables('varNICName')]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "project": "cml-azure-lab",
+                "role": "ise"
+            },
+            "dependsOn": [
+                "[parameters('publicIpName')]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "[if(equals(parameters('managementPrivateIP'), ''), 'Dynamic', 'Static')]",
+                            "publicIPAddress": "[if(not(equals(parameters('publicIpNewOrExisting'), 'none')), variables('publicIpAddressId') , json('null'))]",
+                            "privateIPAddress": "[if(equals(parameters('managementPrivateIP'), ''), '', parameters('managementPrivateIP'))]",
+                            "subnet": {
+                                "id": "[variables('varSubnetRef')]",
+                                "properties": "[variables('varManagementNSG')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "apiVersion": "2021-04-01",
+            "type": "Microsoft.Compute/virtualMachines",
+            "name": "[parameters('hostName')]",
+            "location": "[parameters('location')]",
+            "plan": {
+                "name": "cisco-ise_3_5",
+                "publisher": "cisco",
+                "product": "cisco-ise-virtual"
+            },
+            "tags": {
+                "project": "cml-azure-lab",
+                "role": "ise"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces/', variables('varNICName'))]"
+            ],
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('instanceType')]"
+                },
+                "osProfile": {
+                    "computerName": "[parameters('hostName')]",
+                    "adminUsername": "[variables('varDefaultUserName')]",
+                    "adminPassword": "[parameters('systemPassword')]",
+                    "linuxConfiguration": {
+                        "disablePasswordAuthentication": true,
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/', variables('varDefaultUserName'), '/.ssh/authorized_keys')]",
+                                    "keyData": "[variables('varSSHKeyID')]"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "cisco",
+                        "offer": "cisco-ise-virtual",
+                        "sku": "cisco-ise_3_5",
+                        "version": "3.5.527"
+                    },
+                    "osDisk": {
+                        "name": "[variables('varOSDiskName')]",
+                        "createOption": "FromImage",
+                        "caching": "ReadWrite",
+                        "diskSizeGB": "[int(parameters('volumeSize'))]",
+                        "managedDisk": {
+                            "storageAccountType": "[variables('varStorageAccountType')]",
+                            "diskEncryptionSet": {
+                                "id": "[if(equals(parameters('diskEncryptionSetId'), ''), json('null'), parameters('diskEncryptionSetId'))]"
+                            }
+                        }
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('varNICName'))]"
+                        }
+                    ]
+                },
+                "userData": "[base64(variables('varUserData'))]"
+            }
+        }
+    ],
+    "outputs": {
+        "printPrivateIP": {
+            "type": "string",
+            "value": "[variables('varNICName')]"
+        },
+        "printUserData": {
+            "type": "string",
+            "value": "[variables('varUserDataOutput')]"
+        },
+        "printPublicKey": {
+            "type": "string",
+            "value": "[variables('varSSHKeyID')]"
+        },
+        "printPublicIPValue": {
+            "type": "string",
+            "value": "[parameters('publicIpName')]"
+        }
+    }
+}

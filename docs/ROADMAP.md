@@ -66,6 +66,30 @@ moved to the Done section at the bottom.
    topology repo registered on every build through the API, so labs
    import on day one. Public repo to avoid a credential on the
    controller. Pairs with the export to blob at teardown.
+16. Reclaim cloud-manager licenses at teardown. Near-term priority.
+    Labs register devices against cloud-delivered managers, and the
+    manager holds the license until the device record is deleted.
+    Today that is manual: the IPS lab's FTDs show unregistered after a
+    rebuild, but cloud-delivered FMC still lists them, so the license is
+    not freed until each record is deleted by hand. A teardown step
+    should release those records over the manager's API before the CML
+    VM is destroyed, so the next build starts with the seats back. First
+    target is cloud-delivered FMC through Security Cloud Control: a
+    stdlib Python client in `scripts/lib/` that reads the tenant and API
+    token from a gitignored env file and deletes the lab's device
+    records, with a fake API server for the test, matching the kit's
+    existing patterns. The same shape extends to the other cloud
+    managers the labs depend on, which is why it is worth building once
+    and reusing. Needs a short spec before any code.
+17. Azure Bastion for browser-based access. Optional. It lets an
+    operator open a lab VM's SSH or RDP session from the Azure portal,
+    and reach any other port with `az network bastion tunnel`, without
+    the CML host jump and without giving that VM its own public IP.
+    Access is controlled by RBAC on the Bastion resource rather than an
+    IP allow-list. It is a persistent resource that bills whether or
+    not anyone connects, and it needs its own `/26` subnet named
+    `AzureBastionSubnet` in the persistent VNet. Not needed while the
+    CML host jump remains the access path (ADR 0003, ADR 0008).
 
 ## Images and scenarios
 

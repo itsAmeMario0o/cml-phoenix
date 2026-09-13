@@ -8,8 +8,10 @@
 #   5. /data mounted on the host
 #   6. /data/images populated and bind-mounted on /var/lib/libvirt/images
 #   7. /data/exports writable by sysadmin
-#   8. Data disk attached at LUN 0 (az)
-#   9. cml-mcp on the Mac lists labs through scripts/mcp-cml.sh
+#   8. Transit bridge br-transit up at 10.100.0.1 with ip_forward enabled
+#      (ADR 0003: routed connectivity, no NAT)
+#   9. Data disk attached at LUN 0 (az)
+#  10. cml-mcp on the Mac lists labs through scripts/mcp-cml.sh
 #
 # Exit 1 on any FAIL. Overrides: none needed; CML_SSH_KEY for the key path.
 set -euo pipefail
@@ -89,6 +91,29 @@ check_exports_writable() {
   fi
 }
 
+# check_transit_bridge: the fork's customize script (ADR 0003) builds
+# br-transit and enables forwarding at boot so lab traffic routes to the
+# host's local bridge instead of being NAT'd. Both must survive every
+# rebuild of the disposable CML VM.
+check_transit_bridge() {
+  local addr fwd
+  # ADR 0003 fixes br-transit at 10.100.0.1/24. Extract the address field
+  # and compare exactly, a substring match would also pass for any other
+  # host in the same /24 and miss drift from the fixed address.
+  addr="$(cml_ssh "ip -o -4 addr show br-transit | awk '{print \$4}'" 2>/dev/null || true)"
+  if [[ "${addr}" == "10.100.0.1/24" ]]; then
+    pass "br-transit holds 10.100.0.1/24"
+  else
+    miss "br-transit address '${addr:-none}', expected 10.100.0.1/24 (see ADR 0003)"
+  fi
+  fwd="$(cml_ssh "sysctl -n net.ipv4.ip_forward" 2>/dev/null || true)"
+  if [[ "${fwd}" == "1" ]]; then
+    pass "net.ipv4.ip_forward is 1"
+  else
+    miss "net.ipv4.ip_forward is '${fwd:-unset}', expected 1 (see ADR 0003)"
+  fi
+}
+
 check_lun0() {
   local rg name
   if ! rg="$(tf_out persistent resource_group_name)"; then
@@ -120,6 +145,7 @@ main() {
   check_license
   check_data_disk_on_host
   check_exports_writable
+  check_transit_bridge
   check_lun0
   check_mcp
   summary_and_exit

@@ -8,12 +8,21 @@ SCRIPT="${REPO_ROOT}/scripts/00-preflight.sh"
 failures=0
 
 # Never destroy an operator's real preflight marker. Save it aside and
-# restore it no matter how this test exits.
+# restore it no matter how this test exits. Also clear the scratch
+# directory used for the ISE env fixture below (matches the .gitignore
+# tests/.tmp*/ pattern, so nothing here is ever tracked).
 MARKER="${REPO_ROOT}/.preflight-ok"
+ISE_TMP_DIR="${REPO_ROOT}/tests/.tmp-ise"
 if [[ -f "${MARKER}" ]]; then
   mv "${MARKER}" "${MARKER}.saved"
-  trap 'mv "${MARKER}.saved" "${MARKER}" 2>/dev/null || true' EXIT
 fi
+cleanup() {
+  mv "${MARKER}.saved" "${MARKER}" 2>/dev/null || true
+  rm -rf "${ISE_TMP_DIR}"
+}
+trap cleanup EXIT
+rm -rf "${ISE_TMP_DIR}"
+mkdir -p "${ISE_TMP_DIR}"
 
 assert_contains() {
   local label="$1" needle="$2" haystack="$3"
@@ -53,6 +62,29 @@ if [[ -f "${REPO_ROOT}/.preflight-ok" ]]; then
 else
   echo "[OK]    no marker on failure"
 fi
+
+# check_ise_marketplace: point ISE_ENV_FILE at a scratch path instead of
+# the operator's real config/mcp-env/ise.env. FAIL_COUNT proves an absent
+# file only WARNs and never fails preflight.
+ise_of() {
+  local env_file="$1"
+  PATH="${REPO_ROOT}/tests/stubs:${PATH}" ISE_ENV_FILE="${env_file}" \
+    bash -c "source '${SCRIPT}'; check_ise_marketplace; echo FAIL_COUNT=\${fail}"
+}
+
+out="$(ise_of "${ISE_TMP_DIR}/absent.env")"
+assert_contains "ise.env absent warns" "[WARN]  config/mcp-env/ise.env missing" "${out}"
+assert_contains "ise.env absent does not fail preflight" "FAIL_COUNT=0" "${out}"
+
+cat > "${ISE_TMP_DIR}/ise.env" <<'EOF'
+ISE_IMAGE_PUBLISHER=cisco
+ISE_IMAGE_OFFER=cisco-ise-virtual
+ISE_IMAGE_SKU=cisco-ise_3_5
+ISE_IMAGE_VERSION=latest
+EOF
+out="$(ise_of "${ISE_TMP_DIR}/ise.env")"
+assert_contains "ise.env present gives OK" "[OK]    ISE Marketplace terms accepted" "${out}"
+assert_contains "ise.env present does not fail preflight" "FAIL_COUNT=0" "${out}"
 
 if [[ "${RUN_AZ_TESTS:-0}" == "1" ]]; then
   out="$(bash "${SCRIPT}" 2>&1 || true)"
