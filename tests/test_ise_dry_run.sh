@@ -11,10 +11,11 @@ DOWN_SCRIPT="${REPO_ROOT}/scripts/45-ise-down.sh"
 chmod +x "${REPO_ROOT}/tests/stubs/"*
 failures=0
 
-# A fake secret, distinct enough that an accidental leak cannot be
-# mistaken for anything else. If this string appears anywhere in the
+# Fake secrets, distinct enough that an accidental leak cannot be
+# mistaken for anything else. If either string appears anywhere in the
 # up script's dry-run output, the test must fail.
 FAKE_PASSWORD="Sup3rSecretTestOnly-DoNotLeak"
+FAKE_RADIUS_SECRET="Sup3rRadiusTestOnly-DoNotLeak"
 
 FIXTURE_DIR="${REPO_ROOT}/tests/.tmp-ise-dry-run"
 rm -rf "${FIXTURE_DIR}"
@@ -43,6 +44,7 @@ ISE_VM_SIZE=Standard_D8s_v4
 ISE_PRIVATE_IP=10.20.2.20
 ISE_HOSTNAME=ise-lab
 ISE_ADMIN_PASSWORD=${FAKE_PASSWORD}
+RADIUS_SECRET=${FAKE_RADIUS_SECRET}
 EOF
 
 cat > "${FIXTURE_DIR}/cml.tfvars" <<'EOF'
@@ -95,9 +97,11 @@ assert_contains "vm create no public ip" "--public-ip-address" "${up_out}"
 assert_contains "vm create tags" "--tags project=cml-azure-lab role=ise" "${up_out}"
 assert_contains "nic tagged too" "+ az network nic update" "${up_out}"
 assert_contains "readiness wait planned" "+ poll https://10.20.2.20/admin/API/mnt/Version through 203.0.113.5:1122" "${up_out}"
+assert_contains "ise policy step planned" "+ python3 ${REPO_ROOT}/scripts/lib/ise_config.py" "${up_out}"
 
 assert_not_contains "admin password never printed" "${FAKE_PASSWORD}" "${up_out}"
 assert_not_contains "no --custom-data content inlined" "password=${FAKE_PASSWORD}" "${up_out}"
+assert_not_contains "radius secret never printed" "${FAKE_RADIUS_SECRET}" "${up_out}"
 
 # --- 45-ise-down.sh --dry-run ---
 

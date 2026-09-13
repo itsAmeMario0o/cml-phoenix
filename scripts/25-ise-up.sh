@@ -83,6 +83,11 @@ load_ise_env() {
   : "${ISE_PRIVATE_IP:?missing in ${ISE_ENV_FILE}}"
   : "${ISE_HOSTNAME:?missing in ${ISE_ENV_FILE}, see config/ise.env.example}"
   : "${ISE_ADMIN_PASSWORD:?missing in ${ISE_ENV_FILE}, see config/ise.env.example}"
+  # Required up front, not just when the policy step runs: apply_ise_policy
+  # (scripts/lib/ise_config.py) is the RADIUS client secret for the NAD it
+  # registers, and a build should fail fast rather than 30-45 minutes into
+  # wait_for_ise_ready.
+  : "${RADIUS_SECRET:?missing in ${ISE_ENV_FILE}, see config/ise.env.example}"
 }
 
 # Operator addresses come from the same tfvars list that scopes the CML
@@ -188,6 +193,18 @@ wait_for_ise_ready() {
   die "ISE did not answer within $((READY_TIMEOUT_S / 60)) minutes"
 }
 
+# apply_ise_policy: the minimal TrustSec Phase 1 policy, one network
+# device and one authorization rule (scripts/lib/ise_config.py). Runs
+# only after ISE answers, since the ERS API needs a fully booted node.
+# ISE_PRIVATE_IP, ISE_ADMIN_PASSWORD, and RADIUS_SECRET are already in
+# this shell's environment from load_ise_env's `set -a` source, so
+# ise_config.py reads them from its own environment; none of the three is
+# ever passed as an argument, so none can appear on a command line or in
+# --dry-run output (ADR 0004).
+apply_ise_policy() {
+  run python3 "${REPO_ROOT}/scripts/lib/ise_config.py"
+}
+
 main() {
   if [[ "${1:-}" == "--dry-run" ]]; then
     DRY_RUN=1
@@ -202,6 +219,7 @@ main() {
   create_vm
   tag_nic
   wait_for_ise_ready "${ISE_PRIVATE_IP}" "${CML_PUBLIC_IP}" "${REPO_ROOT}/keys/cml-lab"
+  apply_ise_policy
   pass "ISE ready. Reach it through the CML host jump (ADR 0003), never directly."
 }
 
