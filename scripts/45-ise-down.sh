@@ -17,25 +17,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 DRY_RUN=0
 
-run() {
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ $*"
-  else
-    "$@"
-  fi
-}
-
-out_or_placeholder() {
-  local value
-  if value="$(tf_out persistent "$1" 2>/dev/null)" && [[ -n "${value}" ]]; then
-    echo "${value}"
-  elif [[ "${DRY_RUN}" == "1" ]]; then
-    echo "<$1>"
-  else
-    die "persistent output $1 unavailable"
-  fi
-}
-
 # find_ise_resources: id, type, name (tab separated) per line for
 # everything tagged role=ise in the lab resource group. Read-only, so it
 # always runs for real, dry run included, and shows exactly what would
@@ -78,9 +59,7 @@ delete_all() {
 
 main() {
   local rows
-  if [[ "${1:-}" == "--dry-run" ]]; then
-    DRY_RUN=1
-  fi
+  DRY_RUN="$(parse_dry_run_only "$@")"
   require_env ARM_SUBSCRIPTION_ID
   require_cmd az terraform jq
   rows="$(find_ise_resources)" || die "cannot list ISE resources by tag"

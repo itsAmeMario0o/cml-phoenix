@@ -4,7 +4,9 @@
 #   source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 #
 # Provides: REPO_ROOT, pass/warn/miss counters, summary_and_exit, die,
-# require_cmd, require_env, tf_out, cml_ip, cml_ssh, confirm.
+# require_cmd, require_env, tf_out, cml_ip, cml_ssh, cml_remote, cml_scp,
+# cml_api_ready, confirm, load_cml_env, run, out_or_placeholder,
+# parse_dry_run_only, azcopy_env_init.
 #
 # Must stay bash 3.2 compatible: this runs on macOS.
 
@@ -102,4 +104,107 @@ confirm() {
     y|Y|yes|YES) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# run CMD...: execute CMD, or under DRY_RUN=1 print "+ CMD..." instead of
+# running it. Every mutating script sets its own DRY_RUN; this wrapper is
+# syntactic (mirrors set -x's "+" convention) so a dry run exercises the
+# same argument construction as a real run, never a separate mocked path.
+run() {
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "+ $*"
+  else
+    "$@"
+  fi
+}
+
+# out_or_placeholder NAME: a persistent-root output, or the literal
+# "<NAME>" under DRY_RUN=1 when the root may not be applied yet, or a
+# hard failure otherwise. Shared by every script that resolves a
+# persistent-root value before rendering config or naming a resource.
+out_or_placeholder() {
+  local value
+  if value="$(tf_out persistent "$1" 2>/dev/null)" && [[ -n "${value}" ]]; then
+    echo "${value}"
+  elif [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "<$1>"
+  else
+    die "persistent output $1 unavailable"
+  fi
+}
+
+# parse_dry_run_only "$@": for a script whose only accepted argument is
+# --dry-run. Dies on anything else rather than silently discarding it, so
+# a typo like --dryrun cannot fall through and run for real against
+# Azure. Echoes 0 or 1; callers do DRY_RUN="$(parse_dry_run_only "$@")".
+parse_dry_run_only() {
+  local dry=0 arg
+  for arg in "$@"; do
+    case "${arg}" in
+      --dry-run) dry=1 ;;
+      *) die "usage: $(basename "$0") [--dry-run]" ;;
+    esac
+  done
+  echo "${dry}"
+}
+
+# cml_remote SUBCOMMAND [ARGS...]: run one of cml-remote.sh's subcommands
+# (list-labs, export-labs, stop-labs, license-status, deregister) on the
+# CML host over the same jump cml_ssh uses. cml-remote.sh never runs on
+# the Mac; it is piped over SSH and executed on the host itself.
+cml_remote() {
+  cml_ssh "bash -s -- $*" < "${REPO_ROOT}/scripts/lib/cml-remote.sh"
+}
+
+# cml_scp ARGS...: scp through the CML host's system shell port (1122,
+# same jump cml_ssh uses), forwarding every argument (source, dest, and
+# any scp flags) straight through.
+cml_scp() {
+  local key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
+  scp -P 1122 -i "${key}" "${CML_SSH_OPTS[@]}" "$@"
+}
+
+# cml_api_ready IP: true if the CML controller's own API reports ready.
+cml_api_ready() {
+  [[ "$(curl -sk -m 10 "https://$1/api/v0/system_information" | jq -r .ready 2>/dev/null)" == "true" ]]
+}
+
+# azcopy_env_init: point azcopy's logs and job plans at .azcopy/ inside
+# the repo, never a dotfile under $HOME (CLAUDE.md: never create files
+# outside this repo), and use the az CLI's own login session instead of
+# a separate azcopy login.
+azcopy_env_init() {
+  export AZCOPY_AUTO_LOGIN_TYPE=AZCLI
+  export AZCOPY_LOG_LOCATION="${REPO_ROOT}/.azcopy" AZCOPY_JOB_PLAN_LOCATION="${REPO_ROOT}/.azcopy"
+  mkdir -p "${AZCOPY_LOG_LOCATION}"
+}
+
+# load_cml_env [--require-labs]: source config/mcp-env/cml.env (mandatory)
+# and config/mcp-env/labs.env (optional unless --require-labs), exporting
+# every key so a caller's python3 or curl subprocess inherits them
+# without either ever crossing a command line (ADR 0004). A caller may
+# override CML_ENV_FILE/LAB_ENV_FILE before calling. Validates only the
+# four keys every caller needs (CML_URL, CML_USERNAME, CML_PASSWORD,
+# CML_VERIFY_SSL); a script-specific key like LAB_PASSWORD is the
+# caller's own check, made right after calling this.
+load_cml_env() {
+  local require_labs=0
+  case "${1:-}" in --require-labs) require_labs=1 ;; esac
+  CML_ENV_FILE="${CML_ENV_FILE:-${REPO_ROOT}/config/mcp-env/cml.env}"
+  LAB_ENV_FILE="${LAB_ENV_FILE:-${REPO_ROOT}/config/mcp-env/labs.env}"
+  [[ -f "${CML_ENV_FILE}" ]] || die "${CML_ENV_FILE} missing. Run scripts/20-up.sh first."
+  set -a
+  # shellcheck disable=SC1090
+  source "${CML_ENV_FILE}"
+  if [[ -f "${LAB_ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${LAB_ENV_FILE}"
+  elif [[ "${require_labs}" == "1" ]]; then
+    set +a
+    die "${LAB_ENV_FILE} missing. Start from config/labs.env.example"
+  fi
+  set +a
+  : "${CML_URL:?CML_URL missing in ${CML_ENV_FILE}}"
+  : "${CML_USERNAME:?CML_USERNAME missing in ${CML_ENV_FILE}}"
+  : "${CML_PASSWORD:?CML_PASSWORD missing in ${CML_ENV_FILE}}"
 }

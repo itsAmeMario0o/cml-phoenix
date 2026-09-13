@@ -16,61 +16,37 @@ set -euo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
 LOCAL_EXPORTS="${REPO_ROOT}/exports"
 DRY_RUN=0
 
-run() {
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ $*"
-  else
-    "$@"
-  fi
-}
-
-api_ready() {
-  local ip="$1"
-  [[ "$(curl -sk -m 10 "https://${ip}/api/v0/system_information" | jq -r .ready 2>/dev/null)" == "true" ]]
-}
-
 export_on_host() {
-  local ip="$1" stamp="$2" key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ ssh -p 1122 sysadmin@${ip} bash -s -- export-labs /data/exports/${stamp} < ${REMOTE_LIB}"
-  else
-    ssh -p 1122 -i "${key}" "${CML_SSH_OPTS[@]}" "sysadmin@${ip}" \
-      "bash -s -- export-labs /data/exports/${stamp}" < "${REMOTE_LIB}"
-  fi
+  local stamp="$1"
+  run cml_remote export-labs "/data/exports/${stamp}"
 }
 
 pull_local_copy() {
-  local ip="$1" stamp="$2" key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
+  local ip="$1" stamp="$2"
   mkdir -p "${LOCAL_EXPORTS}"
-  run scp -P 1122 -i "${key}" "${CML_SSH_OPTS[@]}" -q -r \
-    "sysadmin@${ip}:/data/exports/${stamp}" "${LOCAL_EXPORTS}/${stamp}"
+  run cml_scp -q -r "sysadmin@${ip}:/data/exports/${stamp}" "${LOCAL_EXPORTS}/${stamp}"
 }
 
 push_to_blob() {
   local stamp="$1" sa
   sa="$(tf_out persistent storage_account_name)"
-  export AZCOPY_AUTO_LOGIN_TYPE=AZCLI
-  export AZCOPY_LOG_LOCATION="${REPO_ROOT}/.azcopy" AZCOPY_JOB_PLAN_LOCATION="${REPO_ROOT}/.azcopy"
-  mkdir -p "${AZCOPY_LOG_LOCATION}"
+  azcopy_env_init
   run azcopy copy "${LOCAL_EXPORTS}/${stamp}" "https://${sa}.blob.core.windows.net/exports/" --recursive
 }
 
 main() {
   local ip stamp
-  if [[ "${1:-}" == "--dry-run" ]]; then
-    DRY_RUN=1
-  fi
+  DRY_RUN="$(parse_dry_run_only "$@")"
   require_cmd terraform ssh scp azcopy curl jq
   ip="$(cml_ip)"
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  if [[ "${DRY_RUN}" != "1" ]] && ! api_ready "${ip}"; then
+  if [[ "${DRY_RUN}" != "1" ]] && ! cml_api_ready "${ip}"; then
     die "CML API at https://${ip} is not ready. Nothing exported."
   fi
-  export_on_host "${ip}" "${stamp}"
+  export_on_host "${stamp}"
   pull_local_copy "${ip}" "${stamp}"
   push_to_blob "${stamp}"
   pass "exports in ${LOCAL_EXPORTS}/${stamp} and blob container exports/${stamp}"

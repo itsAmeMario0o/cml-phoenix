@@ -13,10 +13,10 @@ line_of() { grep -nF -- "$1" <<<"$2" | head -1 | cut -d: -f1; }
 
 out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x ASSUME_YES=1 bash "${SCRIPT}" --dry-run 2>&1)"
 assert_contains "export first" "30-export-labs.sh --dry-run" "${out}"
-assert_contains "stop labs" "bash -s -- stop-labs" "${out}"
+assert_contains "stop labs" "+ cml_remote stop-labs" "${out}"
 assert_contains "deregister via del.sh" "/provision/del.sh" "${out}"
 assert_contains "destroy cml root" "+ terraform -chdir=${REPO_ROOT}/vendor/cloud-cml destroy" "${out}"
-a="$(line_of "30-export-labs.sh" "${out}")"; b="$(line_of "stop-labs" "${out}")"; c="$(line_of "/provision/del.sh" "${out}")"; d="$(line_of "vendor/cloud-cml destroy" "${out}")"
+a="$(line_of "30-export-labs.sh" "${out}")"; b="$(line_of "cml_remote stop-labs" "${out}")"; c="$(line_of "/provision/del.sh" "${out}")"; d="$(line_of "vendor/cloud-cml destroy" "${out}")"
 if [[ "${a}" -lt "${b}" && "${b}" -lt "${c}" && "${c}" -lt "${d}" ]]; then echo "[OK]    order export < stop < deregister < destroy"; else
   echo "[FAIL]  order: ${a} ${b} ${c} ${d}"; failures=$((failures + 1)); fi
 

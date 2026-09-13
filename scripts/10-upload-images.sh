@@ -28,14 +28,6 @@ MOUNT_POINT="${REPO_ROOT}/.refplat-mount"
 DRY_RUN=0
 MOUNTED=0
 
-run() {
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ $*"
-  else
-    "$@"
-  fi
-}
-
 # Cisco ships add-on ISOs beside the base one, named -supplemental, -ise,
 # -wireless, and -proprietary. They match refplat-*.iso too, so they are
 # dropped here; the base ISO is the default and REFPLAT_ISO picks any other.
@@ -122,12 +114,8 @@ upload_all() {
 
 main() {
   local iso base
-  if [[ "${1:-}" == "--dry-run" ]]; then
-    DRY_RUN=1
-  fi
-  export AZCOPY_AUTO_LOGIN_TYPE=AZCLI
-  export AZCOPY_LOG_LOCATION="${REPO_ROOT}/.azcopy" AZCOPY_JOB_PLAN_LOCATION="${REPO_ROOT}/.azcopy"
-  mkdir -p "${AZCOPY_LOG_LOCATION}"
+  DRY_RUN="$(parse_dry_run_only "$@")"
+  azcopy_env_init
   echo "AZCOPY_LOG_LOCATION=${AZCOPY_LOG_LOCATION}"
   if [[ "${DRY_RUN}" != "1" ]]; then
     require_cmd azcopy az python3

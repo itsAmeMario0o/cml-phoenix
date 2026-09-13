@@ -1,13 +1,13 @@
 # Deploying ISE from the Azure Marketplace, by hand
 
-This is the reliable way to bring up ISE for the lab. The automated ARM path
-(`az deployment group create` against the exported template) fails: the ISE
-appliance image never completes Azure's OS-provisioning handshake, so ARM
-marks the VM `OSProvisioningTimedOut` and reaches a terminal, non-recoverable
-state, even though the portal's Marketplace flow deploys the same image and
-lets ISE boot. Until that is solved, deploy ISE through the portal with the
-values below, then let the kit take over for config, verification, and
-teardown.
+This is the way to bring up ISE for the lab. An earlier automated path
+(`az deployment group create` against an exported template) was retired: the
+ISE appliance image never completes Azure's OS-provisioning handshake, so
+ARM marked the VM `OSProvisioningTimedOut` and reached a terminal,
+non-recoverable state, even though the portal's Marketplace flow deploys the
+same image and lets ISE boot (ADR 0008 amendment, 2026-09-13). Deploy ISE
+through the portal with the values below, then let the kit take over for
+config, verification, and teardown.
 
 Everything here uses our environment: resource group `rg-cml-lab`, region
 East US 2, VNet `vnet-cml-lab`, subnet `snet-apps`. The values are chosen to
@@ -97,50 +97,32 @@ continues to boot. First boot takes 30 to 45 minutes.
 
 The wizard's network security group handling is limited, so leave it unset
 here. The Standard public IP is inbound-closed by default, so nothing is
-exposed. After ISE is up, apply the scoped rules the lab needs, sourced from
-the CML host and the lab summary, never `0.0.0.0/0`:
+exposed while it boots. Everything after the wizard, the NSG and its
+attachment, tagging, the readiness wait, and the policy apply, is one
+command:
 
 ```bash
-RG=rg-cml-lab
-az network nsg create -g "$RG" -n ise-nsg -l eastus2 \
-  --tags project=cml-azure-lab role=ise
-az network nsg rule create -g "$RG" --nsg-name ise-nsg -n allow-radius \
-  --priority 100 --direction Inbound --access Allow --protocol Udp \
-  --destination-port-ranges 1812 1813 --source-address-prefixes 10.100.0.0/16
-az network nsg rule create -g "$RG" --nsg-name ise-nsg -n allow-admin \
-  --priority 110 --direction Inbound --access Allow --protocol Tcp \
-  --destination-port-ranges 443 22 --source-address-prefixes 10.20.1.10/32
-az network nic update -g "$RG" -n ise1nic --network-security-group ise-nsg
+scripts/25-ise-up.sh --post-deploy
 ```
 
-Tag the VM and its disk so teardown by tag catches everything:
-
-```bash
-az resource tag -g "$RG" --tags project=cml-azure-lab role=ise \
-  --name ise1 --resource-type Microsoft.Compute/virtualMachines
-az disk update -g "$RG" -n ise1osdisk --set tags.project=cml-azure-lab tags.role=ise
-```
+It creates `ise-nsg` with the scoped rules the lab needs (RADIUS from the
+lab summary, admin 443/22 from the CML host, never `0.0.0.0/0`), attaches it
+to the NIC the wizard created, tags the VM and its OS disk `role=ise` so
+teardown by tag catches both, waits for ISE to answer through the CML jump
+(30-45 minutes), and applies the minimal TrustSec Phase 1 policy. Run
+`scripts/25-ise-up.sh --post-deploy --dry-run` first to see the plan; it
+reads its settings from `config/mcp-env/ise.env` (`config/ise.env.example`
+to start from).
 
 ## After it boots
 
-1. Confirm ISE answers through the CML jump (do not reach it directly):
-
-   ```bash
-   CML=$(terraform -chdir=terraform/persistent output -raw public_ip_address)
-   ssh -p 1122 -i keys/cml-lab "sysadmin@${CML}" \
-     "curl -sk -o /dev/null -w '%{http_code}\n' --max-time 10 https://10.20.2.20/admin/API/mnt/Version"
-   ```
-
-   A non-`000` HTTP code means ISE is serving.
-
-2. Apply the minimal policy with the kit's config tooling once ISE is ready.
-
-3. Confirm the deploy did not disturb the routed path:
+1. `scripts/25-ise-up.sh --post-deploy` (above) confirms ISE answers through
+   the CML jump as its own readiness check; it never reaches ISE directly.
+2. Confirm the deploy did not disturb the routed path:
    `terraform -chdir=terraform/persistent plan` should show no changes, which
    proves the `rt-apps` route table is still associated with `snet-apps`.
 
 ## Tearing it down
 
-`scripts/45-ise-down.sh` deletes everything tagged `role=ise`. If you skipped
-the tagging step above, delete `ise1`, `ise1nic`, `ise1-ip`, `ise-nsg`, and
-`ise1osdisk` by name instead.
+`scripts/45-ise-down.sh` deletes everything tagged `role=ise`: `ise1`,
+`ise1nic`, `ise1-ip`, `ise-nsg`, and `ise1osdisk`.

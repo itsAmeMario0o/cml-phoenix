@@ -217,9 +217,10 @@ check_blobs() {
 }
 
 # check_ise_marketplace: confirm the Cisco ISE Marketplace offer's terms
-# are accepted. ISE deploys by az CLI, not Terraform, and is optional
-# until its own build task runs, so an absent ISE_ENV_FILE only WARNs.
-# See ADR 0003 for the routed network ISE lands on.
+# are accepted, needed before the portal deploy in
+# docs/ISE-MARKETPLACE-DEPLOY.md (ADR 0008 amendment) regardless of
+# deploy method. ISE is optional until that deploy runs, so an absent
+# ISE_ENV_FILE only WARNs.
 check_ise_marketplace() {
   local accepted
   if [[ ! -f "${ISE_ENV_FILE}" ]]; then

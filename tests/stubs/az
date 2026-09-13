@@ -23,11 +23,8 @@ case "$*" in
   # invocation, e.g. from a future integration test.
   *"network nsg create"*) ;;
   *"network nsg rule create"*) ;;
-  *"vm create"*) echo '{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/virtualMachines/ise"}' ;;
   *"network nic update"*) ;;
-  # 25-ise-up.sh (solution-template deploy, ADR 0008): the deployment and
-  # the OS disk tag that follows it.
-  *"deployment group create"*) echo '{"properties":{"provisioningState":"Succeeded"}}' ;;
+  *"resource tag"*) ;;
   *"disk update"*) ;;
   *"vm delete"*) ;;
   *"network nic delete"*) ;;

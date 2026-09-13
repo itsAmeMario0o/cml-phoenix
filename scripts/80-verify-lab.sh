@@ -11,17 +11,19 @@
 # Order:
 #   1. Confirm verify/.venv exists (see verify/README.md to bootstrap it).
 #   2. Confirm verify/<scenario>/jobfile.py exists.
-#   3. Resolve the scenario's lab title by reading it from the tracked
+#   3. load_cml_env (scripts/lib/common.sh) sources config/mcp-env/cml.env
+#      and exports CML_URL/CML_USERNAME/CML_PASSWORD for gen_testbed.py to
+#      read from its own environment (ADR 0004); neither ever appears on
+#      this or gen_testbed.py's command line, so a --dry-run plan carries
+#      no secret (senior-secops).
+#   4. Resolve the scenario's lab title by reading it from the tracked
 #      topology in labs/, through scripts/lib/render_lab.py --print-title,
 #      so the title used to find the lab on CML can never drift from the
 #      YAML (ADR 0006 documents why the tracked file, not this script,
 #      owns the title).
-#   4. Generate verify/.testbed/<scenario>.yaml from the running lab
-#      (verify/lib/gen_testbed.py, Task 2). CML credentials come from
-#      config/mcp-env/cml.env through the environment (ADR 0004) and
-#      never appear on this or gen_testbed.py's command line, so a
-#      --dry-run plan carries no secret (senior-secops).
-#   5. Run the scenario's jobfile with easypy in the pyATS venv. easypy
+#   5. Generate verify/.testbed/<scenario>.yaml from the running lab
+#      (verify/lib/gen_testbed.py, Task 2).
+#   6. Run the scenario's jobfile with easypy in the pyATS venv. easypy
 #      prints its own report archive path to stdout; this script does not
 #      capture or suppress that output.
 #
@@ -35,14 +37,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 VENV_DIR="${REPO_ROOT}/verify/.venv"
 RENDER="${REPO_ROOT}/scripts/lib/render_lab.py"
 DRY_RUN=0
-
-run() {
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ $*"
-  else
-    "$@"
-  fi
-}
 
 usage() {
   echo "usage: scripts/80-verify-lab.sh <scenario> [--dry-run]" >&2
@@ -102,6 +96,7 @@ main() {
   [[ -n "${scenario}" ]] || usage
   require_cmd python3
   require_venv
+  load_cml_env
   yaml="$(lab_yaml_for_scenario "${scenario}")"
   [[ -f "${yaml}" ]] || die "${yaml} missing for scenario '${scenario}'"
   jobfile="${REPO_ROOT}/verify/${scenario}/jobfile.py"

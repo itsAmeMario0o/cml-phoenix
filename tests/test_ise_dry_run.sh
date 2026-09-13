@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Dry-run tests for scripts/25-ise-up.sh and scripts/45-ise-down.sh. az and
-# terraform are stubbed through PATH; real config/mcp-env/ise.env and
-# keys/cml-lab.pub are never read, so this runs on a fresh clone with no
-# operator secrets and never depends on either file's real contents.
+# Dry-run tests for scripts/25-ise-up.sh --post-deploy and
+# scripts/45-ise-down.sh. az and terraform are stubbed through PATH; real
+# config/mcp-env/ise.env is never read, so this runs on a fresh clone with
+# no operator secrets and never depends on the file's real contents.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,45 +22,14 @@ FIXTURE_DIR="${REPO_ROOT}/tests/.tmp-ise-dry-run"
 rm -rf "${FIXTURE_DIR}"
 mkdir -p "${FIXTURE_DIR}"
 
-# ise_params.py (Task 2) reads keys/cml-lab.pub by its real repo-relative
-# path (no override is wired through 25-ise-up.sh). An operator's real
-# key, if one exists, is backed up and restored rather than clobbered or
-# depended on for a deterministic assertion.
-PUBKEY_FILE="${REPO_ROOT}/keys/cml-lab.pub"
-if [[ -f "${PUBKEY_FILE}" ]]; then
-  mv "${PUBKEY_FILE}" "${PUBKEY_FILE}.saved"
-fi
-mkdir -p "${REPO_ROOT}/keys"
-echo "ssh-ed25519 AAAAFAKEKEYFORTESTING test@fixture" > "${PUBKEY_FILE}"
-
 cleanup() {
   rm -rf "${FIXTURE_DIR}"
-  rm -f "${PUBKEY_FILE}"
-  mv "${PUBKEY_FILE}.saved" "${PUBKEY_FILE}" 2>/dev/null || true
-  # A dry run's own mktemp under config/mcp-env/ is left behind by design
-  # (only the real python3 invocation, skipped in a dry run, would remove
-  # it via the script's own trap); sweep any it leaves.
-  rm -f "${REPO_ROOT}/config/mcp-env/ise-params."??????
 }
 trap cleanup EXIT
 
 cat > "${FIXTURE_DIR}/ise.env" <<EOF
-ISE_IMAGE_PUBLISHER=cisco
-ISE_IMAGE_OFFER=cisco-ise-virtual
-ISE_IMAGE_SKU=cisco-ise_3_5
-ISE_IMAGE_VERSION=3.5.527
-ISE_VM_SIZE=Standard_D8s_v4
-ISE_STORAGE_TYPE=Premium_LRS
-ISE_VOLUME_SIZE=600
-ISE_PRIVATE_IP=10.20.2.20
-ISE_PUBLIC_IP_NAME=ise1-ip
 ISE_HOSTNAME=ise1
-ISE_DNS_DOMAIN=rooez.com
-ISE_PRIMARY_NAMESERVER=8.8.8.8
-ISE_PRIMARY_NTP=time.google.com
-ISE_TIMEZONE=Etc/UTC
-ISE_ERS=yes
-ISE_PXGRID=yes
+ISE_PRIVATE_IP=10.20.2.20
 ISE_ADMIN_SOURCE_CIDR=10.20.1.10/32
 ISE_ADMIN_PASSWORD=${FAKE_PASSWORD}
 RADIUS_SECRET=${FAKE_RADIUS_SECRET}
@@ -85,14 +54,19 @@ assert_eq() {
     echo "[FAIL]  ${label}: expected '${expected}' got '${actual}'"; failures=$((failures + 1)); fi
 }
 
-# --- 25-ise-up.sh --dry-run ---
+# --post-deploy is required: no other invocation is accepted.
+rc=0
+bash "${UP_SCRIPT}" --dry-run >/dev/null 2>&1 || rc=$?
+assert_eq "missing --post-deploy exits 2" "2" "${rc}"
+
+# --- 25-ise-up.sh --post-deploy --dry-run ---
 
 rc=0
 up_out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" \
   ARM_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 \
   ASSUME_YES=1 \
   ISE_ENV_FILE="${FIXTURE_DIR}/ise.env" \
-  bash "${UP_SCRIPT}" --dry-run 2>&1)" || rc=$?
+  bash "${UP_SCRIPT}" --post-deploy --dry-run 2>&1)" || rc=$?
 assert_eq "up dry run exits 0" "0" "${rc}"
 
 assert_contains "nsg create planned" "+ az network nsg create -g rg-cml-lab -n ise-nsg" "${up_out}"
@@ -102,12 +76,11 @@ assert_contains "radius rule source is the lab summary" "10.100.0.0/16" "${up_ou
 assert_contains "admin rule name and ports" "-n allow-admin" "${up_out}"
 assert_contains "admin rule ports" "443 22" "${up_out}"
 assert_contains "admin rule scoped to ISE_ADMIN_SOURCE_CIDR" "10.20.1.10/32" "${up_out}"
+assert_contains "nsg attached to the wizard's nic" "+ az network nic update -g rg-cml-lab -n ise1nic --network-security-group ise-nsg" "${up_out}"
 assert_not_contains "no 0.0.0.0/0 anywhere" "0.0.0.0/0" "${up_out}"
 
-assert_contains "deployment group create planned" "+ az deployment group create -g rg-cml-lab" "${up_out}"
-assert_contains "deployment uses the solution template" "--template-file ${REPO_ROOT}/config/ise/template.json" "${up_out}"
-assert_contains "deployment parameters come from a file" "--parameters @" "${up_out}"
-
+assert_contains "vm tagged" "+ az resource tag -g rg-cml-lab" "${up_out}"
+assert_contains "vm tag name" "--name ise1 --resource-type Microsoft.Compute/virtualMachines" "${up_out}"
 assert_contains "os disk tagged" "+ az disk update -g rg-cml-lab -n ise1osdisk" "${up_out}"
 assert_contains "os disk tag role" "tags.role=ise" "${up_out}"
 
@@ -127,11 +100,9 @@ assert_not_contains "ISE_API_BASE never appears in the plan" "ISE_API_BASE" "${u
 
 # --- 45-ise-down.sh --dry-run ---
 
-# The az stub's role=ise listing returns one of each of the five types
-# the solution template plus 25-ise-up.sh's tag_osdisk and nsg create
-# tag: VM, NIC, NSG, disk, public IP (ADR 0008). No userdata file to
-# clean up; the solution-template deploy never renders one (Task 3 uses
-# a mktemp params file removed by its own trap).
+# The az stub's role=ise listing returns one of each of the five resource
+# types 25-ise-up.sh's attach_nsg and tag_resources tag, plus what the
+# Marketplace wizard itself creates: VM, NIC, NSG, disk, public IP.
 rc=0
 down_out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" \
   ARM_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 \

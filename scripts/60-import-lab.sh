@@ -16,8 +16,6 @@ set -euo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-CML_ENV_FILE="${CML_ENV_FILE:-${REPO_ROOT}/config/mcp-env/cml.env}"
-LAB_ENV_FILE="${LAB_ENV_FILE:-${REPO_ROOT}/config/mcp-env/labs.env}"
 PUBKEY_FILE="${PUBKEY_FILE:-${REPO_ROOT}/keys/cml-lab.pub}"
 RENDER="${REPO_ROOT}/scripts/lib/render_lab.py"
 RENDERED_DIR="${REPO_ROOT}/exports/.rendered"
@@ -27,23 +25,6 @@ TOKEN=""
 usage() {
   echo "usage: scripts/60-import-lab.sh labs/<topology>.yaml [--dry-run]" >&2
   exit 2
-}
-
-# Both env files are KEY=VALUE lines. set -a exports them for the renderer
-# so the password never lands on a command line.
-load_env() {
-  local f
-  for f in "${CML_ENV_FILE}" "${LAB_ENV_FILE}"; do
-    [[ -f "${f}" ]] || die "${f} missing. cml.env comes from 20-up.sh, labs.env from config/labs.env.example"
-    set -a
-    # shellcheck disable=SC1090
-    source "${f}"
-    set +a
-  done
-  : "${CML_URL:?CML_URL missing in ${CML_ENV_FILE}}"
-  : "${CML_USERNAME:?CML_USERNAME missing in ${CML_ENV_FILE}}"
-  : "${CML_PASSWORD:?CML_PASSWORD missing in ${CML_ENV_FILE}}"
-  : "${LAB_PASSWORD:?LAB_PASSWORD missing in ${LAB_ENV_FILE}}"
 }
 
 curl_opts() {
@@ -99,7 +80,8 @@ main() {
   done
   [[ -n "${src}" && -f "${src}" ]] || usage
   require_cmd python3 curl jq
-  load_env
+  load_cml_env --require-labs
+  : "${LAB_PASSWORD:?LAB_PASSWORD missing in ${LAB_ENV_FILE}}"
   title="$(python3 "${RENDER}" "${src}" --pubkey "${PUBKEY_FILE}" --print-title)"
   [[ -n "${title}" ]] || die "${src} has no lab title"
   out="${RENDERED_DIR}/$(basename "${src}")"

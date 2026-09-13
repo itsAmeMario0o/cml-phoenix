@@ -12,10 +12,10 @@ assert_contains() {
 line_of() { grep -nF -- "$1" <<<"$2" | head -1 | cut -d: -f1; }
 
 out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" bash "${SCRIPT}" --dry-run 2>&1)"
-assert_contains "remote export planned" "bash -s -- export-labs /data/exports/" "${out}"
-assert_contains "scp planned" "+ scp -P 1122" "${out}"
+assert_contains "remote export planned" "+ cml_remote export-labs /data/exports/" "${out}"
+assert_contains "scp planned" "+ cml_scp -q -r" "${out}"
 assert_contains "blob upload planned" "https://stfake.blob.core.windows.net/exports/" "${out}"
-e="$(line_of "export-labs /data/exports/" "${out}")"; s="$(line_of "+ scp -P 1122" "${out}")"; u="$(line_of "blob.core.windows.net/exports/" "${out}")"
+e="$(line_of "cml_remote export-labs /data/exports/" "${out}")"; s="$(line_of "+ cml_scp -q -r" "${out}")"; u="$(line_of "blob.core.windows.net/exports/" "${out}")"
 if [[ "${e}" -lt "${s}" && "${s}" -lt "${u}" ]]; then echo "[OK]    order export < scp < upload"; else
   echo "[FAIL]  order: ${e} ${s} ${u}"; failures=$((failures + 1)); fi
 

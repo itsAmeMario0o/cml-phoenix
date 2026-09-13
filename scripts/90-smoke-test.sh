@@ -19,7 +19,6 @@ set -euo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
 CLOUD_CML="${REPO_ROOT}/vendor/cloud-cml"
 
 check_outputs() {
@@ -52,7 +51,7 @@ check_ip_matches() {
 
 check_license() {
   local status
-  status="$(cml_ssh "bash -s -- license-status" < "${REMOTE_LIB}" 2>/dev/null || echo UNREACHABLE)"
+  status="$(cml_remote license-status 2>/dev/null || echo UNREACHABLE)"
   case "${status}" in
     REGISTERED | COMPLETED) pass "license ${status}" ;;
     *) miss "license status '${status}'" ;;

@@ -31,27 +31,6 @@ PERSISTENT="${REPO_ROOT}/terraform/persistent"
 CLOUD_CML="${REPO_ROOT}/vendor/cloud-cml"
 DRY_RUN=0
 
-run() {
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ $*"
-  else
-    "$@"
-  fi
-}
-
-# In a dry run the roots may not be applied, so outputs fall back to a
-# visible placeholder instead of aborting.
-out_or_placeholder() {
-  local value
-  if value="$(tf_out persistent "$1" 2>/dev/null)" && [[ -n "${value}" ]]; then
-    echo "${value}"
-  elif [[ "${DRY_RUN}" == "1" ]]; then
-    echo "<$1>"
-  else
-    die "persistent output $1 unavailable"
-  fi
-}
-
 check_preflight_marker() {
   local marker="${REPO_ROOT}/.preflight-ok" age
   if [[ "${DRY_RUN}" == "1" ]]; then
@@ -179,9 +158,7 @@ write_env_and_report() {
 }
 
 main() {
-  if [[ "${1:-}" == "--dry-run" ]]; then
-    DRY_RUN=1
-  fi
+  DRY_RUN="$(parse_dry_run_only "$@")"
   require_env ARM_SUBSCRIPTION_ID
   require_cmd terraform az python3 ssh-keygen jq
   check_preflight_marker

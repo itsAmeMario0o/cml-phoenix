@@ -2,7 +2,9 @@
 # Dry-run test for scripts/80-verify-lab.sh (Task 3, ADR 0009). No venv, no
 # pyATS, and no live CML call: this runs on a fresh clone in the build lane
 # (senior-secops: a real run writes a testbed that can carry device
-# credentials, so the plan this test checks must never print one).
+# credentials, so the plan this test checks must never print one). A fake
+# cml.env exercises load_cml_env for real, the same fix that makes this
+# script usable at all outside a test.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,6 +15,10 @@ LAB_TITLE="Cilium EVPN fabric (blank)"
 VENV_DIR="${REPO_ROOT}/verify/.venv"
 SCENARIO_DIR="${REPO_ROOT}/verify/${SCENARIO}"
 JOBFILE="${SCENARIO_DIR}/jobfile.py"
+TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+FAKE_PASSWORD="Sup3rSecretTestOnly-DoNotLeak"
+printf 'CML_URL=https://198.51.100.9\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${FAKE_PASSWORD}" > "${TMP}/cml.env"
+export CML_ENV_FILE="${TMP}/cml.env" LAB_ENV_FILE="${TMP}/no-such-labs.env"
 failures=0
 
 assert_contains() {
@@ -50,7 +56,7 @@ if [[ -e "${SCENARIO_DIR}" ]]; then
 fi
 
 cleanup() {
-  rm -rf "${VENV_DIR}" "${SCENARIO_DIR}" "${REPO_ROOT}/verify/.testbed"
+  rm -rf "${VENV_DIR}" "${SCENARIO_DIR}" "${REPO_ROOT}/verify/.testbed" "${TMP}"
   if [[ "${VENV_SAVED}" == "1" ]]; then
     mv "${VENV_DIR}.saved-test" "${VENV_DIR}"
   fi
@@ -77,12 +83,14 @@ assert_contains "gen_testbed.py writes to the scenario's testbed path" "${REPO_R
 assert_contains "easypy planned" "+ ${VENV_DIR}/bin/easypy" "${out}"
 assert_contains "easypy runs the scenario's jobfile" "${JOBFILE}" "${out}"
 
-# No CML credential appears anywhere. --dry-run never executes
-# gen_testbed.py (run() only echoes the planned command), so the real
-# config/mcp-env/cml.env is never even sourced here; these checks just
-# confirm the plan line itself carries no credential-shaped content.
+# cml.env is genuinely loaded and exported now (the fix for the bug this
+# test exists to catch: 80-verify-lab.sh used to never load it at all).
+# --dry-run never executes gen_testbed.py itself (run() only echoes the
+# planned command), so confirm the loaded password never reaches the
+# printed plan line, by name or by value.
 assert_not_contains "CML_PASSWORD var name never appears" "CML_PASSWORD" "${out}"
 assert_not_contains "CML_USERNAME var name never appears" "CML_USERNAME" "${out}"
+assert_not_contains "loaded password value never appears" "${FAKE_PASSWORD}" "${out}"
 
 # An unknown scenario dies with a clear message and touches nothing.
 rc=0

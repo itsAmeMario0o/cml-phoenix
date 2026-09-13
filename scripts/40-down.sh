@@ -16,7 +16,6 @@ set -euo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-REMOTE_LIB="${REPO_ROOT}/scripts/lib/cml-remote.sh"
 CLOUD_CML="${REPO_ROOT}/vendor/cloud-cml"
 CML_YML="${REPO_ROOT}/config/cml.yml"
 DRY_RUN=0
@@ -29,24 +28,6 @@ license_blocked() {
   [[ "$1" != "NOT_REGISTERED" ]]
 }
 
-run() {
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ $*"
-  else
-    "$@"
-  fi
-}
-
-remote() {
-  local ip="$1"; shift
-  local key="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ ssh -p 1122 sysadmin@${ip} bash -s -- $* < ${REMOTE_LIB}"
-  else
-    ssh -p 1122 -i "${key}" "${CML_SSH_OPTS[@]}" "sysadmin@${ip}" "bash -s -- $*" < "${REMOTE_LIB}"
-  fi
-}
-
 export_labs() {
   if [[ "${DRY_RUN}" == "1" ]]; then
     echo "+ ${REPO_ROOT}/scripts/30-export-labs.sh --dry-run"
@@ -56,16 +37,16 @@ export_labs() {
 }
 
 release_license() {
-  local ip="$1" status
+  local status
   run cml_ssh /provision/del.sh || true
   if [[ "${DRY_RUN}" == "1" ]]; then
     echo "+ license gate (status from host)"
     return 0
   fi
-  status="$( (remote "${ip}" license-status || echo UNKNOWN) | tail -n 1)"
+  status="$( (cml_remote license-status || echo UNKNOWN) | tail -n 1)"
   if license_blocked "${status}"; then
     warn "del.sh left the license ${status}, retrying through the API"
-    status="$( (remote "${ip}" deregister || true) | tail -n 1)"
+    status="$( (cml_remote deregister || true) | tail -n 1)"
     [[ -n "${status}" ]] || status="UNKNOWN"
   fi
   if license_blocked "${status}"; then
@@ -96,7 +77,7 @@ destroy_cml() {
 }
 
 main() {
-  local ip arg
+  local arg
   for arg in "$@"; do
     case "${arg}" in
       --dry-run) DRY_RUN=1 ;;
@@ -106,10 +87,9 @@ main() {
   done
   require_env ARM_SUBSCRIPTION_ID
   require_cmd terraform az ssh
-  ip="$(cml_ip)"
   export_labs
-  remote "${ip}" stop-labs
-  release_license "${ip}"
+  run cml_remote stop-labs
+  release_license
   destroy_cml
   pass "CML VM destroyed. Persistent resources untouched. Next build: scripts/20-up.sh"
   summary_and_exit

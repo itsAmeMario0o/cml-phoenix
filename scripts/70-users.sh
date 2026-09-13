@@ -18,8 +18,6 @@ set -euo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-CML_ENV_FILE="${CML_ENV_FILE:-${REPO_ROOT}/config/mcp-env/cml.env}"
-LAB_ENV_FILE="${LAB_ENV_FILE:-${REPO_ROOT}/config/mcp-env/labs.env}"
 USERS_CSV="${USERS_CSV:-${REPO_ROOT}/config/mcp-env/users.csv}"
 USERS_CREDENTIALS="${USERS_CREDENTIALS:-${REPO_ROOT}/config/mcp-env/users-credentials.csv}"
 USERS_PY="${REPO_ROOT}/scripts/lib/users.py"
@@ -28,20 +26,6 @@ usage() {
   echo "usage: scripts/70-users.sh [--dry-run] [--csv FILE]" >&2
   echo "       scripts/70-users.sh class NAME COUNT DOMAIN" >&2
   exit 2
-}
-
-load_env() {
-  [[ -f "${CML_ENV_FILE}" ]] || die "${CML_ENV_FILE} missing. Run scripts/20-up.sh first."
-  set -a
-  # shellcheck disable=SC1090
-  source "${CML_ENV_FILE}"
-  # labs.env is optional here; it may carry LAB_USER_PASSWORD, LAB_GROUP,
-  # or LAB_PERMISSION. It holds no CML login, so its absence is fine.
-  if [[ -f "${LAB_ENV_FILE}" ]]; then
-    # shellcheck disable=SC1090
-    source "${LAB_ENV_FILE}"
-  fi
-  set +a
 }
 
 main() {
@@ -61,7 +45,7 @@ main() {
   done
   require_cmd python3
   [[ -f "${csv}" ]] || die "${csv} missing. Start from config/users.csv.example, or: scripts/70-users.sh class NAME COUNT"
-  load_env
+  load_cml_env
   # Bash 3.2 calls an empty array unbound under set -u, hence the guard.
   python3 "${USERS_PY}" apply --csv "${csv}" --credentials "${USERS_CREDENTIALS}" ${dry_run[@]+"${dry_run[@]}"}
 }
