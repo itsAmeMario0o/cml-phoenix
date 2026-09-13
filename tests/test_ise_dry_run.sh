@@ -127,26 +127,17 @@ assert_not_contains "ISE_API_BASE never appears in the plan" "ISE_API_BASE" "${u
 
 # --- 45-ise-down.sh --dry-run ---
 
-# 45-ise-down.sh still removes a stale rendered userdata file from the
-# prior VM-image deploy, independent of anything scripts/25-ise-up.sh
-# does now. The real path is used (down.sh takes no override), so any
-# operator file is backed up and restored rather than clobbered.
-DOWN_USERDATA_FILE="${REPO_ROOT}/config/mcp-env/ise-userdata"
-if [[ -f "${DOWN_USERDATA_FILE}" ]]; then
-  mv "${DOWN_USERDATA_FILE}" "${DOWN_USERDATA_FILE}.saved"
-fi
-touch "${DOWN_USERDATA_FILE}"
-
+# The az stub's role=ise listing returns one of each of the five types
+# the solution template plus 25-ise-up.sh's tag_osdisk and nsg create
+# tag: VM, NIC, NSG, disk, public IP (ADR 0008). No userdata file to
+# clean up; the solution-template deploy never renders one (Task 3 uses
+# a mktemp params file removed by its own trap).
 rc=0
 down_out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" \
   ARM_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 \
   ASSUME_YES=1 \
   bash "${DOWN_SCRIPT}" --dry-run 2>&1)" || rc=$?
 assert_eq "down dry run exits 0" "0" "${rc}"
-
-assert_contains "userdata file removal planned" "+ rm -f ${DOWN_USERDATA_FILE}" "${down_out}"
-rm -f "${DOWN_USERDATA_FILE}"
-mv "${DOWN_USERDATA_FILE}.saved" "${DOWN_USERDATA_FILE}" 2>/dev/null || true
 
 assert_contains "vm delete planned" "+ az vm delete --ids" "${down_out}"
 assert_contains "nic delete planned" "+ az network nic delete --ids" "${down_out}"

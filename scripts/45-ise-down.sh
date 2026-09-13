@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Tear down the disposable ISE VM created by scripts/25-ise-up.sh. Finds
 # every resource carrying the role=ise tag in the lab resource group and
-# deletes it: VM, NIC, NSG, OS disk, and a public IP if one somehow
-# exists (25-ise-up.sh never creates one, ADR 0003). Never touches
-# bootstrap, persistent, or the CML VM, none of which carry this tag.
+# deletes it: VM, NIC, NSG, OS disk, and public IP (the solution template
+# tags the first three, 25-ise-up.sh tags the disk and NSG, ADR 0008).
+# Never touches bootstrap, persistent, or the CML VM, none of which carry
+# this tag.
 #
 #   scripts/45-ise-down.sh [--dry-run]
 #
@@ -14,7 +15,6 @@ set -euo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-USERDATA_FILE="${REPO_ROOT}/config/mcp-env/ise-userdata"
 DRY_RUN=0
 
 run() {
@@ -76,15 +76,6 @@ delete_all() {
   done <<< "${rows}"
 }
 
-# remove_userdata_file: the rendered custom-data holds the ISE admin
-# password (ADR 0004); once ISE is gone the file is stale, not useful,
-# and should not linger on disk.
-remove_userdata_file() {
-  if [[ -f "${USERDATA_FILE}" ]]; then
-    run rm -f "${USERDATA_FILE}"
-  fi
-}
-
 main() {
   local rows
   if [[ "${1:-}" == "--dry-run" ]]; then
@@ -95,14 +86,12 @@ main() {
   rows="$(find_ise_resources)" || die "cannot list ISE resources by tag"
   if [[ -z "${rows}" ]]; then
     pass "no ISE resources tagged role=ise found"
-    remove_userdata_file
     summary_and_exit
   fi
   echo "ISE resources tagged role=ise:"
   echo "${rows}"
   confirm "Delete every ISE resource listed above?" || die "declined"
   delete_all "${rows}"
-  remove_userdata_file
   pass "ISE resources deleted. Persistent resources and the CML VM untouched."
   summary_and_exit
 }
