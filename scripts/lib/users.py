@@ -181,34 +181,28 @@ class Outcome:
     labs_granted: int = 0
 
 
-def apply(rows: list[Row], api: CmlApi, group_name: str, permission: str,
-          dry_run: bool, log: Any = print, shared_password: str = "") -> Outcome:
-    """Create missing users, then give the managed group every lab. Idempotent.
-
-    With shared_password set, every new user gets it; otherwise each gets a
-    generated one. CML rejects a password under 8 characters or on its
-    common-word list, and that rejection surfaces as a UsersError.
-    """
-    if permission not in PERMISSIONS:
-        raise UsersError(f"permission must be one of {sorted(PERMISSIONS)}, got {permission!r}")
-    if shared_password and len(shared_password) < PASSWORD_MIN:
-        raise UsersError(f"LAB_USER_PASSWORD must be at least {PASSWORD_MIN} characters")
-    existing_users = api.users()
-    groups = api.groups()
-    outcome = Outcome()
-
+def _ensure_group(api: CmlApi, groups: dict[str, Any], group_name: str,
+                   dry_run: bool, log: Any, outcome: Outcome) -> dict[str, Any]:
+    """The managed group, creating it first if this is the first run."""
     group = groups.get(group_name)
-    if group is None:
-        if dry_run:
-            log(f"[OK]    would create group {group_name}")
-            group = {"id": "", "members": [], "associations": []}
-        else:
-            gid = api.create_group(group_name)
-            group = {"id": gid, "members": [], "associations": []}
-            log(f"[OK]    created group {group_name}")
-        outcome.group_created = True
-    gid = group["id"]
+    if group is not None:
+        return group
+    if dry_run:
+        log(f"[OK]    would create group {group_name}")
+        group = {"id": "", "members": [], "associations": []}
+    else:
+        gid = api.create_group(group_name)
+        group = {"id": gid, "members": [], "associations": []}
+        log(f"[OK]    created group {group_name}")
+    outcome.group_created = True
+    return group
 
+
+def _create_missing_users(rows: list[Row], existing_users: dict[str, Any], api: CmlApi,
+                           gid: str, dry_run: bool, log: Any, shared_password: str,
+                           outcome: Outcome) -> None:
+    """Create every row not already a CML user. Mutates existing_users so
+    the membership union right after this call sees the new ids too."""
     for row in rows:
         if row.username in existing_users:
             outcome.existing.append(row)
@@ -223,13 +217,21 @@ def apply(rows: list[Row], api: CmlApi, group_name: str, permission: str,
             log(f"[OK]    created {row.username} ({row.role})")
         outcome.created.append((row, password))
 
+
+def _grant_labs(rows: list[Row], existing_users: dict[str, Any], api: CmlApi,
+                 group: dict[str, Any], group_name: str, permission: str,
+                 dry_run: bool, log: Any, outcome: Outcome) -> None:
+    """Union the managed group's membership and lab grants with what the
+    file wants, without dropping anything added by hand in between runs."""
+    gid = group["id"]
     # Every non-admin user in the file should be a member. Admins are left
     # out; CML shows an admin all labs already. Union with current members
     # so a member added by hand is not dropped.
     want_members = {existing_users[r.username]["id"] for r in rows
                     if not r.admin and r.username in existing_users}
-    members = sorted(set(group.get("members") or []) | want_members)
-    outcome.members_added = len(want_members - set(group.get("members") or []))
+    current_members = set(group.get("members") or [])
+    members = sorted(current_members | want_members)
+    outcome.members_added = len(want_members - current_members)
 
     lab_ids = api.lab_ids()
     have = {a["id"] for a in (group.get("associations") or [])}
@@ -245,6 +247,27 @@ def apply(rows: list[Row], api: CmlApi, group_name: str, permission: str,
     elif gid:
         api.update_group(gid, members, associations)
         log(f"[OK]    {group_name}: {len(members)} member(s), {permission} on {len(lab_ids)} lab(s)")
+
+
+def apply(rows: list[Row], api: CmlApi, group_name: str, permission: str,
+          dry_run: bool, log: Any = print, shared_password: str = "") -> Outcome:
+    """Create missing users, then give the managed group every lab. Idempotent.
+
+    With shared_password set, every new user gets it; otherwise each gets a
+    generated one. CML rejects a password under 8 characters or on its
+    common-word list, and that rejection surfaces as a UsersError.
+    """
+    if permission not in PERMISSIONS:
+        raise UsersError(f"permission must be one of {sorted(PERMISSIONS)}, got {permission!r}")
+    if shared_password and len(shared_password) < PASSWORD_MIN:
+        raise UsersError(f"LAB_USER_PASSWORD must be at least {PASSWORD_MIN} characters")
+    existing_users = api.users()
+    outcome = Outcome()
+
+    group = _ensure_group(api, api.groups(), group_name, dry_run, log, outcome)
+    _create_missing_users(rows, existing_users, api, group["id"], dry_run, log,
+                           shared_password, outcome)
+    _grant_labs(rows, existing_users, api, group, group_name, permission, dry_run, log, outcome)
     return outcome
 
 

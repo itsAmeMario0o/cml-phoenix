@@ -110,6 +110,26 @@ def render(template_text: str, mapping: dict[str, str]) -> str:
     return template.substitute(mapping)
 
 
+def write_private(path: Path, content: str) -> None:
+    """Write with mode 0600 from the first byte, replacing any old file.
+
+    config/cml.yml carries the Smart License token and both admin
+    passwords (ADR 0004). O_CREAT only applies the mode to a new inode,
+    so an old copy with a wider mode is removed first rather than reused;
+    O_EXCL then creates it at 0600 directly, closing the gap a plain
+    write_text() followed by chmod() leaves open, where the file exists
+    briefly at the process umask before its mode is narrowed.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        handle.write(content)
+
+
 def parse_sets(pairs: list[str]) -> dict[str, str]:
     sets: dict[str, str] = {}
     for pair in pairs:
@@ -141,8 +161,7 @@ def main(argv: list[str]) -> int:
         check_secret_scalars(values, sets)
         mapping = build_mapping(values, read_refplat(args.refplat), sets)
         rendered = render(args.template.read_text(), mapping)
-        args.out.write_text(rendered)
-        os.chmod(args.out, 0o600)
+        write_private(args.out, rendered)
     except (ValueError, KeyError, OSError) as exc:
         print(f"render_cml_config: {exc}", file=sys.stderr)
         return 1
