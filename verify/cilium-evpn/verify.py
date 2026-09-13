@@ -25,7 +25,13 @@ from pyats.topology import Device, Testbed
 
 
 def _nxos_devices(testbed: Testbed) -> Iterator[Device]:
-    """Yield only the NX-OS fabric switches from the testbed."""
+    """Yield only the NX-OS fabric switches from the testbed.
+
+    This relies on CML's generated testbed tagging the nexus9300v nodes with
+    os "nxos". That is confirmed at the Task 7 live run, the same as the Genie
+    parser keys below; if CML tags them differently, this filter is where to
+    adjust.
+    """
     for device in testbed.devices.values():
         if getattr(device, "os", "") == "nxos":
             yield device
