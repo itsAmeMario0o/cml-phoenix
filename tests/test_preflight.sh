@@ -86,6 +86,25 @@ out="$(ise_of "${ISE_TMP_DIR}/ise.env")"
 assert_contains "ise.env present gives OK" "[OK]    ISE Marketplace terms accepted" "${out}"
 assert_contains "ise.env present does not fail preflight" "FAIL_COUNT=0" "${out}"
 
+# check_verify_venv: point VERIFY_VENV at a scratch path instead of the
+# operator's real verify/.venv. FAIL_COUNT proves an absent venv only WARNs
+# and never fails preflight (ADR 0009: verification is optional).
+verify_venv_of() {
+  local venv_dir="$1"
+  VERIFY_VENV="${venv_dir}" \
+    bash -c "source '${SCRIPT}'; check_verify_venv; echo FAIL_COUNT=\${fail}"
+}
+
+out="$(verify_venv_of "${ISE_TMP_DIR}/no-such-venv")"
+assert_contains "verify venv absent warns" "[WARN]  verify/.venv missing" "${out}"
+assert_contains "verify venv absent names the bootstrap command" "python3 -m venv verify/.venv" "${out}"
+assert_contains "verify venv absent does not fail preflight" "FAIL_COUNT=0" "${out}"
+
+mkdir -p "${ISE_TMP_DIR}/present-venv"
+out="$(verify_venv_of "${ISE_TMP_DIR}/present-venv")"
+assert_contains "verify venv present gives OK" "[OK]    verify/.venv present" "${out}"
+assert_contains "verify venv present does not fail preflight" "FAIL_COUNT=0" "${out}"
+
 if [[ "${RUN_AZ_TESTS:-0}" == "1" ]]; then
   out="$(bash "${SCRIPT}" 2>&1 || true)"
   assert_contains "az login check ran" "azure login:" "${out}"

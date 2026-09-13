@@ -13,12 +13,14 @@
 #   8. Estimated copy time versus SAS validity (WARN only)
 #   9. ISE Marketplace terms accepted (skipped with a WARN when
 #      config/mcp-env/ise.env is absent; ISE is optional until Phase 1)
+#  10. verify/.venv present (WARN when absent; pyATS verification is
+#      optional per ADR 0009, not required to build or destroy the lab)
 #
 # Writes .preflight-ok in the repo root when nothing FAILs; 20-up.sh refuses
 # to run without a fresh marker. Exit 1 on any FAIL.
 #
 # Overrides: LOCATION (eastus2), CML_TFVARS, REFPLAT_FILE, ASSUMED_MBPS (50),
-# ISE_ENV_FILE.
+# ISE_ENV_FILE, VERIFY_VENV.
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
@@ -29,6 +31,7 @@ CML_TFVARS="${CML_TFVARS:-${REPO_ROOT}/config/cml.tfvars}"
 REFPLAT_FILE="${REFPLAT_FILE:-${REPO_ROOT}/config/refplat.txt}"
 ASSUMED_MBPS="${ASSUMED_MBPS:-50}"
 ISE_ENV_FILE="${ISE_ENV_FILE:-${REPO_ROOT}/config/mcp-env/ise.env}"
+VERIFY_VENV="${VERIFY_VENV:-${REPO_ROOT}/verify/.venv}"
 TFVARS_PY="${REPO_ROOT}/scripts/lib/tfvars.py"
 MARKER="${REPO_ROOT}/.preflight-ok"
 
@@ -239,6 +242,17 @@ check_ise_marketplace() {
   fi
 }
 
+# check_verify_venv: confirm the pyATS verification venv (ADR 0009) exists.
+# Verification is optional and separate from build/destroy, so an absent
+# venv only WARNs, naming the bootstrap command instead of failing.
+check_verify_venv() {
+  if [[ -d "${VERIFY_VENV}" ]]; then
+    pass "verify/.venv present"
+  else
+    warn "verify/.venv missing. Run: python3 -m venv verify/.venv && verify/.venv/bin/pip install -r verify/requirements.txt"
+  fi
+}
+
 main() {
   rm -f "${MARKER}"
   check_login
@@ -253,6 +267,7 @@ main() {
     check_blobs
   fi
   check_ise_marketplace
+  check_verify_venv
   if [[ "${fail}" -eq 0 ]]; then
     touch "${MARKER}"
   fi
