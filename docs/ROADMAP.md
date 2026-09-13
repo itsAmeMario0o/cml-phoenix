@@ -90,6 +90,28 @@ moved to the Done section at the bottom.
     not anyone connects, and it needs its own `/26` subnet named
     `AzureBastionSubnet` in the persistent VNet. Not needed while the
     CML host jump remains the access path (ADR 0003, ADR 0008).
+18. Cisco ISE configuration as code with the official `cisco.ise` Ansible
+    collection, as the default ISE config layer. It manages the full
+    TrustSec object set over the ERS and OpenAPI: network devices, policy
+    sets, authorization rules, SGTs, SGACLs, and the egress matrix, which
+    is far more than the hand-rolled `scripts/lib/ise_config.py` covers.
+    Decided 2026-09-13 to adopt it, later. It is another non-stdlib
+    dependency, so it follows the same shape as the pyATS verification
+    layer: its own venv and an ADR for the exception. Once in, it
+    supersedes or shrinks `ise_config.py`, and the per-session policy is
+    reapplied as idempotent playbooks. `1homas/ISE_Ansible_Sandbox` is the
+    reference for patterns built on this collection.
+19. Ephemeral ISE with the ISE Eternal Evaluation (ISEEE) approach. The
+    automated ARM deploy of ISE fails, so a fresh per-session deploy is
+    only reliable by hand through the portal (ADR 0008,
+    `docs/ISE-MARKETPLACE-DEPLOY.md`), which is too much friction to repeat
+    every session. ISEEE, from `1homas/ISE_Ansible_Sandbox`, is the closest
+    existing pattern for standing ISE up and down repeatably. The likely
+    shape is to deploy ISE once by hand, capture a specialized image or a
+    config backup, and rebuild each session from that rather than from the
+    Marketplace, restoring or reapplying config with the `cisco.ise`
+    collection (item 18). Needs its own spec, and study of what ISEEE
+    actually automates, before any code.
 
 ## Images and scenarios
 

@@ -3,6 +3,33 @@
 A dated handoff log, newest entry first. Read it before doing anything else
 at the start of a new session.
 
+## 2026-09-13, ISE deploy: automated ARM fails, pivot to the portal
+
+The first real ISE deploy ran `scripts/25-ise-up.sh`. The NSG and the VM
+were created, but the VM reached a terminal `OSProvisioningTimedOut` state
+and ISE never served: TCP 443 never opened in about 50 minutes, and Azure
+marked the VM non-recoverable. The ISE appliance image does not complete
+Azure's OS-provisioning handshake, so `az deployment group create` fails
+even though the portal's Marketplace flow deploys the same image and lets
+ISE boot. This matches the operator's cross-project experience: ISE deploys
+by hand, not through provisioning tools.
+
+All ISE resources were deleted. The persistent root stayed clean: `rt-apps`
+is still associated with `snet-apps` and `terraform -chdir=terraform/
+persistent plan` shows no changes, so the failed deploy left nothing behind.
+
+The deploy step is now by hand through the portal, documented with our
+environment's fields in `docs/ISE-MARKETPLACE-DEPLOY.md`. The automated
+`az deployment group create` path in `25-ise-up.sh` is retired for the
+create (ADR 0008 amendment); the NSG, tagging, readiness, policy, and
+teardown tooling still apply after the portal deploy.
+
+Two directions were set, both deferred and on the roadmap (items 18 and 19):
+adopt the `cisco.ise` Ansible collection as the default ISE config layer,
+and use the ISE Eternal Evaluation (ISEEE) patterns to make a per-session
+ISE practical. Also in flight: a pyATS lab-verification layer (ADR 0009 and
+a spec) on the `pyats-and-ise-pivot` branch.
+
 ## 2026-09-13, TrustSec Phase 1 and ISE by the Azure solution template
 
 The TrustSec Phase 1 foundation and a new ISE deploy method landed on the
