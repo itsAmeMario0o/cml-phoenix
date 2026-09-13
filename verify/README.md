@@ -44,11 +44,15 @@ file stem, for example `verify/cilium-evpn/` (checks `labs/cilium-evpn-blank.yam
 or `verify/trustsec-phase1/` (checks `labs/trustsec-phase1.yaml`). A scenario
 directory holds:
 
-- `verify.py`: the AEtest testscript, with a `CommonSetup` that connects to
-  the devices from the generated testbed, one `Testcase` per thing being
-  checked, and a `CommonCleanup` that disconnects.
-- `jobfile.py`: the easypy job that points at `verify.py` and, if the
-  scenario needs it, at a scenario-specific testbed loader.
+- `verify.py`: the AEtest testscript. Its `CommonSetup`, `CommonCleanup`,
+  and device-filtering helper come from `verify/lib/scenario.py`
+  (`CommonSetup`, `CommonCleanup`, `devices_with_os`), so this file adds
+  only its own `Testcase` classes and, if it needs one, a thin os filter
+  built on `devices_with_os`.
+- `jobfile.py`: six lines that put `verify/lib` on `sys.path` and call
+  `scenario_main(runtime, __file__)`, which derives the scenario name from
+  the directory `jobfile.py` lives in rather than repeating it as a
+  literal.
 
 Following this shape means `scripts/80-verify-lab.sh` can run any scenario
 the same way, and a new lab only has to add checks, not invent a new way to

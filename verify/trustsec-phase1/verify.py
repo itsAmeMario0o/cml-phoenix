@@ -30,14 +30,21 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from typing import Iterator
 
 from pyats import aetest
 from pyats.topology import Device, Testbed
 
+_LIB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib")
+if _LIB_DIR not in sys.path:
+    sys.path.insert(0, _LIB_DIR)
+
+from scenario import CommonCleanup, CommonSetup, devices_with_os  # noqa: E402,F401
+
 
 def _iosxe_devices(testbed: Testbed) -> Iterator[Device]:
-    """Yield only the IOS XE edge from the testbed.
+    """The IOS XE edge from the testbed.
 
     The TrustSec Phase 1 topology (labs/trustsec-phase1.yaml) has one
     routed node, the cat8000v edge, plus the external br-transit connector,
@@ -45,25 +52,11 @@ def _iosxe_devices(testbed: Testbed) -> Iterator[Device]:
     testbed tagging the cat8000v node with os "iosxe", the same kind of
     assumption the Cilium os:nxos filter carries (see that file's Task 7
     live-verify note, added after the actual filter shipped). If CML tags
-    it differently, this filter is where to adjust; the Task 7 live run
-    against this lab is what confirms it.
+    it differently, verify/lib/scenario.py's devices_with_os is where to
+    adjust, for every scenario at once; the Task 7 live run against this
+    lab is what confirms it.
     """
-    for device in testbed.devices.values():
-        if getattr(device, "os", "") == "iosxe":
-            yield device
-
-
-class CommonSetup(aetest.CommonSetup):
-    """Connect to every device in the generated testbed."""
-
-    @aetest.subsection
-    def connect_to_devices(self, testbed: Testbed) -> None:
-        for device in testbed.devices.values():
-            # log_stdout False keeps easypy's own report readable. connect()
-            # raises on failure, which fails this subsection and skips the
-            # testcases below rather than running them against a
-            # half-connected edge.
-            device.connect(log_stdout=False)
+    return devices_with_os(testbed, "iosxe")
 
 
 class RadiusServerReachable(aetest.Testcase):
@@ -186,16 +179,6 @@ class CoAReceived(aetest.Testcase):
         if failures:
             self.failed("no CoA received: " + "; ".join(failures))
         self.passed("CoA request received")
-
-
-class CommonCleanup(aetest.CommonCleanup):
-    """Disconnect from every device in the generated testbed."""
-
-    @aetest.subsection
-    def disconnect_from_devices(self, testbed: Testbed) -> None:
-        for device in testbed.devices.values():
-            if device.connected:
-                device.disconnect()
 
 
 if __name__ == "__main__":
