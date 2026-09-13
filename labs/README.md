@@ -128,3 +128,28 @@ set second, or both standalone units bridge the segments at once.
 From Kali, `nmap -sS 203.0.113.101` or a ping to 198.51.100.1 crosses
 the active unit; pull the active unit's power in CML and the standby
 takes over with its inline interfaces coming up.
+
+## trustsec-phase1.yaml
+
+A single cat8000v lab edge standing in as a RADIUS network device against
+an external ISE. This is the proof step for TrustSec: the routed path
+from ADR 0003, a RADIUS authentication, and a Change of Authorization
+that gets back to the right switch. No Catalyst 9000v fabric yet; that
+arrives with the TrustSec policy in Phase 2. Spec:
+`docs/superpowers/specs/2026-09-12-trustsec-phase1-routed-ise-design.md`.
+
+The external connector maps onto `br-transit`, a bridge that a fork
+customize script creates on the CML host at 10.100.0.1/24. The edge sits
+on that segment at 10.100.0.2/24, with a default route back through the
+host and no NAT anywhere on the path; NAT would collapse every switch to
+one address and leave CoA with nowhere to return.
+
+Needs `ISE_IP` and `RADIUS_SECRET` in `config/mcp-env/labs.env`, on top
+of `LAB_PASSWORD`. ISE itself is not part of this topology; it runs as a
+separate, disposable Azure VM and needs a network device entry for the
+edge, keyed with the same `RADIUS_SECRET`, before RADIUS or CoA will
+work.
+
+| Node | address | user |
+|---|---|---|
+| edge | 10.100.0.2/24 on the transit bridge | admin |
