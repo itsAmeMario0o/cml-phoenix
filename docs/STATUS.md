@@ -6,6 +6,29 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-15, fabric build in progress, console access confirmed by terminal
+
+`labs/cilium-evpn-fabric/BUILD-ORDER.md` merged after a rework: it now
+carries the actual per-device config for each of the seven layers,
+split out of the tracked `.cfg` files by dependency instead of by
+device, plus a section on where spine and leaf actually differ (almost
+nowhere among the four leaves; the one real divergence is the step 7
+access port, leaf1 red, leaf2 blue, leaf3/leaf4 neither).
+
+Confirmed CML's console server works from a plain terminal, no browser
+needed: `ssh admin@<ip>` on port 22 (not 1122) drops into a `consoles>`
+menu (`list`, `open`, `view`); passing the target straight on the SSH
+command line, `ssh -t admin@<ip> "open /<lab>/<node>/<line>"`, skips
+the menu and connects directly. That is now the documented path for
+working the fabric build from iTerm, one pane per node, `Session >
+Broadcast Input` sending identical config (steps 1, 4, and the whole
+of step 6) to every leaf pane at once.
+
+The operator is pushing the fabric config now, by hand, following
+`BUILD-ORDER.md` layer by layer. Not done as of this entry. Next: once
+all seven layers are in on all six switches, `scripts/80-verify-lab.sh
+cilium-evpn` for its first real live run.
+
 ## 2026-09-15, full teardown/rebuild cycle, tooling gaps found and fixed
 
 Ran the full cycle for real: `scripts/40-down.sh` then `scripts/20-up.sh`,
