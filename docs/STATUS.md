@@ -6,6 +6,68 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-15, full teardown/rebuild cycle, tooling gaps found and fixed
+
+Ran the full cycle for real: `scripts/40-down.sh` then `scripts/20-up.sh`,
+both clean. Teardown exported both labs to blob, deregistered the Smart
+License (`NOT_REGISTERED`), destroyed all 13 `vendor/cloud-cml` resources;
+persistent untouched. Rebuild found persistent unchanged (0 add/change/
+destroy) and cloud-cml added 13 resources back on the same static IP,
+`20.114.184.195`. License re-registered automatically (`COMPLETED` /
+`IN_COMPLIANCE`), confirmed against the live API afterward.
+
+Preflight itself needed fixing first. The Terraform provider caches under
+`.terraform/providers/` in `terraform/bootstrap`, `terraform/persistent`,
+and `vendor/cloud-cml` had gone stale as OneDrive cloud-only placeholders
+(`du` showed 0 blocks against a 229 MB provider binary), which
+`terraform validate` surfaced as a `stale NFS file handle` read error, not
+just slow hydration. Fix: `rm -rf` each `.terraform` and reinit. Unrelated
+to any repo code; worth checking first if a terraform command hangs or
+errors oddly on this Mac again (LESSONS-LEARNED).
+
+`cml-mcp` was not connected for this whole session. `scripts/mcp-cml.sh`
+refuses to start without `config/mcp-env/cml.env`, which `20-up.sh` only
+writes at the end of a build, so the MCP server had already failed at
+session startup, before that file existed. Lab import, node start, and
+user provisioning all went through the CML REST API directly instead.
+Reconnecting the MCP session after a rebuild, once `cml.env` exists again,
+should be routine from here.
+
+Reread the pyATS verification layer (ADR 0009) end to end rather than
+assume: it is verify-only, `device.parse()` calls only, nothing that
+configures a device, and it has never actually been run against a live
+lab anywhere in this repo's history (no report archives anywhere; the
+09-13 entry below already said as much). The 2026-09-11 entry below
+claiming the fabric was "verified" predates pyATS's existence by two
+days, so that was a manual check, not this tooling. Pushing the fabric's
+BGP/VXLAN/EVPN config onto the switches stays a manual, by-hand step by
+design. New: `labs/cilium-evpn-fabric/BUILD-ORDER.md`, the ground-up
+dependency chain behind the existing README's design and verification
+tables, meant as the reference for that push. PR #1, open, not yet
+merged.
+
+`labs/cilium-evpn-blank.yaml` reimported and all 11 nodes booted (spines,
+then leaves, then hosts, via direct API calls since cml-mcp was down). No
+fabric config pushed yet; the switches carry only day-0 hostname/admin/
+mgmt0.
+
+The Cloudflare tunnel broke on the rebuild exactly as `docs/ACCESS.md`
+warns it will: `cloudflared` lives on the disposable VM, and reinstalling
+it after every rebuild is still a manual step, not yet automated. Also
+hit the known stale-SSH-host-key issue from LESSONS-LEARNED, cleared by
+hand with `ssh-keygen -R "[20.114.184.195]:1122"`. Reinstalled
+`cloudflared` with the existing tunnel token; verified end to end, DNS
+resolves to Cloudflare and `lab.rooez.com` correctly redirects to the
+Access login page. Token rotation is still the open item from 2026-09-11,
+not done here, since the existing token still works.
+
+`scripts/70-users.sh` rerun; the same five accounts came back (all
+admin), matching the Cloudflare Access policy's email list.
+
+Still owed: push the fabric config from `BUILD-ORDER.md`, then
+`scripts/80-verify-lab.sh cilium-evpn` for its first real live run. Also
+open: merge PR #1, rotate the Cloudflare tunnel token.
+
 ## 2026-09-13, pyATS lab-verification layer landed
 
 A pyATS lab-verification layer (ADR 0009) landed on the `pyats-and-ise-pivot`
