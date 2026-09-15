@@ -452,3 +452,28 @@ in Azure, which is the cheapest place to learn them.
   (PATCH /groups/{id} associations) and the lab-side write
   (PATCH /labs/{id}/associations groups) set the same underlying
   association; the script uses the group side, one write for all labs.
+
+## terraform hangs or errors on a stale NFS file handle
+
+- Symptom: `terraform fmt`, `validate`, or `init` hangs for several
+  minutes with zero CPU use, or fails outright with `read
+  .../terraform-provider-<name>: stale NFS file handle`. Seen
+  2026-09-15 on `terraform/bootstrap`, `terraform/persistent`, and
+  `vendor/cloud-cml` in the same session, at different times.
+- Cause: this repo lives under `OneDrive-MarioJRuiz/Projects/`, a
+  Files-On-Demand synced folder. The provider binaries cached in each
+  root's `.terraform/providers/` are large (the azurerm provider is
+  229 MB); OneDrive's virtual filesystem sometimes leaves them as
+  cloud-only placeholders even after a prior read pulled them down,
+  and a later read against that stale handle fails instead of
+  re-fetching. `du` on the file shows 0 blocks despite `ls -la`
+  reporting the full size, which confirms a placeholder rather than a
+  slow disk.
+- Fix: `rm -rf` the affected root's `.terraform` directory and rerun
+  `terraform init` (`-backend=false` is enough if only `validate` is
+  needed). This only touches the local provider cache, never state,
+  so it is safe on `terraform/persistent` too. If the hang shows up
+  again on a command that touches no provider at all, such as a bare
+  `python3` invocation reading a small tracked file, the cause is
+  broader than this one and worth a fresh investigation rather than
+  assuming the same fix applies.
