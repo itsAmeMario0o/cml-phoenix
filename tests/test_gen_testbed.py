@@ -23,6 +23,48 @@ BASE_URL = f"http://127.0.0.1:{PORT}"
 LAB_TITLE = "TrustSec Demo"
 
 
+class PatchTerminalServerCredentialsTest(unittest.TestCase):
+    """gen_testbed.patch_terminal_server_credentials, no server needed."""
+
+    PLACEHOLDER_BLOCK = (
+        "  terminal_server:\n"
+        "    connections:\n"
+        "      cli:\n"
+        "        ip: 198.51.100.9\n"
+        "        port: 22\n"
+        "        protocol: ssh\n"
+        "    credentials:\n"
+        "      default:\n"
+        "        password: change_me\n"
+        "        username: change_me\n"
+        "    os: linux\n"
+        "    type: server\n"
+    )
+
+    def test_replaces_placeholder_with_real_credentials(self) -> None:
+        out = gen_testbed.patch_terminal_server_credentials(
+            self.PLACEHOLDER_BLOCK, "admin", "s3cret"
+        )
+        self.assertNotIn("change_me", out)
+        self.assertIn("password: 's3cret'", out)
+        self.assertIn("username: 'admin'", out)
+
+    def test_leaves_other_devices_credentials_untouched(self) -> None:
+        text = "  switch1:\n    credentials:\n      default:\n        username: cisco\n" + self.PLACEHOLDER_BLOCK
+        out = gen_testbed.patch_terminal_server_credentials(text, "admin", "s3cret")
+        self.assertIn("username: cisco", out)
+
+    def test_quotes_a_single_quote_in_the_password(self) -> None:
+        out = gen_testbed.patch_terminal_server_credentials(
+            self.PLACEHOLDER_BLOCK, "admin", "it's-a-secret"
+        )
+        self.assertIn("password: 'it''s-a-secret'", out)
+
+    def test_raises_when_placeholder_is_absent(self) -> None:
+        with self.assertRaisesRegex(gen_testbed.TestbedError, "change_me placeholder not found"):
+            gen_testbed.patch_terminal_server_credentials("testbed:\n  name: x\n", "admin", "s3cret")
+
+
 class FetchTestbedTest(unittest.TestCase):
     proc: subprocess.Popen
 
@@ -90,7 +132,13 @@ class FetchTestbedTest(unittest.TestCase):
             self.assertNotIn("FAKE-TOKEN", result.stdout)
             self.assertNotIn("FAKE-TOKEN", result.stderr)
             self.assertEqual(stat.S_IMODE(out_path.stat().st_mode), 0o600)
-            self.assertIn("testbed:", out_path.read_text())
+            written = out_path.read_text()
+            self.assertIn("testbed:", written)
+            # The terminal_server proxy's change_me placeholder must come
+            # out patched with the real CML login, or every device
+            # connection fails through the proxy (caught live, Task 7).
+            self.assertNotIn("change_me", written)
+            self.assertIn("username: 'admin'", written)
 
     def test_cli_unknown_lab_title_fails_without_writing(self) -> None:
         with tempfile.TemporaryDirectory(prefix=".tmp.gen_testbed.", dir=REPO / "tests") as tmp:

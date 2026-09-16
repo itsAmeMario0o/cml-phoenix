@@ -105,6 +105,44 @@ def fetch_testbed(base_url: str, token: str, lab_title: str) -> str:
     return _request(base_url, f"/api/v0/labs/{lab_id}/pyats_testbed", token=token, as_json=False)
 
 
+def _yaml_single_quoted(value: str) -> str:
+    """A YAML single-quoted scalar for value, safe for any character it
+    holds (a single quote doubles to escape, per the YAML spec)."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def patch_terminal_server_credentials(testbed_text: str, username: str, password: str) -> str:
+    """Replace the terminal_server proxy device's change_me/change_me
+    placeholder with the real CML login.
+
+    CML's own /pyats_testbed export fills in every lab node's real
+    per-node credentials (the cisco/LAB_PASSWORD day-0 login), but always
+    leaves the terminal_server proxy device, the CML console server every
+    connection tunnels through, as a change_me placeholder; presumably so
+    the export never auto-embeds the controller's own admin credentials.
+    Without this, every device connection fails through the proxy with
+    "Permission denied" (caught live, Task 7).
+
+    Plain text substitution, not a YAML parse and rewrite, since this
+    script stays stdlib only by design (see the module docstring).
+    Raises TestbedError if the expected placeholder is not found, rather
+    than silently leaving change_me in place were CML's export format to
+    change.
+    """
+    placeholder = "      default:\n        password: change_me\n        username: change_me\n"
+    if placeholder not in testbed_text:
+        raise TestbedError(
+            "terminal_server's change_me placeholder not found; "
+            "CML's testbed export format may have changed"
+        )
+    replacement = (
+        "      default:\n"
+        f"        password: {_yaml_single_quoted(password)}\n"
+        f"        username: {_yaml_single_quoted(username)}\n"
+    )
+    return testbed_text.replace(placeholder, replacement, 1)
+
+
 def _write_private(out_path: Path, text: str) -> None:
     """Write text so it is never briefly world- or group-readable.
 
@@ -136,6 +174,7 @@ def main(argv: list[str]) -> int:
     try:
         token = authenticate(base_url, username, password)
         testbed = fetch_testbed(base_url, token, lab_title)
+        testbed = patch_terminal_server_credentials(testbed, username, password)
     except TestbedError as exc:
         print(f"gen_testbed: {exc}", file=sys.stderr)
         return 1

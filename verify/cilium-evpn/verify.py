@@ -29,7 +29,22 @@ _LIB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _LIB_DIR not in sys.path:
     sys.path.insert(0, _LIB_DIR)
 
-from scenario import CommonCleanup, CommonSetup, devices_with_os  # noqa: E402,F401
+from scenario import CommonCleanup as _CommonCleanup  # noqa: E402
+from scenario import CommonSetup as _CommonSetup  # noqa: E402
+from scenario import devices_with_os  # noqa: E402,F401
+
+
+# AEtest only discovers CommonSetup/CommonCleanup/Testcase subclasses that
+# are defined in the testscript's own module; a name merely imported from
+# scenario.py is invisible to it, and the job silently skips setup and
+# cleanup instead of failing loudly (caught live, Task 7). Re-declaring
+# each one here, empty, is enough for discovery to find it.
+class CommonSetup(_CommonSetup):
+    pass
+
+
+class CommonCleanup(_CommonCleanup):
+    pass
 
 
 def _nxos_devices(testbed: Testbed) -> Iterator[Device]:
