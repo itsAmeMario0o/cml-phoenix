@@ -81,7 +81,13 @@ gen_testbed() {
 }
 
 run_jobfile() {
-  run "${VENV_DIR}/bin/easypy" "$1"
+  # PATH needs the venv's bin/ ahead of the system one: easypy's own
+  # pre-job EnvironmentDebugPlugin shells out to the bare "pyats" command
+  # to check the install, and running "${VENV_DIR}/bin/easypy" by full
+  # path does not put its own bin/ on PATH the way "source .../activate"
+  # would. Without it the plugin errors "pyats: command not found" and
+  # the job aborts before any testcase runs (caught live, Task 7).
+  PATH="${VENV_DIR}/bin:${PATH}" run "${VENV_DIR}/bin/easypy" "$1"
 }
 
 main() {

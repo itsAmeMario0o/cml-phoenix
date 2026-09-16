@@ -22,12 +22,36 @@ TESTBED_YAML = (
     "  name: trustsec-demo\n"
     "devices:\n"
     "  switch1:\n"
-    "    os: iosxe\n"
     "    connections:\n"
     "      console:\n"
     "        protocol: telnet\n"
     "        ip: 127.0.0.1\n"
     "        port: 17001\n"
+    # A real CML testbed export defaults every real device's own login
+    # to the same cisco/cisco guess (gen_testbed.py's
+    # patch_device_credentials docstring), so the fixture carries the
+    # same shape to exercise that substitution too.
+    "    credentials:\n"
+    "      default:\n"
+    "        password: cisco\n"
+    "        username: cisco\n"
+    "    os: nxos\n"
+    # A real CML testbed export always leaves this device as a change_me
+    # placeholder (verify/lib/gen_testbed.py's patch_terminal_server_credentials
+    # docstring), so the fixture carries the same shape to exercise that
+    # substitution instead of dodging it.
+    "  terminal_server:\n"
+    "    connections:\n"
+    "      cli:\n"
+    "        ip: 127.0.0.1\n"
+    "        port: 17001\n"
+    "        protocol: ssh\n"
+    "    credentials:\n"
+    "      default:\n"
+    "        password: change_me\n"
+    "        username: change_me\n"
+    "    os: linux\n"
+    "    type: server\n"
 )
 
 USERNAME = os.environ.get("FAKE_USERNAME", "admin")

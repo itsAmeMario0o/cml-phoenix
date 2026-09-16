@@ -23,6 +23,117 @@ BASE_URL = f"http://127.0.0.1:{PORT}"
 LAB_TITLE = "TrustSec Demo"
 
 
+class PatchTerminalServerCredentialsTest(unittest.TestCase):
+    """gen_testbed.patch_terminal_server_credentials, no server needed."""
+
+    PLACEHOLDER_BLOCK = (
+        "  terminal_server:\n"
+        "    connections:\n"
+        "      cli:\n"
+        "        ip: 198.51.100.9\n"
+        "        port: 22\n"
+        "        protocol: ssh\n"
+        "    credentials:\n"
+        "      default:\n"
+        "        password: change_me\n"
+        "        username: change_me\n"
+        "    os: linux\n"
+        "    type: server\n"
+    )
+
+    def test_replaces_placeholder_with_real_credentials(self) -> None:
+        out = gen_testbed.patch_terminal_server_credentials(
+            self.PLACEHOLDER_BLOCK, "admin", "s3cret"
+        )
+        self.assertNotIn("change_me", out)
+        self.assertIn("password: 's3cret'", out)
+        self.assertIn("username: 'admin'", out)
+
+    def test_leaves_other_devices_credentials_untouched(self) -> None:
+        text = "  switch1:\n    credentials:\n      default:\n        username: cisco\n" + self.PLACEHOLDER_BLOCK
+        out = gen_testbed.patch_terminal_server_credentials(text, "admin", "s3cret")
+        self.assertIn("username: cisco", out)
+
+    def test_quotes_a_single_quote_in_the_password(self) -> None:
+        out = gen_testbed.patch_terminal_server_credentials(
+            self.PLACEHOLDER_BLOCK, "admin", "it's-a-secret"
+        )
+        self.assertIn("password: 'it''s-a-secret'", out)
+
+    def test_raises_when_placeholder_is_absent(self) -> None:
+        with self.assertRaisesRegex(gen_testbed.TestbedError, "change_me placeholder not found"):
+            gen_testbed.patch_terminal_server_credentials("testbed:\n  name: x\n", "admin", "s3cret")
+
+
+class PatchDeviceCredentialsTest(unittest.TestCase):
+    """gen_testbed.patch_device_credentials, no server needed."""
+
+    DEVICES_TEXT = (
+        "devices:\n"
+        "  blue-endpoint:\n"
+        "    credentials:\n"
+        "      default:\n"
+        "        password: cisco\n"
+        "        username: cisco\n"
+        "    os: linux\n"
+        "    type: server\n"
+        "  kind-host:\n"
+        "    credentials:\n"
+        "      default:\n"
+        "        password: cisco\n"
+        "        username: cisco\n"
+        "    os: linux\n"
+        "    type: server\n"
+        "  spine1:\n"
+        "    credentials:\n"
+        "      default:\n"
+        "        password: cisco\n"
+        "        username: cisco\n"
+        "    os: nxos\n"
+        "    platform: n9k\n"
+        "    type: switch\n"
+        "  terminal_server:\n"
+        "    credentials:\n"
+        "      default:\n"
+        "        password: 'admin'\n"
+        "        username: 'admin'\n"
+        "    os: linux\n"
+        "    type: server\n"
+    )
+
+    def test_nxos_device_gets_admin_username(self) -> None:
+        out = gen_testbed.patch_device_credentials(self.DEVICES_TEXT, "labrats1")
+        spine_block = out.split("  spine1:\n", 1)[1].split("  terminal_server:\n", 1)[0]
+        self.assertIn("username: 'admin'", spine_block)
+        self.assertIn("password: 'labrats1'", spine_block)
+
+    def test_linux_host_keeps_cisco_username(self) -> None:
+        out = gen_testbed.patch_device_credentials(self.DEVICES_TEXT, "labrats1")
+        host_block = out.split("  blue-endpoint:\n", 1)[1].split("  kind-host:\n", 1)[0]
+        self.assertIn("username: 'cisco'", host_block)
+        self.assertIn("password: 'labrats1'", host_block)
+
+    def test_kind_host_gets_kindops_username_override(self) -> None:
+        # kind-host is a Linux host like blue-endpoint/red-endpoint, but
+        # its real day-0 username is kindops, not cisco (labs/README.md's
+        # node table; confirmed live, Task 7, "Login incorrect" against
+        # cisco specifically on this one node).
+        out = gen_testbed.patch_device_credentials(self.DEVICES_TEXT, "labrats1")
+        host_block = out.split("  kind-host:\n", 1)[1].split("  spine1:\n", 1)[0]
+        self.assertIn("username: 'kindops'", host_block)
+        self.assertIn("password: 'labrats1'", host_block)
+
+    def test_terminal_server_is_left_untouched(self) -> None:
+        out = gen_testbed.patch_device_credentials(self.DEVICES_TEXT, "labrats1")
+        proxy_block = out.split("  terminal_server:\n", 1)[1]
+        self.assertIn("username: 'admin'", proxy_block)
+        self.assertNotIn("labrats1", proxy_block)
+
+    def test_raises_when_no_device_placeholder_found(self) -> None:
+        with self.assertRaisesRegex(gen_testbed.TestbedError, "no device cisco/cisco placeholder"):
+            gen_testbed.patch_device_credentials("devices:\n  terminal_server:\n    os: linux\n", "labrats1")
+
+
 class FetchTestbedTest(unittest.TestCase):
     proc: subprocess.Popen
 
@@ -78,6 +189,7 @@ class FetchTestbedTest(unittest.TestCase):
                 "CML_USERNAME": "admin",
                 "CML_PASSWORD": "secret",
                 "CML_VERIFY_SSL": "false",
+                "LAB_PASSWORD": "TestLabPassword-DoNotLeak",
             })
             result = subprocess.run(
                 [sys.executable, str(REPO / "verify" / "lib" / "gen_testbed.py"), LAB_TITLE, str(out_path)],
@@ -89,8 +201,18 @@ class FetchTestbedTest(unittest.TestCase):
             self.assertNotIn("secret", result.stderr)
             self.assertNotIn("FAKE-TOKEN", result.stdout)
             self.assertNotIn("FAKE-TOKEN", result.stderr)
+            self.assertNotIn("TestLabPassword-DoNotLeak", result.stdout)
+            self.assertNotIn("TestLabPassword-DoNotLeak", result.stderr)
             self.assertEqual(stat.S_IMODE(out_path.stat().st_mode), 0o600)
-            self.assertIn("testbed:", out_path.read_text())
+            written = out_path.read_text()
+            self.assertIn("testbed:", written)
+            # Neither placeholder should survive: the terminal_server
+            # proxy's change_me, or any real device's cisco/cisco guess.
+            # Without both, some device connection fails (caught live,
+            # Task 7).
+            self.assertNotIn("change_me", written)
+            self.assertNotIn("password: cisco\n        username: cisco", written)
+            self.assertIn("password: 'TestLabPassword-DoNotLeak'\n        username: 'admin'", written)
 
     def test_cli_unknown_lab_title_fails_without_writing(self) -> None:
         with tempfile.TemporaryDirectory(prefix=".tmp.gen_testbed.", dir=REPO / "tests") as tmp:
@@ -101,6 +223,7 @@ class FetchTestbedTest(unittest.TestCase):
                 "CML_USERNAME": "admin",
                 "CML_PASSWORD": "secret",
                 "CML_VERIFY_SSL": "false",
+                "LAB_PASSWORD": "TestLabPassword-DoNotLeak",
             })
             result = subprocess.run(
                 [sys.executable, str(REPO / "verify" / "lib" / "gen_testbed.py"), "Nope", str(out_path)],

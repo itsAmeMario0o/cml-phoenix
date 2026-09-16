@@ -14,7 +14,10 @@ Devices are nexus9300v spines and leaves (NX-OS). The generated testbed
 also carries the kind host and the two Ubuntu endpoints from the lab
 topology; those have no BGP or NVE state to check, so both testcases below
 filter to devices whose testbed os is nxos rather than assuming every
-device in the testbed understands these commands.
+device in the testbed understands these commands. Within that nxos set,
+VnisUp skips any device where "show nve vni" itself does not exist (the
+spines, which route-reflect EVPN but never terminate a VTEP), rather than
+assuming every nxos device runs NVE too (caught live, Task 7).
 """
 from __future__ import annotations
 
@@ -22,6 +25,7 @@ import os
 import sys
 from typing import Any, Iterator
 
+from genie.metaparser.util.exceptions import InvalidCommandError
 from pyats import aetest
 from pyats.topology import Device, Testbed
 
@@ -29,7 +33,22 @@ _LIB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _LIB_DIR not in sys.path:
     sys.path.insert(0, _LIB_DIR)
 
-from scenario import CommonCleanup, CommonSetup, devices_with_os  # noqa: E402,F401
+from scenario import CommonCleanup as _CommonCleanup  # noqa: E402
+from scenario import CommonSetup as _CommonSetup  # noqa: E402
+from scenario import devices_with_os  # noqa: E402,F401
+
+
+# AEtest only discovers CommonSetup/CommonCleanup/Testcase subclasses that
+# are defined in the testscript's own module; a name merely imported from
+# scenario.py is invisible to it, and the job silently skips setup and
+# cleanup instead of failing loudly (caught live, Task 7). Re-declaring
+# each one here, empty, is enough for discovery to find it.
+class CommonSetup(_CommonSetup):
+    pass
+
+
+class CommonCleanup(_CommonCleanup):
+    pass
 
 
 def _nxos_devices(testbed: Testbed) -> Iterator[Device]:
@@ -81,14 +100,25 @@ class BgpEvpnNeighborsEstablished(aetest.Testcase):
 
 
 class VnisUp(aetest.Testcase):
-    """Every VNI on every NX-OS device is up."""
+    """Every VNI on every NX-OS device that runs NVE (the leaves) is up."""
 
     @aetest.test
     def check_vnis(self, testbed: Testbed) -> None:
         checked_any = False
         failures: list[str] = []
         for device in _nxos_devices(testbed):
-            parsed: dict[str, Any] = device.parse("show nve vni")
+            try:
+                parsed: dict[str, Any] = device.parse("show nve vni")
+            except InvalidCommandError:
+                # Spines never run NVE: they route-reflect the EVPN
+                # control plane (BUILD-ORDER.md's "Where spine and leaf
+                # actually differ") but never get "feature nv overlay",
+                # so "show nve vni" does not exist on them at all, "%
+                # Invalid command". Not every NX-OS device in this
+                # fabric terminates a VTEP; skip the ones where the
+                # command itself is unsupported rather than erroring
+                # the whole check (caught live, Task 7).
+                continue
             # Genie's nxos parser for this command
             # (genie.libs.parser.nxos.show_vxlan.ShowNveVni) nests each VNI
             # at <nve interface> -> 'vni' -> <vni id> -> 'vni_state', a
