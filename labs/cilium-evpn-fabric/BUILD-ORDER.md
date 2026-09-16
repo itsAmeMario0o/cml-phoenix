@@ -515,6 +515,50 @@ in this layer; it's plain IP routing, and it should be provably working
 end to end (ping loopback to loopback across the fabric) before layer 4
 touches it.
 
+### Why an unsourced ping past one hop fails here, and a sourced one doesn't
+
+Only loopback0 and loopback1 ever get a `network` statement above.
+Nobody advertises the eight `/30` transit links themselves; each one
+exists only as a directly-connected route on the two devices sitting on
+it, nowhere else in the fabric. That is a deliberate design choice, not
+some special property of loopbacks: whatever gets advertised is
+reachable fabric-wide, and here that happens to be only the loopbacks.
+
+`ping`/`traceroute` need a working path in both directions, and the
+destination in a reachability test is never the problem here, it is
+always a loopback, always advertised. The source is what breaks it.
+Without an explicit `source`, NX-OS stamps the packet with the local
+egress interface's own address, for example leaf1 reaching leaf2's
+loopback over the spine2 uplink sources from `10.4.0.6`, leaf1's own
+end of that `/30`. Leaf2 receives that packet fine, the forward path
+is never in question, but it has no route back to `10.4.0.6`, since
+that subnet was never advertised past its two direct neighbors. The
+reply has nowhere to go:
+
+```
+leaf1# traceroute 10.2.0.12
+ 1  10.4.0.5 (10.4.0.5)  3.6 ms      <- forward path is fine, reaches spine2
+ 2  * * *                            <- leaf2 has it, can't route the reply back
+```
+
+Source it from a loopback instead, and the only thing that changed is
+that the reply now has somewhere routable to go:
+
+```
+leaf1# traceroute 10.2.0.12 source 10.2.0.11
+ 1  10.4.0.5 (10.4.0.5)  3.5 ms
+ 2  10.2.0.12 (10.2.0.12) (AS 65000)  5.3 ms
+```
+
+Same forward path, same hop 1, both times. A single-hop test (spine to
+its directly connected leaf) never hits this, because two directly
+connected devices already know their own shared subnet regardless of
+what BGP ever advertised; a third device in the path is what makes that
+local shortcut disappear and forces the packet onto an actually routed
+return path. Any multi-hop reachability test in this fabric needs
+`source <loopback-address>` for exactly this reason, underlay pings
+here and overlay VTEP pings later in step 6 alike.
+
 ## Step 4: multicast underlay
 
 This design floods BUM traffic with PIM sparse mode and an anycast RP
