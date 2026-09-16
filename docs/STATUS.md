@@ -6,6 +6,59 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-16, Cilium EVPN fabric verified live, pyATS layer fixed end to end
+
+The operator finished pushing `BUILD-ORDER.md`'s seven layers onto all
+six switches, by hand from iTerm over the console-server SSH path.
+`scripts/80-verify-lab.sh cilium-evpn` then ran for real, for the first
+time ever against this fabric: `common_setup`, `BgpEvpnNeighborsEstablished`,
+and `VnisUp` all `PASSED`, 100% success rate. Genie-parsed, not raw text,
+so this is a real independent confirmation the fabric is correct, not
+just that the operator's own `show` commands looked right.
+
+Getting there took five bug fixes to the pyATS layer itself, all latent
+since ADR 0009 landed and never caught because nothing had run this
+layer live before now:
+
+- AEtest never discovers a `CommonSetup`/`CommonCleanup` subclass that
+  is merely imported, not defined, in the testscript's own module.
+  Both scenarios' shared-code pattern hit this; setup and cleanup
+  silently never ran. Fixed with a thin local re-declaration per
+  scenario.
+- `scripts/80-verify-lab.sh` invoked `easypy` by its full venv path,
+  which never puts the venv's `bin/` on `PATH`; `easypy`'s own pre-job
+  plugin shells out to the bare `pyats` command and aborted every run
+  before any testcase started. Fixed.
+- `gen_testbed.py` wrote out CML's `/pyats_testbed` export unmodified.
+  That export always leaves the `terminal_server` proxy device (the
+  console server every connection tunnels through) as a
+  `change_me`/`change_me` placeholder, and separately defaults every
+  real device's own credentials to a generic `cisco`/`cisco` guess,
+  wrong for the NX-OS switches (`admin`) and for `kind-host`
+  specifically (`kindops`, not `cisco`, per `labs/README.md`'s node
+  table). Fixed with two patch steps and `LAB_PASSWORD` wired in from
+  `labs.env` (already sourced, no script changes needed). The
+  `kind-host` case needed connecting to each device individually with
+  verbose output to catch, since the generic fix alone still failed.
+- `VnisUp` assumed every NX-OS device runs NVE. The spines
+  route-reflect EVPN but never terminate a VTEP, so `show nve vni`
+  does not exist there at all. Fixed by skipping a device where the
+  command itself is unsupported instead of erroring the whole check.
+
+All five fixes are on `main`, each with new unit tests. Along the way,
+corrected an earlier answer given in chat: the red/blue endpoint
+password is `LAB_PASSWORD` in `config/mcp-env/labs.env`, not
+`LAB_USER_PASSWORD` (the shared human CML-login password); the two were
+conflated when originally asked.
+
+Next: an ISE deploy, by hand through the Azure portal per
+`docs/ISE-MARKETPLACE-DEPLOY.md` (ADR 0008 amendment; the automated
+`az deployment group create` path stays retired). `config/mcp-env/ise.env`
+is already fully populated from earlier work; no ISE resources exist in
+Azure right now (`role=ise` tag search is empty). The Cilium-BGP-peering
+step from `BUILD-ORDER.md`'s closing section, and the Cloudflare tunnel
+token rotation from 2026-09-11, are still open and unrelated to this.
+
 ## 2026-09-15, fabric build in progress, console access confirmed by terminal
 
 `labs/cilium-evpn-fabric/BUILD-ORDER.md` merged after a rework: it now
