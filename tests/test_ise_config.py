@@ -2,6 +2,7 @@
 network device, one authorization rule), against tests/fake_ise_api.py.
 Create-if-missing, idempotent on rerun, like tests/test_users.py for
 scripts/lib/users.py."""
+import os
 import subprocess
 import sys
 import time
@@ -164,6 +165,55 @@ class MainEntryPointTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("ISE_PRIVATE_IP", result.stderr)
+
+
+class MainDefaultAdminUsernameTest(unittest.TestCase):
+    """main() must default ISE_ADMIN_USERNAME to iseadmin, the Azure
+    Marketplace ISE image's fixed admin account, not the generic "admin"
+    guess. A wrong default here 401s every real ERS call even though the
+    same password is correct (caught live, first real deploy)."""
+
+    proc: subprocess.Popen
+    port = PORT + 2
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        env = dict(os.environ)
+        env["FAKE_ISE_USER"] = "iseadmin"
+        cls.proc = subprocess.Popen(
+            [sys.executable, str(REPO / "tests" / "fake_ise_api.py"), str(cls.port)], env=env
+        )
+        for _ in range(50):
+            try:
+                req = urllib.request.Request(f"http://127.0.0.1:{cls.port}/api/v1/policy/network-access/policy-set")
+                with urllib.request.urlopen(req, timeout=1):
+                    pass
+                break
+            except urllib.error.HTTPError:
+                break
+            except OSError:
+                time.sleep(0.1)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.proc.terminate()
+        cls.proc.wait(timeout=5)
+
+    def test_default_username_is_iseadmin_not_admin(self) -> None:
+        # No ISE_ADMIN_USERNAME set: main() must still authenticate as
+        # iseadmin against a fake that only accepts that username.
+        env = {
+            "ISE_API_BASE": f"http://127.0.0.1:{self.port}",
+            "ISE_ADMIN_PASSWORD": "secret",
+            "RADIUS_SECRET": "radius-secret",
+        }
+        result = subprocess.run(
+            [sys.executable, str(REPO / "scripts" / "lib" / "ise_config.py")],
+            capture_output=True, text=True, env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("network device", result.stdout)
+        self.assertIn("authorization rule", result.stdout)
 
 
 if __name__ == "__main__":
