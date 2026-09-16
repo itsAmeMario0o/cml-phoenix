@@ -6,6 +6,48 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-16, ISE deployed and TrustSec Phase 1 policy live
+
+ISE 3.5 deployed by hand through the Azure Marketplace portal, per
+`docs/ISE-MARKETPLACE-DEPLOY.md`, at `10.20.2.20` (`ise1`, East US 2,
+`Standard_D8s_v4`). `scripts/25-ise-up.sh --post-deploy` then completed
+clean end to end: `ise-nsg` created and attached (RADIUS from the lab
+summary, admin 443/22 from the CML host only), VM and disk tagged
+`role=ise`, readiness confirmed through the CML jump, and the TrustSec
+Phase 1 policy applied for real: `c8000v-edge` registered as a RADIUS
+network device over ERS, the `trustsec-poc` authorization rule created
+under the OpenAPI. `terraform -chdir=terraform/persistent plan` shows no
+changes; the deploy didn't disturb `rt-apps`.
+
+Getting there took two more real bugs in `scripts/lib/ise_config.py`,
+neither ever exercised against real ISE before this deploy:
+
+- `main()` defaulted the admin username to `"admin"`; the Marketplace
+  image's account is always `iseadmin`, fixed by the deploy wizard, not
+  customizable. Every ERS call 401'd with the correct password until
+  fixed.
+- The OpenAPI client assumed bare JSON arrays and flat rule objects.
+  Real ISE 3.5 wraps everything in a `{"version", "response"}` envelope,
+  and an authorization rule's own fields nest under a `"rule"` key
+  alongside `"profile"`. Verified all three real shapes (GET policy-set,
+  GET .../authorization, and an actual POST creating `trustsec-poc`)
+  directly against the live node before writing the fix.
+
+Also along the way: the repo's own `keys/known_hosts` had gone stale
+(a different host key than the live CML host presents), breaking
+`scripts/50-tunnels.sh`; fixed directly since that file lives inside the
+repo. Added an `ise` entry to `config/tunnels.conf` (gitignored, not
+previously created) forwarding local `8443` to ISE's admin GUI over
+443, since ISE's private IP has no route from the Mac and all admin
+access goes through the CML jump (ADR 0003): the NSG's admin rule only
+allows the CML host's own address, not the Mac's, even via ISE's public
+IP.
+
+Not fixed, not needed for this phase: ISE raises a `DNS Resolution
+Failure` alarm for its own FQDN (`ise1.rooez.com`, no public record
+ever created for it). Cosmetic for a standalone lab node; acknowledged
+and left as is.
+
 ## 2026-09-16, Cilium EVPN fabric verified live, pyATS layer fixed end to end
 
 The operator finished pushing `BUILD-ORDER.md`'s seven layers onto all
