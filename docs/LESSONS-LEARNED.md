@@ -322,6 +322,30 @@ in Azure, which is the cheapest place to learn them.
   hook finds the directory and skips it. Done 2026-09-10 in under a
   minute. Roadmap item 10 should absorb this as the normal path.
 
+## The live image add needs no sudo: the controller has an upload API
+
+- Symptom: repeating the FTDv live add for the two Catalyst 9000v images
+  on 2026-09-16, the `install` into `/var/local/virl2/dropfolder` asked
+  for sysadmin's sudo password, which a non-interactive SSH session
+  cannot answer. The dropfolder is `www-data:virl2` mode 2770 and
+  sysadmin is in neither group.
+- Cause: the dropfolder is meant to be fed by the controller itself.
+  `POST /api/v0/images/upload` takes the file as the request body with
+  `X-Original-File-Name` and `X-File-Name` headers and writes it into
+  the dropfolder as the right owner. Run from the host against
+  `https://127.0.0.1` the 2.5 GB copy takes seconds.
+- Fix: pull the blob onto the host with azcopy as before, then
+  `curl -X POST -T /tmp/<file> https://127.0.0.1/api/v0/images/upload`
+  with the two headers and the bearer token, then `POST
+  /node_definitions` and `POST /image_definitions` as before. Two traps
+  on the way: `curl --data-binary @file` reads the whole file into
+  memory and dies with "out of memory" on a 2.5 GB image, so stream it
+  with `-T`; and both Cat9000v image definitions name the same qcow2
+  file, so upload it once per image definition, since the controller
+  moves the file out of the dropfolder on each register. Both images
+  landed under `/data/images/virl-base-images/` owned `libvirt-qemu:virl2`,
+  where the persist hook finds them at the next rebuild.
+
 ## An Ubuntu LACP bond to a vPC never comes up in CML
 
 - Symptom: the Nexus pair reported Ethernet1/12 "suspended (no LACP

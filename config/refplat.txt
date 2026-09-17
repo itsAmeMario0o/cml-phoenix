@@ -12,6 +12,11 @@ iosv iosv-159-3-m12
 iosvl2 iosvl2-2020
 cat8000v cat8000v-17-18-02
 nxosv9000 nxosv9300-10-6-2-f
+# Catalyst 9000v, both data planes. UADP models the 9300/9500 access
+# layer and is the TrustSec Phase 2 access switch; Q200 models the 9500X
+# and is for the IOS-XE VXLAN EVPN lab. 18 GB and 12 GB RAM per node.
+cat9000v-uadp cat9000v-uadp-17-18-02
+cat9000v-q200 cat9000v-q200-17-18-02
 # From the supplemental ISO. Upload these with REFPLAT_ISO pointing at it
 # and REFPLAT_FILE holding only these lines; the script checks names
 # against one mounted ISO at a time.
