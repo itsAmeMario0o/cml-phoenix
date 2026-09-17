@@ -28,15 +28,19 @@ and MAB lines are in that export. That lab was a hand-built test lab and is
 not the TrustSec lab. The TrustSec lab is the Phase 2 design, which has a
 spec, no implementation plan, and no topology; the export is an input to it.
 
+Also new today: `docs/ARCHITECTURE-REVIEW.md`, a self-audit by four
+read-only reviewers. Read its "What to do, in order" list before the next
+build. The first item is rotating the two CML passwords, which never
+happened (the correction is in the 2026-09-17 early entry below).
+
 New today: `docs/BUILD-FROM-SCRATCH.md`, the whole build in order for
 someone starting from a clone and an empty subscription, linking to the
 detailed documents. Writing it turned up things no document said before: on
 another subscription `terraform/persistent/backend.tf` needs the bootstrap
 root's storage account name, the image upload has to follow the persistent
 apply, and `config/refplat.txt` mixes images from two ISOs. It also
-questions this file's 2026-09-17 early entry: the admin and sysadmin
-`random_password` resources live in `terraform/persistent`, so a CML
-teardown probably does not rotate them. Not checked yet.
+questioned this file's 2026-09-17 early entry about password rotation.
+Checked since: it was wrong, and that entry now says so.
 
 Code that has not yet run in a clean build, all of it expected to work: the
 fork's `06-transit.sh` from cloud-init and its `lab-transit-out` rule, the
@@ -340,10 +344,15 @@ and work now. LESSONS-LEARNED has it.)
 Torn down at 02:51 UTC after both PRs merged: all three labs exported
 to blob under `exports/20260917T025148Z` (the cat9kv probe lab among
 them, so its YAML survives even though it was never tracked), license
-deregistered, 13 resources destroyed, persistent plan clean. The
-teardown also destroyed the root's `random_password` secrets, so the
-next `20-up.sh` rotates the admin and sysadmin passwords that leaked
-into this session on its own. The next build ships
+deregistered, 13 resources destroyed, persistent plan clean. This entry
+first said the teardown also destroyed the root's `random_password` secrets
+and that the next `20-up.sh` would rotate the admin and sysadmin passwords
+that leaked into this session. That was wrong, and nothing rotated: both
+passwords are defined in `terraform/persistent/main.tf` and read from its
+outputs on every build. They need
+`terraform -chdir=terraform/persistent apply -replace=random_password.app_admin -replace=random_password.sys_admin`
+before the next build, which is the operator's apply
+(`docs/ARCHITECTURE-REVIEW.md`, security). The next build ships
 `06-transit-bridge.sh` through cloud-init for the first time; check
 `/var/log/provision/06-transit-bridge.log` and the connector list
 (`Bridge 1` on `bridge1`) before reimporting the labs, then the pyATS
