@@ -113,7 +113,9 @@ moved to the Done section at the bottom.
     collection (item 18). Needs its own spec, and study of what ISEEE
     actually automates, before any code.
 
-21. Python first, with proof. Operator direction, 2026-09-17: the kit has
+21. Python first, with proof. Tabled by the operator the same day it was
+    raised: functional labs come first, and this waits until they work as
+    intended. Do not start it unasked. Operator direction, 2026-09-17: the kit has
     grown to thirteen bash scripts and six Python modules, about 3,200
     lines, and nearly every latent bug found in the 09-16 and 09-17
     sessions lived in bash that had only ever been dry-run tested (a
