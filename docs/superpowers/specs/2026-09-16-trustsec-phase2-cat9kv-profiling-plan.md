@@ -176,10 +176,13 @@ request and not answering. Next step, in order:
    `keys/cml-lab` was interrupted before it ran, so first confirm which
    public key the Marketplace deploy was given. If ISE sees no request,
    the drop is on the Azure side between the CML NIC and ISE.
-2. If it is the CML NIC, add an explicit outbound rule on `cml-sg` in
-   `terraform/persistent` (source 10.100.0.0/16, destination the apps
-   subnet, any port) rather than relying on the `VirtualNetwork` tag, then
-   `terraform plan` and a gated apply.
+2. If it is the CML NIC, add an explicit outbound rule on its NSG for
+   source 10.100.0.0/16 to the apps subnet, any port, rather than relying
+   on the `VirtualNetwork` tag. That NSG is defined in the fork, not the
+   persistent root: `azurerm_network_security_group.cml` in
+   `vendor/cloud-cml/modules/deploy/azure/main.tf`, beside the existing
+   `lab_transit` inbound rule, so it is a stop-and-ask vendor edit that
+   lands on the next build.
 3. If ISE sees the request and does not answer, check Operations >
    RADIUS > Live Logs for the drop reason (unknown NAD, shared secret).
    Both NAD entries read back correctly over ERS (RADIUS, /32, profile

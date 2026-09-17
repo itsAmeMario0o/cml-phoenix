@@ -84,32 +84,50 @@ PRs #10 and #11 merged at session end: #10 (Catalyst 9000v in the reference plat
 and #11 (the transit bridge, the `bridge1` rename in the Phase 1 lab,
 smoke test, and verify script, these lessons and this entry).
 
-Next session, in this order:
+Next session, in this order (reviewed by `/code-review` before merge;
+it caught the wrong Terraform root, the missing rescan, and three
+omitted steps):
 
 1. `scripts/00-preflight.sh`, then `scripts/20-up.sh`. Nothing is running
    in Azure but the persistent root, and the data disk already holds
    every image, both Cat9000v flavors included.
 2. On the new host, before anything else: `/var/log/provision/06-transit-bridge.log`
-   should end with `bridge1 holds 10.100.0.1/24` and `10.100.0.0/16
-   routes via 10.100.0.2`, and `GET /api/v0/system/external_connectors`
-   should list `Bridge 1` on device `bridge1`. This is the fork script's
-   first run through cloud-init; it has only ever run by hand.
-3. `scripts/90-smoke-test.sh` (it checks `bridge1` now), then reimport
-   `labs/trustsec-phase1.yaml` with `60-import-lab.sh`. The Cilium fabric
-   and the cat9kv probe lab are in blob under `exports/20260917T025148Z`
-   if wanted; the probe lab's YAML also sits in the Phase 2 note's
-   history, not in `labs/`.
-4. ISE: portal deploy per `docs/ISE-MARKETPLACE-DEPLOY.md`, then
+   must contain `[06-transit-bridge] bridge1 holds 10.100.0.1/24` and
+   `[06-transit-bridge] 10.100.0.0/16 routes via 10.100.0.2` and no
+   `FAIL:` line (`postprocess` swallows the exit code, so the log is the
+   only signal). This is the fork script's first run through cloud-init;
+   it has only ever run by hand. Then `PUT /api/v0/system/external_connectors`
+   to rescan, because `postprocess` runs after the controller's own
+   startup scan and the script does not rescan for itself; only after
+   that should `GET` list `Bridge 1` on device `bridge1`. Making the
+   script issue that rescan (the way `04-customize.sh` talks to the API
+   from postprocess) is a small fork change worth doing first.
+3. `scripts/70-users.sh` (accounts and lab grants live on the disposable
+   VM) and the cloudflared reinstall in `docs/ACCESS.md`, both needed
+   after every rebuild.
+4. `scripts/90-smoke-test.sh` (it checks `bridge1` now), then reimport
+   `labs/trustsec-phase1.yaml` with `60-import-lab.sh`, and the cat9kv
+   probe lab, which step 6 depends on (it is where `sw1` and `ep1` live;
+   the Phase 1 lab has only the edge). The probe lab was never tracked;
+   its only surviving copy is the blob export
+   `exports/20260917T025148Z/cat9kv-probe-f13f801f-ab62-4436-a788-f04827ad6684.yaml`.
+   Rerun `70-users.sh` after importing so the grants cover both labs.
+5. ISE: portal deploy per `docs/ISE-MARKETPLACE-DEPLOY.md`, then
    `scripts/25-ise-up.sh --post-deploy`, which now tags the NIC and
    public IP too. Note which SSH public key the deploy is given; the ISE
-   CLI is key-only and the next step needs it. Re-add `cat9kv-sw1`
-   (10.100.0.3) as a NAD once the probe lab is back, or fold it into
-   `ise_config.py`.
-5. Then the open question, from ISE's side first: does the switch's
+   CLI is key-only and step 6 needs it. Re-add `cat9kv-sw1` (10.100.0.3)
+   as a NAD, or fold it into `ise_config.py`. Then
+   `scripts/80-verify-lab.sh trustsec-phase1`, the pyATS run that has
+   never executed against a live lab.
+6. The open question, from ISE's side first: does the switch's
    Access-Request reach ISE (RADIUS Live Logs through the `ise` tunnel,
-   or `tech dumptcp 0 count 12` on its CLI). If not, add an explicit
-   outbound rule on the CML NSG in `terraform/persistent` for source
-   10.100.0.0/16 to the apps subnet and plan it. If it does and ISE stays
+   or `tech dumptcp 0 count 12` on its CLI). If not, the CML NIC's NSG is
+   the suspect, and it lives in the fork, not the persistent root:
+   `azurerm_network_security_group.cml` in
+   `vendor/cloud-cml/modules/deploy/azure/main.tf`, next to the existing
+   `lab_transit` inbound rule. An explicit outbound rule there for source
+   10.100.0.0/16 to the apps subnet is a stop-and-ask vendor edit that
+   takes effect on the next build. If ISE does see the request and stays
    silent, the Live Log drop reason says why. Only after RADIUS answers:
    the first MAB session on `ep1`, then the Phase 2 spec with FTDv and
    Kali (`docs/superpowers/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`).
