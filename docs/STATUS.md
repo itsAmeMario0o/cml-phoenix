@@ -6,6 +6,52 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-17, night: ISE repointed at the DC, join point made, join blocked
+
+ISE now uses the directory for DNS. The ISE deployed that morning had
+8.8.8.8 and the domain `rooez.com`, and it was repointed from its CLI:
+`ip name-server 10.20.2.10`, `no ip name-server 8.8.8.8` (the first command
+appends, so the public resolver stayed in front until removed), and
+`ip domain-name corp.rooez.com`. Each asks to restart ISE's services and
+has to be answered `yes`; `no` cancels the change itself. Three restarts,
+30 to 40 minutes. Verified on ISE: the running config has the one name
+server and the new domain name, `ping dc1` resolves to
+`dc1.corp.rooez.com (10.20.2.10)` and gets replies, and `show ntp` shows ISE
+synchronized with the DC's clock within seconds of it. ISE is
+`ise1.corp.rooez.com` now, with a new self-signed certificate. ISE's own
+`nslookup` fails on this image while resolution works, so `ping` is the
+check (LESSONS-LEARNED).
+
+The Active Directory join point `corp.rooez.com` exists, created over ERS
+through the `ise` tunnel as `iseadmin`. The join as `svc-ise` fails. The API
+only says HTTP 500, "nodes not able to join/remove"; the reason is in ISE's
+`ise-psc.log` and nowhere else. The first reading of that log blamed the
+delegation: `svc-ise` could create its computer object but was denied
+`operatingSystem`, `operatingSystemVersion`, and
+`msDS-SupportedEncryptionTypes`. Write property on computer objects under
+`CN=Computers` was granted live on the DC, and the same `dsacls` line is
+being added to `scripts/ad/30-create-identities.ps1`. After it every
+attribute is written and `ISE1` on the DC shows its OS and version. The join
+still ends on the same line, "Access is denied", error code 5, so those
+denials were never fatal.
+
+The suspected cause is Cisco Field Notice FN74321 with regression bug
+CSCwr77017: a Windows Server 2025 DC refuses the legacy SAM RPC password
+change methods that ISE uses in a join. The notice lists ISE 3.1 through
+3.4 P1 and does not mention 3.5; ours is 3.5.0.527, so it is not proven
+here. Cisco's workaround is a DC policy ("Configure SAM change password RPC
+methods policy", allow all; registry `SamrChangeUserPasswordApiPolicy` = 3).
+It has not been applied. It lowers a security default on a domain
+controller and is the operator's decision. Until then nothing after the
+join (groups, identity source sequence, `test aaa` from `sw1`, PEAP from
+`emp-pc` as `mario`, a CA-signed ISE certificate) can start.
+
+New: `docs/ISE-AD-BUILD.md`, the step by step runbook for the Windows
+server, ISE's DNS, and the join, with `docs/AD.md` kept as the conceptual
+document. Ten lessons added to LESSONS-LEARNED from this work.
+
+Running in Azure: CML, ISE, and the DC, all three. PR #18 is open.
+
 ## 2026-09-17, evening: 802.1X proven, Phase 2 spec drafted, direction recorded
 
 802.1X works in this lab. An IOSvL2 node added to the probe lab as a

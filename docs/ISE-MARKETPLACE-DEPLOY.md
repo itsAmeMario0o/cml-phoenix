@@ -81,6 +81,14 @@ after **Create**: the Basics tab asks for Host Name and Time Zone.
 
 Leave the secondary and tertiary DNS and NTP fields blank.
 
+Get DNS domain name and Primary Name Server right here, because they are
+expensive to change afterward. On a running ISE it takes three CLI commands
+(add the DC as a name server, remove the old one, set the domain name), each
+with its own restart of ISE's services, 30 to 40 minutes in all, and the
+domain name change regenerates ISE's self-signed certificate. The ISE of
+2026-09-17 went through it; `docs/ISE-AD-BUILD.md`, Part 2, has the prompts
+and the answers.
+
 ### Services
 
 | Field | Value | Why |

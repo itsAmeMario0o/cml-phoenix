@@ -69,6 +69,11 @@ try {
     # ISE creates its own computer object when it joins.
     $computers = "CN=Computers,$((Get-ADDomain).DistinguishedName)"
     & dsacls.exe $computers /G "$NetbiosName\svc-ise:CC;computer" > $null
+    # Creating the object does not let svc-ise write operatingSystem,
+    # operatingSystemVersion, or msDS-SupportedEncryptionTypes on it. ISE
+    # survives the denial but leaves its computer object without them, so
+    # grant write property on computer objects under Computers.
+    & dsacls.exe $computers /I:S /G "$NetbiosName\svc-ise:WP;;computer" > $null
 
     Add-IseDnsRecords
     Write-Output "identities done: $($rows.Count) users plus svc-ise"

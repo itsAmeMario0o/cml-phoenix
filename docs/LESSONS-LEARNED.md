@@ -616,3 +616,170 @@ in Azure, which is the cheapest place to learn them.
   `authentication violation replace`, or `authentication host-mode
   multi-auth` where several MACs are expected. Check the port status
   before suspecting EAP, certificates, or ISE.
+
+## ISE asks to restart after a DNS change, and answering no cancels the change
+
+- Symptom: on ISE's CLI, `ip name-server 10.20.2.10` printed a notice that
+  DNS changed and asked "Do you want to restart ISE now? Proceed?
+  [yes,no]". Answered `no`, to restart later at a better moment. ISE
+  printed "Aborted: by user" and `show running-config` still had the old
+  name server. Seen 2026-09-17.
+- Cause: the question is worded as if it were about timing, and it is about
+  the change. `no` throws the command away. ISE has no way to change DNS
+  now and restart later.
+- Fix: answer `yes` and plan for the wait. The prompt came back after about
+  7 minutes saying "ISE Processes are initializing", and the Application
+  Server took a few minutes more (`show application status ise`). The same
+  holds for `no ip name-server` and `ip domain-name`; the domain name
+  restart took about 11 minutes. `docs/ISE-AD-BUILD.md`, Part 2.
+
+## ISE's `ip name-server` adds to the list, it does not replace it
+
+- Symptom: after `ip name-server 10.20.2.10` and its restart, the running
+  config read `ip name-server 8.8.8.8 10.20.2.10`. The public resolver
+  from the portal deploy was still there, and still first. Seen 2026-09-17.
+- Cause: the command appends. With 8.8.8.8 in front, lookups for
+  `corp.rooez.com` go to a server that knows nothing about it.
+- Fix: `no ip name-server 8.8.8.8`, which asks for another restart and
+  needs `yes`. A repoint is therefore three commands and three restarts
+  (add, remove, `ip domain-name`), 30 to 40 minutes in all. A fresh deploy
+  with Primary Name Server 10.20.2.10 and DNS domain `corp.rooez.com` in
+  the portal form costs nothing, which is why `24-ad-up.sh` runs before the
+  ISE deploy.
+
+## ISE refuses a config command right after a restart: "configuration database is locked"
+
+- Symptom: `ip domain-name corp.rooez.com`, typed as soon as the prompt
+  returned from the previous restart, was refused with "the configuration
+  database is locked by session NNN admin http (rest from 127.0.0.1)".
+  Nobody else was logged in. Seen once, 2026-09-17.
+- Cause: the session holding the lock is ISE's own initialization. The CLI
+  prompt comes back while "ISE Processes are initializing", well before the
+  services are up.
+- Fix: wait until `show application status ise` shows the Application
+  Server `running`, then type the command again. The retry worked.
+
+## ISE's `nslookup` fails while DNS works
+
+- Symptom: after the repoint, `nslookup` on ISE's CLI failed with
+  "/usr/bin/host: parse of /etc/resolv.conf failed". Seen 2026-09-17 on
+  3.5.0.527.
+- Cause: not known. Resolution itself was fine at the same moment. We did
+  not run `nslookup` before the change, so we cannot say whether the
+  repoint broke it or it never worked on this image.
+- Fix: check with `ping dc1` instead. It has to resolve to
+  `dc1.corp.rooez.com (10.20.2.10)` and get replies, which proves both the
+  name server and the search domain. Then
+  `show running-config | include name-server` and `| include domain-name`.
+
+## An expect block written on one line never matches and waits out its timeout
+
+- Symptom: an expect script driving ISE's CLI sat for the whole timeout at
+  every prompt and then carried on. It looked exactly like ISE hanging,
+  and about an hour went to it on 2026-09-17.
+- Cause: `expect { -re {pattern} {} timeout {...} }` written on one line is
+  parsed as a single glob pattern, not as a block of pattern and action
+  pairs. It never matches anything, expect waits the full timeout in
+  silence, and the script falls through as if all were well.
+- Fix: write the block across several lines, one pattern and action per
+  line. When an automated CLI session is slow by exactly the timeout at
+  every step, suspect the script before the device. The helper scripts from
+  that session lived in a session scratchpad and are not in this repo.
+
+## The ISE join over ERS fails with "Falied to send http get request" or a 401
+
+- Symptom: two ways the ERS calls for the Active Directory join go wrong.
+  A 401 on every call, with a password known to be right (first met on
+  2026-09-16 in `ise_config.py`). And, on 2026-09-17,
+  `PUT /ers/config/activedirectory/<id>/join` failing with "Falied to send
+  http get request" (ISE's spelling).
+- Cause: the 401 is the username. The Marketplace image's admin account is
+  `iseadmin`, for ERS as well as the GUI, and `admin` does not exist. The
+  second is the `node` value in the join body: the short name `ise1` is not
+  accepted.
+- Fix: authenticate as `iseadmin`, and give the node as the FQDN,
+  `ise1.corp.rooez.com`. The two request bodies are in
+  `docs/ISE-AD-BUILD.md`, Part 3.
+
+## A failed ISE join says "nodes not able to join/remove" and nothing else
+
+- Symptom: the join returned HTTP 500, "nodes not able to join/remove :
+  [ise1.corp.rooez.com]". `ad_agent.log` had only
+  `LW_ERROR_NOT_JOINED_TO_AD` status lines. The DC's Security log had only
+  Audit Success: a TGT for `svc-ise`, a password reset on `ISE1$`, the
+  account enabled. Seen 2026-09-17.
+- Cause: the API message never carries the reason. `ad_agent.log` at its
+  default level does not log the attempt. The DC does not audit an LDAP
+  write that it denies, by default, so a refusal leaves no event there.
+- Fix: the reason is only in ISE's `ise-psc.log`, which holds the join's
+  full step log and its final error: `show logging application ise-psc.log
+  | include Fatal`. It takes several minutes and pages with `--More--`.
+  Read it to the end before settling on a cause; the next entry is why.
+
+## Denied attribute writes in the ISE join log were not why the join failed
+
+- Symptom: the join's step log showed `ISE1$` created, enabled, and given a
+  password, `dNSHostName` and the SPNs written, then `operatingSystem`,
+  `operatingSystemVersion`, and `msDS-SupportedEncryptionTypes` with no
+  success line, and a final "Access is denied", error code 5. Seen
+  2026-09-17.
+- Cause: two separate things. `svc-ise` had only create-computer on
+  `CN=Computers` (`dsacls ... /G "CORP\svc-ise:CC;computer"`), and an
+  object's creator may write only a short list of its attributes (logon
+  information, description, displayName, sAMAccountName, account
+  restrictions, and the validated writes for DNS host name and SPN). Those
+  three are outside the list, so they were denied. But Cisco lists setting
+  the OS attributes as optional, and the denials were not fatal. After the
+  grant below every attribute was written, the log said "Attributes was
+  setted successfully", and the join failed on the same final line anyway.
+  The denials were the only visible refusals in the log, so they took the
+  blame and sent the debugging the wrong way for a while.
+- Fix: `dsacls "CN=Computers,DC=corp,DC=rooez,DC=com" /I:S /G
+  "CORP\svc-ise:WP;;computer"`, now in `30-create-identities.ps1`. It is
+  kept because it lets ISE record its OS and version on its computer object
+  (`Cisco Identity Services Engine`, `3.5.0.527`, encryption types 28) and
+  keeps the step log clean. It is not a fix for the join. When a log shows
+  a denial, check whether the run ended there before acting on it.
+
+## The ISE join fails with access denied after a step log that succeeds throughout
+
+- Symptom: ISE 3.5.0.527 joining a Windows Server 2025 domain as
+  `svc-ise`. Every step in `ise-psc.log` succeeds, attributes included, and
+  the join ends with "Join Operation Failed: Access is denied, Error Name:
+  ERROR_ACCESS_DENIED, Error Code: 5". The DC's Security log is all Audit
+  Success. Seen 2026-09-17, still open.
+- Cause: likely, and not proven in this lab, Cisco Field Notice FN74321,
+  "Cisco Identity Services Engine Fails to Join Microsoft Active Directory
+  Domain Services Hosted on Windows Server 2025"
+  (https://www.cisco.com/c/en/us/support/docs/field-notices/743/fn74321.html),
+  regression bug CSCwr77017. A Server 2025 DC by default refuses the legacy
+  SAM RPC password change methods when called remotely
+  (`SamrChangePasswordUser`, `SamrOemChangePasswordUser2`,
+  `SamrUnicodeChangePasswordUser2`) and accepts only
+  `SamrUnicodeChangePasswordUser4`; ISE uses the legacy ones during a join.
+  The notice's second scenario is this exact message. It lists ISE 3.1
+  through 3.4 P1 as affected and does not mention 3.5, and the bug lists
+  3.4 builds and no fixed version, so whether it applies to 3.5.0.527 is
+  what a test would show.
+- Fix: none applied. Cisco's workaround is the DC policy Computer
+  Configuration > Administrative Templates > System > Security Account
+  Manager > "Configure SAM change password RPC methods policy" set to
+  "Allow all change password RPC methods"; in the registry,
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\SAM`,
+  DWORD `SamrChangeUserPasswordApiPolicy`, where 1 blocks all, 2 allows the
+  strong method only (the DC's behavior when unset), and 3 allows all. It
+  lowers a security default on a domain controller, so it waits for the
+  operator's decision and is untested here. `docs/ISE-AD-BUILD.md`, Part 3.
+
+## `AD_ADMIN_USERNAME` already carries the domain prefix
+
+- Symptom: an ad hoc admin command sent to the DC through
+  `run-as-admin.ps1` failed with "No mapping between account names and
+  security IDs". Seen 2026-09-17.
+- Cause: the caller put `CORP\` in front of `AD_ADMIN_USERNAME`, and the
+  value in `config/mcp-env/ad.env` already reads `CORP\labadmin`.
+- Fix: pass the variable as it is. The way to run one admin command on the
+  DC without RDP is the repo's `run-as-admin.ps1` with the command in place
+  of its marker line, delivered by `az vm run-command invoke`, with the
+  password read from a mode 0600 file through az's `@file` argument syntax
+  so it never shows in a process listing.

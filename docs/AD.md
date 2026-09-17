@@ -5,6 +5,8 @@ lab's identity questions. ISE decides who and what gets on the network.
 Active Directory is where the people are, and it also runs the two services
 ISE leans on: DNS and a certificate authority. This document explains how
 the directory is built, what runs on it, who is in it, and how ISE uses it.
+The commands themselves, in build order with what each prints, are in
+`docs/ISE-AD-BUILD.md`.
 
 Both are disposable. Neither holds anything that a script and a tracked file
 cannot rebuild, and neither bills between sessions. The decisions behind that
@@ -209,10 +211,15 @@ Two accounts are not in the file:
   administrator, and promotion turns that account into the domain's built-in
   Administrator, a member of Domain Admins and Enterprise Admins.
 - **`svc-ise`** is the account ISE joins the domain with. It is an ordinary
-  user with one delegation: it may create computer objects in the
-  `Computers` container, because ISE creates its own when it joins. It is
-  made by the script and not the CSV so that no row in that file is secretly
-  special.
+  user with two delegations on the `Computers` container. It may create
+  computer objects there, because ISE creates its own when it joins. It may
+  also write the properties of the computer objects beneath it, because ISE
+  records its operating system, version, and encryption types on its object,
+  and an object's creator is not allowed to write those three. A join does
+  not depend on the second grant, but without it the join's log fills with
+  denied writes that look like a cause and are not (`docs/ISE-AD-BUILD.md`,
+  Part 3). The account is made by the script and not the CSV so that no row
+  in that file is secretly special.
 
 ### Passwords
 
@@ -272,8 +279,8 @@ beside it, ISE can do what it does in production:
   signed by `corp-rooez-CA`, replace the self-signed one that supplicants
   are currently told not to check.
 
-None of those five is done yet. They are by hand in the ISE GUI for now, and
-the last section lists them.
+The first is done, as of 2026-09-17. The join has been attempted and is
+blocked, and the other three wait on it. The last section lists them.
 
 ### The rule: the directory first, and one domain
 
@@ -288,11 +295,16 @@ directory.
 The first ISE of that day predates the rule. It was deployed with a public
 resolver and the domain `rooez.com`, so it calls itself `ise1.rooez.com` and
 knows nothing of the lab's names. An ISE in that state is repointed from its
-command line with `ip name-server 10.20.2.10` and
-`ip domain-name corp.rooez.com`. Either restarts the ISE application, about
-fifteen minutes, and a new domain name means a new self-signed certificate,
-which the CA step replaces anyway. Every deploy after it simply starts
-right.
+command line, and on 2026-09-17 this one was. It takes three commands, not
+two: `ip name-server 10.20.2.10`, then `no ip name-server 8.8.8.8` because
+the first command appends to the list and leaves the public resolver in
+front, then `ip domain-name corp.rooez.com`. Each asks to restart ISE's
+services and has to be answered `yes`, since `no` cancels the change and not
+just the restart. The three restarts came to 30 to 40 minutes. A new domain
+name also means a new self-signed certificate, which the CA step replaces
+anyway. The prompts, the answers, and the checks are in
+`docs/ISE-AD-BUILD.md`, Part 2. Every deploy after this one starts right and
+skips all of it.
 
 ## Network
 
@@ -364,15 +376,25 @@ Then it prints what ISE's portal form needs:
 | `System error thrown for RunAs user` | Someone set `run_as_user` on a run command; it cannot log a domain account on to a DC | Remove it. The wrapper is the way to run as `CORP\labadmin` |
 | The CA script fails with access denied | It ran as SYSTEM, outside the wrapper | Deliver it through `run-as-admin.ps1` |
 | A check fails but the apply succeeded | The directory was still starting | Rerun the script; the checks run again |
+| An ERS call to ISE returns 401 with the right password | The client signed in as `admin`. The Marketplace image's account, for ERS too, is `iseadmin` | Use `iseadmin` |
+| The ISE join fails with HTTP 500, "nodes not able to join/remove" | That message never carries the reason | `show logging application ise-psc.log \| include Fatal` on ISE's CLI holds the join's step log. The DC's Security log will not help: a denied LDAP write is not audited by default |
+| The join's step log shows `operatingSystem` and two other attributes with no success line | `svc-ise` lacks write property on computer objects. Not fatal to a join, but misleading | The second `dsacls` grant in `docs/ISE-AD-BUILD.md`, Part 1 |
+| The join's step log succeeds throughout and still ends in "Access is denied", error code 5; the DC logs only Audit Success | Likely Cisco Field Notice FN74321: a Windows Server 2025 DC refuses the legacy SAM RPC password change methods ISE uses. Not proven here; the notice does not list ISE 3.5 | The workaround lowers a security default on the DC and is the operator's decision. It has not been applied. `docs/ISE-AD-BUILD.md`, Part 3 |
 | Anything else | | The transcripts under `C:\lab\log` on the DC, over RDP |
 
 ## Not built yet
 
-These are done by hand in the ISE GUI for now, in this order:
+These are done by hand for now, in this order. `docs/ISE-AD-BUILD.md` has
+the steps for the first two.
 
-1. Point ISE at the DC for DNS, at deploy or from its CLI.
+1. Point ISE at the DC for DNS, at deploy or from its CLI. Done on
+   2026-09-17, from the CLI, and verified.
 2. Add `corp.rooez.com` as an Active Directory join point and join as
-   `svc-ise`.
+   `svc-ise`. In progress. The join point exists. The join is blocked with
+   access denied, error code 5. The suspected cause is Cisco Field Notice
+   FN74321 (Windows Server 2025 refuses the legacy SAM RPC password change
+   methods), and its workaround, a SAM policy on the DC, is untested here
+   and waits for the operator's decision.
 3. Select the groups `Mushroom-Kingdom` and `Koopa-Troop` and put Active
    Directory in the identity source sequence.
 4. Import `corp-rooez-CA`'s root certificate into ISE's trusted store,
