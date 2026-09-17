@@ -3,3 +3,5 @@
 # the CML host on SSH 1122. Cockpit is reachable directly, this is an
 # example. The ISE and FTD spec adds their entries.
 cockpit 9090 127.0.0.1 9090
+# ise 8443 10.20.2.20 443     ISE GUI, then https://localhost:8443
+# dc  3389 10.20.2.10 3389    domain controller RDP (docs/AD.md)

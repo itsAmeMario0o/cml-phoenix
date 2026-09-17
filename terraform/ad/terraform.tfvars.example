@@ -1,0 +1,6 @@
+# scripts/24-ad-up.sh passes owner and expires from
+# terraform/persistent/terraform.tfvars and the network values from that
+# root's outputs, so this file is optional. Copy it to terraform.tfvars
+# (gitignored) only to override a default.
+#
+# vm_size = "Standard_D2s_v4"
