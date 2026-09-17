@@ -84,6 +84,36 @@ PRs #10 and #11 merged at session end: #10 (Catalyst 9000v in the reference plat
 and #11 (the transit bridge, the `bridge1` rename in the Phase 1 lab,
 smoke test, and verify script, these lessons and this entry).
 
+Next session, in this order:
+
+1. `scripts/00-preflight.sh`, then `scripts/20-up.sh`. Nothing is running
+   in Azure but the persistent root, and the data disk already holds
+   every image, both Cat9000v flavors included.
+2. On the new host, before anything else: `/var/log/provision/06-transit-bridge.log`
+   should end with `bridge1 holds 10.100.0.1/24` and `10.100.0.0/16
+   routes via 10.100.0.2`, and `GET /api/v0/system/external_connectors`
+   should list `Bridge 1` on device `bridge1`. This is the fork script's
+   first run through cloud-init; it has only ever run by hand.
+3. `scripts/90-smoke-test.sh` (it checks `bridge1` now), then reimport
+   `labs/trustsec-phase1.yaml` with `60-import-lab.sh`. The Cilium fabric
+   and the cat9kv probe lab are in blob under `exports/20260917T025148Z`
+   if wanted; the probe lab's YAML also sits in the Phase 2 note's
+   history, not in `labs/`.
+4. ISE: portal deploy per `docs/ISE-MARKETPLACE-DEPLOY.md`, then
+   `scripts/25-ise-up.sh --post-deploy`, which now tags the NIC and
+   public IP too. Note which SSH public key the deploy is given; the ISE
+   CLI is key-only and the next step needs it. Re-add `cat9kv-sw1`
+   (10.100.0.3) as a NAD once the probe lab is back, or fold it into
+   `ise_config.py`.
+5. Then the open question, from ISE's side first: does the switch's
+   Access-Request reach ISE (RADIUS Live Logs through the `ise` tunnel,
+   or `tech dumptcp 0 count 12` on its CLI). If not, add an explicit
+   outbound rule on the CML NSG in `terraform/persistent` for source
+   10.100.0.0/16 to the apps subnet and plan it. If it does and ISE stays
+   silent, the Live Log drop reason says why. Only after RADIUS answers:
+   the first MAB session on `ep1`, then the Phase 2 spec with FTDv and
+   Kali (`docs/superpowers/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`).
+
 ## 2026-09-16, TrustSec Phase 2 scoped: profiling, and why it needs a real switch
 
 Brainstormed folding ISE profiling into the TrustSec lab. The real goal
