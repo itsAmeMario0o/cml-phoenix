@@ -10,11 +10,13 @@ file to what is still current.
 
 The operator called a stop. No VM is left in `rg-cml-lab`: the directory
 went with `scripts/46-ad-down.sh` (13 resources), CML with
-`scripts/40-down.sh`, and the operator deleted the ISE VM by hand. Left from
-ISE when this was written: `ise1osdisk`, `ise1nic`, `ise-nsg`, and `ise1-ip`,
-all tagged `role=ise`. The disk and the public address bill until
-`scripts/45-ise-down.sh` removes them. The persistent resources are
-untouched.
+`scripts/40-down.sh`, and the operator deleted the ISE VM by hand, which
+left its disk, NIC, NSG, and public address. `scripts/45-ise-down.sh`
+removed three of them and missed the disk, because Azure reports a disk's
+resource group in upper case and the script compared it (LESSONS-LEARNED).
+The lookup is fixed and the disk is gone. What is left in the resource
+group is the persistent set and nothing else: the data disk, the SSH key,
+`pip-cml-lab`, `rt-apps`, the VNet, and the storage account.
 
 The CML teardown needed a hand. The export (`exports/20260917T214927Z`,
 also in blob) and the license release passed, then the destroy failed
@@ -47,9 +49,8 @@ deploy with the two values it prints, `25-ise-up.sh --post-deploy`, then
 Still by hand on every new ISE until `ise_config.py` learns it: the join
 point, the join, the two groups, `cat9kv-sw1`, and its authorization rule.
 After that comes an ISE certificate from `corp-rooez-CA`, then the Phase 2
-implementation plan. PR #18 is open. `CLAUDE.md` does not yet list
-`terraform/ad`, `scripts/ad/`, or the two AD scripts; that edit waits for
-the operator's word.
+implementation plan. PR #18 is merged, and `CLAUDE.md` now lists
+`terraform/ad`, `scripts/ad/`, and the two AD scripts.
 
 ## 2026-09-17, late night: ISE joined to the domain, mario authenticates against AD
 

@@ -111,6 +111,12 @@ if grep -qiE 'cml-controller|terraform.*(bootstrap|persistent)' "${DOWN_SCRIPT}"
 else
   echo "[OK]    45-ise-down.sh touches only role=ise resources"
 fi
+# Azure upper-cases a disk's resourceGroup in listings, so the lookup must
+# never compare that field; the resource group is az's own filter.
+down_src="$(cat "${REPO_ROOT}/scripts/45-ise-down.sh")"
+assert_contains "ISE lookup filters by resource group server side" "az resource list --resource-group" "${down_src}"
+assert_not_contains "ISE lookup never compares resourceGroup in the query" "[?resourceGroup==" "${down_src}"
+
 
 # The directory is a prerequisite for ISE (ADR 0010). After a portal deploy
 # the script can only warn, and it must.

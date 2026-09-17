@@ -21,12 +21,15 @@ DRY_RUN=0
 # everything tagged role=ise in the lab resource group. Read-only, so it
 # always runs for real, dry run included, and shows exactly what would
 # be deleted.
-# az 2.89 refuses --tag together with --resource-group, so the tag query
-# runs subscription-wide and the resource group is a query filter.
+# az 2.89 refuses --tag together with --resource-group, so the resource
+# group is the server side filter and the tag is the query. Not the other
+# way round: Azure reports a disk's resource group in upper case
+# (RG-CML-LAB), and a query comparing it to the real name skips the disk
+# without a word while it goes on billing (LESSONS-LEARNED, 2026-09-17).
 find_ise_resources() {
   local rg
   rg="$(out_or_placeholder resource_group_name)"
-  az resource list --tag role=ise --query "[?resourceGroup=='${rg}'].{id:id,type:type,name:name}" -o tsv
+  az resource list --resource-group "${rg}" --query "[?tags.role=='ise'].{id:id,type:type,name:name}" -o tsv
 }
 
 # delete_by_type ID TYPE NAME: dispatch to the right az subcommand. An
