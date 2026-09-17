@@ -18,7 +18,19 @@ Catalyst 9000v is the device under test throughout, as the authenticator;
 the IOSvL2 only plays the endpoint. An hour went to a CML trap, not to
 802.1X: a link created through the API leaves the running node's
 interface `STOPPED`, passing nothing while every guest shows it up
-(LESSONS-LEARNED). PEAP from a Linux supplicant is still untested.
+(LESSONS-LEARNED). Later the same evening the IOSvL2 node was dropped at
+the operator's request and replaced by `emp-pc`, an Ubuntu node with
+`wpa_supplicant`: PEAP with MSCHAPv2 authorized on the same port, ISE
+recording protocol PEAP (EAP-MSCHAPv2), 126 ms. Its first attempt was
+refused because the port still held the old endpoint's session in
+single-host mode and the violation err-disabled it (LESSONS-LEARNED).
+Also that evening: the Python rewrite (roadmap 21) was tabled by the
+operator in favor of functional labs; ASAv 9.24.1 is on the base ISO and
+supports SGT rules, inline tagging, and SXP with a local CLI, a lighter
+enforcement point than FTDv if wanted; and the operator wants the Active
+Directory instance built, whose 09-13 draft spec needs reconciling with
+this week (ISE is reached by the CML jump, not its public IP, and is
+already deployed with a public resolver).
 
 The Phase 2 design is drafted for review (PR #17,
 `docs/superpowers/specs/2026-09-17-trustsec-phase2-design.md`), in two

@@ -592,3 +592,21 @@ in Azure, which is the cheapest place to learn them.
   linked interface must read `STARTED`. `GET /pcap/<link id>` after
   `PUT .../links/<link>/capture/start` is the quickest way to see which
   side of a link is silent.
+
+## A new endpoint on an 802.1X port is refused at once: single-host violation
+
+- Symptom: after swapping the test endpoint on `sw1` Gi1/0/2, the new
+  Linux supplicant got an immediate EAP-Failure with no TLS exchange, and
+  ISE recorded nothing. `show access-session` said no sessions. Seen
+  2026-09-17.
+- Cause: the port was in the default single-host mode and still held the
+  previous endpoint's authorized session. The new MAC logged
+  `%AUTHMGR-5-SECURITY_VIOLATION ... new MAC address is seen`, and the
+  default violation action err-disabled the port
+  (`show interfaces Gi1/0/2 status`), which the supplicant only sees as
+  failure.
+- Fix: `clear access-session interface <port>`, then `shutdown` and
+  `no shutdown` to recover the port. For lab ports that change endpoints,
+  `authentication violation replace`, or `authentication host-mode
+  multi-auth` where several MACs are expected. Check the port status
+  before suspecting EAP, certificates, or ISE.

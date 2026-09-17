@@ -47,12 +47,15 @@ Proven live on 2026-09-17, so the design leans on it freely:
   address, MAB authorizes an endpoint on the first frame, and ISE's CoA
   reaches the switch and is ACKed. ISE can therefore also reach the
   switch on UDP 161; the same NSG rule covers it.
-- 802.1X works end to end. With an IOSvL2 node as the supplicant on a
-  `sw1` access port, EAPOL crossed CML's link both ways (captured on the
-  wire), the virtual Catalyst ran its authenticator, and ISE recorded
-  `passed`, method dot1x, EAP-MD5, identity store Internal Users, profile
-  PermitAccess, 79 ms. This was the last general doubt about the
-  platform: plain Linux bridges drop EAPOL, CML's fabric does not.
+- 802.1X works end to end, with the method the design uses. An Ubuntu
+  node running `wpa_supplicant` on a `sw1` access port authorized with
+  PEAP and MSCHAPv2 against an ISE internal user, ISE's self-signed
+  certificate not validated: ISE recorded passed, method dot1x, protocol
+  PEAP (EAP-MSCHAPv2), 126 ms. EAPOL was captured on CML's link both
+  ways, so the usual virtual-lab failure, a Linux bridge dropping EAPOL,
+  does not apply to CML's fabric. The supplicant got its package over a
+  second interface on the NAT connector, which is how `emp-pc` will be
+  built.
 - FTDv 10.0.0 registers to cdFMC when the key is generated after boot
   (LESSONS-LEARNED). Kali 2026.2 runs with its own node definition.
 
@@ -68,11 +71,10 @@ nearly every untested assumption in this lab has turned out wrong so far:
 | The switch downloads SGTs and SGACLs from ISE | 2 | Static `cts role-based permissions` on the switch |
 | `cts manual` works on a routed port of the virtual switch, and FTDv on KVM reads the inline tag from a frame arriving on virtio | 2 | SXP from the switch to FTD for IP-to-SGT mappings |
 
-The EAPOL question was settled on 2026-09-17 on the running probe lab, as
-step 0 of the build order, and is in the proven list above. What it does
-not yet cover is PEAP from a Linux supplicant, which the employee PC
-uses; EAP-MD5 from a Cisco supplicant proved the transport and the
-authenticator, not that method.
+The 802.1X question was settled on 2026-09-17 on the running probe lab,
+as step 0 of the build order, first with a Cisco supplicant and EAP-MD5
+and then with the real thing, PEAP from Linux. It is in the proven list
+above.
 
 ## Topology
 
@@ -276,8 +278,8 @@ Each step ends in a live check. A step whose unknown fails takes its
 fallback from the table above and the build continues; nothing later
 assumes an unproven step worked.
 
-0. Done, 2026-09-17: 802.1X on the running probe lab. EAPOL passes and a
-   dot1x session authorizes against ISE.
+0. Done, 2026-09-17: 802.1X on the running probe lab. EAPOL passes, and
+   PEAP from a Linux supplicant authorizes against ISE.
 1. Topology file with day-0 for the switch and hosts, FTD present but
    stopped. Gate: endpoints get DHCP leases from `sw1` and `sw1` holds
    ARP entries for them.
