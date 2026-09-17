@@ -532,12 +532,18 @@ in Azure, which is the cheapest place to learn them.
   `libvirt-routed-in` and `-out` policies are `ACCEPT` both ways. No
   hand-written firewall rule, and the static route for the rest of
   10.100.0.0/16 lives in the same XML. The `!A` disappeared on the first
-  run. Two related facts from the same evening: a ping from the lab
-  range to ISE can never succeed, because `ise-nsg` allows only UDP
-  1812/1813 and TCP 443/22 and no ICMP, so RADIUS is the only valid
-  reachability test; and SSH to the Marketplace ISE is key-only
-  (`Permission denied (publickey)` for `iseadmin`), so an ISE-side
-  capture needs the key the deploy was given, or the GUI.
+  run. One related fact from the same evening: SSH to the Marketplace
+  ISE is key-only (`Permission denied (publickey)` for `iseadmin`), so
+  an ISE-side capture needs the key the deploy was given, or the GUI.
+  This entry first also claimed that a ping from the lab range to ISE
+  can never succeed because `ise-nsg` has no ICMP rule. That was wrong,
+  and disproved the next day: the pings had failed for the same reason
+  RADIUS had, the CML NIC's outbound NSG (see "RADIUS leaves the CML
+  host and never reaches ISE"). `ise-nsg`'s own rules are only explicit
+  allows; Azure's default AllowVnetInBound still admits the lab range
+  on ISE's NIC, ICMP included, and once `lab-transit-out` existed a lab
+  switch pinged ISE at once. An NSG's custom allow rules never narrow
+  anything by themselves.
 
 ## A customize script is shipped to the host and never runs
 

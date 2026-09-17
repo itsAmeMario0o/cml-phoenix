@@ -180,9 +180,10 @@ and Kali added are in the Phase 2 note,
 Two things to carry forward. The rendered `config/cml.yml` secrets,
 sysadmin's sudo password among them, appeared unmasked in this
 session's tool output and an editor selection; rotate at the next
-build. And a ping from the lab range to ISE can never succeed
-(`ise-nsg` has no ICMP rule), so RADIUS is the only valid test of that
-path; two hours went into learning that.
+build. (This entry first also said a ping from the lab range to ISE can
+never succeed for want of an ICMP rule on `ise-nsg`. Wrong, and corrected
+on 2026-09-17 evening: the pings failed for the same reason RADIUS did,
+and work now. LESSONS-LEARNED has it.)
 
 Torn down at 02:51 UTC after both PRs merged: all three labs exported
 to blob under `exports/20260917T025148Z` (the cat9kv probe lab among
