@@ -6,6 +6,48 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-17, later: rebuilt, RADIUS answered, the routed path is proven
+
+Rebuilt CML and ISE from nothing and closed the open problem. A lab
+switch now gets a RADIUS reply from ISE: `sw1` sent an Access-Request at
+11:45:51.507 UTC and received an Access-Reject (made-up user, the right
+answer) 400 ms later. Switch, `bridge1`, host forwarding, Azure, ISE, and
+the UDR return path are all proven for the first time.
+
+The cause was Azure, not the host or ISE. The `VirtualNetwork` tag
+expands per NIC from that NIC's effective routes, and only `snet-apps`
+carries the UDR for 10.100.0.0/16. On the CML NIC a forwarded packet with
+a lab source matched no default outbound allow and was dropped silently.
+Proven with a RADIUS-filtered capture on ISE's own interface (zero
+packets while the switch sent) and `list-effective-nsg`'s `tagMap` for
+both NICs. Fix: `lab-transit-out` on the CML NSG, lab summary to the apps
+subnet, now in the fork's `azure/main.tf` (`1ade9ae`). The operator added
+the rule by hand to the running NSG, since the session's classifier
+refuses NSG changes; it is not in that root's state, which is harmless
+because teardown deletes the NSG.
+
+Four more latent bugs surfaced on the way, all fixed with tests where
+code was involved (PR #14): `06-transit-bridge.sh` was shipped to
+`/provision` and silently skipped on its first cloud-init build, because
+upstream `postprocess` only runs `[0-9]{2}-[[:alnum:]_]+\.sh` and the
+second hyphen fails it, so the script is `06-transit.sh` now and ran by
+hand from `/provision` this time; `25-ise-up.sh` read curl's doubled
+`000000` as "ISE answered" at 0 seconds, then a front-end `502` as ready
+at 28 minutes, so readiness now needs a status below 500; the expect
+helpers checked the console server against the operator's own
+`known_hosts` and died after the rebuild, so they use `keys/known_hosts`.
+ISE's CLI is reachable with `keys/cml-lab` through the jump
+(`ise1/iseadmin#`), and its capture syntax on 3.5 is `tech dumptcp
+interface GigabitEthernet0 console filter "..." time-limit 1`.
+
+Running now: CML (smoke test 12/12, cloudflared reinstalled,
+`lab.rooez.com` back), ISE 3.5 at 10.20.2.20 with `ise-nsg`, all five
+resources tagged, policy applied, `c8000v-edge` and `cat9kv-sw1` as
+NADs, and two labs up: TrustSec Phase 1 and the untracked cat9kv probe
+(`sw1` at 10.100.0.3, `ep1` on Gi1/0/1). Users recreated. Next: the pyATS
+`trustsec-phase1` run, then the first MAB session on `ep1`'s port, then
+the Phase 2 spec with FTDv and Kali.
+
 ## 2026-09-17, Catalyst 9000v live, transit bridge built, RADIUS one hop short
 
 Both Catalyst 9000v flavors are on the controller without a rebuild:
