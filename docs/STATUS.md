@@ -6,6 +6,36 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-17, evening: 802.1X proven, Phase 2 spec drafted, direction recorded
+
+802.1X works in this lab. An IOSvL2 node added to the probe lab as a
+supplicant (`dot1x pae supplicant`, EAP-MD5, the `trustsec-verify`
+identity) on `sw1` Gi1/0/2 authorized: switch side `dot1x Authc Success`,
+ISE side passed, method dot1x, EAP-MD5, Internal Users, PermitAccess,
+79 ms. A capture on the CML link showed EAPOL on the wire, so CML's
+fabric carries it; the usual virtual-lab failure does not apply. The
+Catalyst 9000v is the device under test throughout, as the authenticator;
+the IOSvL2 only plays the endpoint. An hour went to a CML trap, not to
+802.1X: a link created through the API leaves the running node's
+interface `STOPPED`, passing nothing while every guest shows it up
+(LESSONS-LEARNED). PEAP from a Linux supplicant is still untested.
+
+The Phase 2 design is drafted for review (PR #17,
+`docs/superpowers/specs/2026-09-17-trustsec-phase2-design.md`), in two
+acts after the operator's five-step slide: Act 1 is the SNMP-only
+inventory job against the switches, RADIUS untouched; Act 2 adds tags,
+SGACLs on the switch, and FTD enforcing by inline tag. Routed access is
+the default, the customer fabric being VXLAN EVPN on IOS XE, with
+switched access as a day-0 variant. Six unknowns remain as gates with
+fallbacks. Operator direction recorded as roadmap items 21 (standardize
+on Python under a real test framework) and 22 (ISE as policy as code
+from the proven API calls); both need their own specs.
+
+Running: CML, ISE, the Phase 1 lab, and the probe lab with `sw1`, `ep1`
+(MAB session), and `supp1` (dot1x session). Still owed by the operator
+for the spec: the ForeScout sample in the repo, the device class
+`iot-dev` should imitate, and the customer's SNMP version.
+
 ## 2026-09-17, afternoon: first pyATS Phase 1 run, first MAB session, CoA proven
 
 `scripts/80-verify-lab.sh trustsec-phase1` ran against a live lab for the

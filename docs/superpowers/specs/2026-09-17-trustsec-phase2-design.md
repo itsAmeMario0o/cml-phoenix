@@ -47,6 +47,12 @@ Proven live on 2026-09-17, so the design leans on it freely:
   address, MAB authorizes an endpoint on the first frame, and ISE's CoA
   reaches the switch and is ACKed. ISE can therefore also reach the
   switch on UDP 161; the same NSG rule covers it.
+- 802.1X works end to end. With an IOSvL2 node as the supplicant on a
+  `sw1` access port, EAPOL crossed CML's link both ways (captured on the
+  wire), the virtual Catalyst ran its authenticator, and ISE recorded
+  `passed`, method dot1x, EAP-MD5, identity store Internal Users, profile
+  PermitAccess, 79 ms. This was the last general doubt about the
+  platform: plain Linux bridges drop EAPOL, CML's fabric does not.
 - FTDv 10.0.0 registers to cdFMC when the key is generated after boot
   (LESSONS-LEARNED). Kali 2026.2 runs with its own node definition.
 
@@ -58,15 +64,15 @@ nearly every untested assumption in this lab has turned out wrong so far:
 | What ISE creates from SNMP alone. Polling is documented to read interfaces, CDP and LLDP neighbors, and ARP, but whether an endpoint record appears from polling alone or only after a trap names its MAC is not something to assume | 1 | Traps become required, not optional; say so in the comparison |
 | The virtual switch emits link and MAC-notification traps. The slide itself says to verify trap support per platform | 1 | Polling only, with a shorter interval; record the latency cost |
 | ISE's profiler probes (SNMPQUERY, SNMPTRAP) can be switched on through an API | 1 | One documented GUI step per ISE deploy |
-| EAPOL passes between an endpoint and the switch inside CML. Plain Linux bridges drop it; CML's links run through its own fabric process, which is why LACP and LLDP work here, so it should | 2 | MAB for every endpoint; 802.1X shown as configuration only |
 | The virtual switch enforces SGACLs in its software data plane (Cisco lists only basic L2, OSPF, SVIs, and VLANs as tested, at about 250 Kbps) | 2 | Show classification and the matrix; enforce everything on FTD |
 | The switch downloads SGTs and SGACLs from ISE | 2 | Static `cts role-based permissions` on the switch |
 | `cts manual` works on a routed port of the virtual switch, and FTDv on KVM reads the inline tag from a frame arriving on virtio | 2 | SXP from the switch to FTD for IP-to-SGT mappings |
 
-The EAPOL question is cheap to settle before anything else is built: add
-a Cisco node to today's running probe lab as an 802.1X supplicant
-(`dot1x pae supplicant`) on a port of `sw1` and watch the session. It is
-step 0 of the build order.
+The EAPOL question was settled on 2026-09-17 on the running probe lab, as
+step 0 of the build order, and is in the proven list above. What it does
+not yet cover is PEAP from a Linux supplicant, which the employee PC
+uses; EAP-MD5 from a Cisco supplicant proved the transport and the
+authenticator, not that method.
 
 ## Topology
 
@@ -270,9 +276,8 @@ Each step ends in a live check. A step whose unknown fails takes its
 fallback from the table above and the build continues; nothing later
 assumes an unproven step worked.
 
-0. The 802.1X question, on today's running probe lab: a Cisco node as a
-   supplicant on `sw1`. Gate: an EAPOL exchange and a dot1x session, or a
-   clear answer that EAPOL does not pass.
+0. Done, 2026-09-17: 802.1X on the running probe lab. EAPOL passes and a
+   dot1x session authorizes against ISE.
 1. Topology file with day-0 for the switch and hosts, FTD present but
    stopped. Gate: endpoints get DHCP leases from `sw1` and `sw1` holds
    ARP entries for them.
@@ -285,8 +290,8 @@ assumes an unproven step worked.
    ForeScout sample. Gate: the table is filled in, empty cells included.
    Act 1 is demonstrable here.
 5. Act 2, sessions and tags: RADIUS and TrustSec added to the device, MAB
-   for `iot-dev` and Kali, 802.1X for `emp-pc` if step 0 allows. Gate:
-   three sessions with their tags.
+   for `iot-dev` and Kali, 802.1X with PEAP for `emp-pc`. Gate: three
+   sessions with their tags.
 6. Act 2, switch enforcement: CTS credentials, policy download, the
    matrix. Gate: the IoT to Employees deny counter moves.
 7. Act 2, firewall: register to cdFMC, routed interfaces, an allow-all
