@@ -97,4 +97,15 @@ assert_eq "log file written" "1" "${log_present}"
 if grep -qE '[0-9]{2}-[[:alnum:]_]+\.sh' <<<"/provision/$(basename "${SCRIPT}")"; then name_ok=1; else name_ok=0; fi
 assert_eq "script name matches the postprocess filter" "1" "${name_ok}"
 
+# 9. The NSG rules come as a pair. Without lab-transit-out the CML NIC's
+#    DenyAllOutBound silently drops every forwarded lab packet (ADR 0003
+#    amendment, 2026-09-17), so losing either half must fail here.
+tf="$(cat "${REPO_ROOT}/vendor/cloud-cml/modules/deploy/azure/main.tf")"
+assert_contains "inbound transit rule present" 'name                        = "lab-transit-in"' "${tf}"
+assert_contains "outbound transit rule present" 'name                        = "lab-transit-out"' "${tf}"
+out_block="$(sed -n '/resource "azurerm_network_security_rule" "lab_transit_out"/,/^}/p' <<<"${tf}")"
+assert_contains "outbound rule is outbound" 'direction                   = "Outbound"' "${out_block}"
+assert_contains "outbound source is the lab summary" 'source_address_prefix       = try(var.options.cfg.azure.lab_summary_cidr' "${out_block}"
+assert_contains "outbound destination is the apps subnet" 'destination_address_prefix  = var.options.cfg.azure.apps_subnet_cidr' "${out_block}"
+
 echo "test_transit: all passed"

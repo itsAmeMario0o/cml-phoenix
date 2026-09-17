@@ -22,6 +22,8 @@ lab edge at `10.100.0.2` routes the rest of `10.100.0.0/16`. In Azure:
   table, makes this decision, so it must be a UDR.
 - An NSG rule on the CML NIC allows the apps subnet to the lab summary on
   any port.
+- Its mirror allows the lab summary out to the apps subnet. See the
+  amendment below for why the default rules do not cover it.
 
 Claude Code runs on the Mac only and reaches the controller API on the
 static public IP through cml-mcp. Reaching ISE and FTD is by SSH forwards
@@ -50,3 +52,28 @@ bridge, the sysctl, and the C8000v are lab content for the TrustSec spec.
    the host.
 4. An overlay tunnel, C8000v to C8000v. Kept as a documented fallback in
    case the routed path surprises us.
+
+## Amendment, 2026-09-17: the outbound rule, and what the host side became
+
+The decision stands. Two things it did not foresee, both found on the
+first live RADIUS test.
+
+The NSG needs a rule in each direction. Azure's `VirtualNetwork` service
+tag expands per NIC from that NIC's effective routes. The apps subnet has
+the UDR for the lab summary, so ISE's NIC treats `10.100.0.0/16` as
+VirtualNetwork and its default rules allow the reply. The CML subnet has
+no such route, so on the CML NIC a forwarded packet with a lab source
+matches neither `AllowVnetOutBound` nor `AllowInternetOutBound`, and
+`DenyAllOutBound` drops it without ICMP or a log entry. The request was
+visible leaving `eth0` and never reached ISE. `lab-transit-out` (lab
+summary to the apps subnet, priority 410) sits beside `lab-transit-in` in
+the fork's `modules/deploy/azure/main.tf`, under the same
+`apps_subnet_cidr` condition. Inline SGT tagging still cannot cross the
+VNet; that consequence is unchanged.
+
+"A local bridge on the host" became a libvirt network in routed mode,
+`transit` on `bridge1`, built by the fork's `06-transit.sh`. The name is
+forced by the controller's connector scan, and libvirt is what gets the
+bridge past firewalld on the host. The fork's `AZURE-LAB.md` documents all
+four required pieces together; `docs/LESSONS-LEARNED.md` has the
+diagnosis of each failure.
