@@ -126,6 +126,12 @@ PRs #10 and #11 merged at session end: #10 (Catalyst 9000v in the reference plat
 and #11 (the transit bridge, the `bridge1` rename in the Phase 1 lab,
 smoke test, and verify script, these lessons and this entry).
 
+Superseded later the same day by the entry at the top of this file:
+steps 1 to 5 were carried out, step 6's question is answered (the CML
+NIC's outbound NSG, fixed as `lab-transit-out` in the fork), and the
+script and its log are `06-transit.sh` and `06-transit.log` now. Kept
+for the record of what was planned.
+
 Next session, in this order (reviewed by `/code-review` before merge;
 it caught the wrong Terraform root, the missing rescan, and three
 omitted steps):
