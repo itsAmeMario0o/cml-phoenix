@@ -572,3 +572,41 @@ in Azure, which is the cheapest place to learn them.
   400 ms after the rule did. The rule was added by hand to the running
   NSG that day, so it is absent from that root's Terraform state; the
   next teardown removes the NSG and the next build owns the rule.
+
+## A link made through the CML API carries nothing: the interface is STOPPED
+
+- Symptom: a node and a link were added to a running lab through the API
+  (`POST /labs/<id>/nodes`, `POST /labs/<id>/links`). The link reported
+  `STARTED`, both nodes showed the port up/up, the new node's frames
+  appeared in a link capture, and the existing switch's port showed 0
+  packets input and none of its own frames on the wire. A full restart
+  of the switch changed nothing. Seen 2026-09-17, an hour spent on it
+  while testing 802.1X.
+- Cause: the API wires the link but leaves the interface on the already
+  running node in state `STOPPED`. The UI starts it for you; the API does
+  not, and a node stop and start does not either. Guest operating systems
+  cannot see this: the virtual Catalyst reports the port connected
+  regardless.
+- Fix: `PUT /api/v0/labs/<lab>/interfaces/<interface id>/state/start`.
+  Check with `GET /labs/<lab>/nodes/<node>/interfaces?data=true`: every
+  linked interface must read `STARTED`. `GET /pcap/<link id>` after
+  `PUT .../links/<link>/capture/start` is the quickest way to see which
+  side of a link is silent.
+
+## A new endpoint on an 802.1X port is refused at once: single-host violation
+
+- Symptom: after swapping the test endpoint on `sw1` Gi1/0/2, the new
+  Linux supplicant got an immediate EAP-Failure with no TLS exchange, and
+  ISE recorded nothing. `show access-session` said no sessions. Seen
+  2026-09-17.
+- Cause: the port was in the default single-host mode and still held the
+  previous endpoint's authorized session. The new MAC logged
+  `%AUTHMGR-5-SECURITY_VIOLATION ... new MAC address is seen`, and the
+  default violation action err-disabled the port
+  (`show interfaces Gi1/0/2 status`), which the supplicant only sees as
+  failure.
+- Fix: `clear access-session interface <port>`, then `shutdown` and
+  `no shutdown` to recover the port. For lab ports that change endpoints,
+  `authentication violation replace`, or `authentication host-mode
+  multi-auth` where several MACs are expected. Check the port status
+  before suspecting EAP, certificates, or ISE.

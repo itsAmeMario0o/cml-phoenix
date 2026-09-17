@@ -113,6 +113,35 @@ moved to the Done section at the bottom.
     collection (item 18). Needs its own spec, and study of what ISEEE
     actually automates, before any code.
 
+21. Python first, with proof. Tabled by the operator the same day it was
+    raised: functional labs come first, and this waits until they work as
+    intended. Do not start it unasked. Operator direction, 2026-09-17: the kit has
+    grown to thirteen bash scripts and six Python modules, about 3,200
+    lines, and nearly every latent bug found in the 09-16 and 09-17
+    sessions lived in bash that had only ever been dry-run tested (a
+    doubled curl status read as ready, a filename a regex skipped, SSH
+    swallowing a heredoc, a tag query a newer az rejects). Revisit the
+    architecture, standardize as aggressively as is sensible on Python,
+    and put it under a real test framework so that behavior is proven,
+    not inferred. Needs its own spec before any code: which scripts stay
+    thin bash wrappers around terraform and az and which move, whether
+    the stdlib-only rule (CLAUDE.md code style) still holds or pytest
+    and a small dependency set earn an ADR, how live checks (smoke,
+    readiness, the pyATS layer) fit beside unit tests, and an order of
+    migration that never leaves the kit unable to build.
+22. ISE as policy as code. Operator direction, 2026-09-17: drive ISE from
+    declared policy, built out from the API calls already proven live
+    (ERS network devices and internal users, OpenAPI policy sets and
+    authorization rules, the monitoring API for verification), not from
+    one-off calls. `ise_config.py` is the seed: idempotent, tested
+    against a fake API, shapes confirmed against real ISE 3.5. The
+    Phase 2 spec (`2026-09-17-trustsec-phase2-design.md`) needs device
+    groups, SNMP settings, SGTs, SGACLs, the egress matrix, identity
+    groups, and profiler probes on top. The open design question is the
+    shape: policy declared as data files that a Python engine applies,
+    which fits item 21, or the `cisco.ise` Ansible collection of item 18.
+    Decide that in the spec; the two should not both grow.
+
 ## Images and scenarios
 
 8. Moved to Done.
