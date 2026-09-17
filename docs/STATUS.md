@@ -60,7 +60,27 @@ build. And a ping from the lab range to ISE can never succeed
 (`ise-nsg` has no ICMP rule), so RADIUS is the only valid test of that
 path; two hours went into learning that.
 
-Open PRs at session end: #10 (Catalyst 9000v in the reference platform)
+Torn down at 02:51 UTC after both PRs merged: all three labs exported
+to blob under `exports/20260917T025148Z` (the cat9kv probe lab among
+them, so its YAML survives even though it was never tracked), license
+deregistered, 13 resources destroyed, persistent plan clean. The
+teardown also destroyed the root's `random_password` secrets, so the
+next `20-up.sh` rotates the admin and sysadmin passwords that leaked
+into this session on its own. The next build ships
+`06-transit-bridge.sh` through cloud-init for the first time; check
+`/var/log/provision/06-transit-bridge.log` and the connector list
+(`Bridge 1` on `bridge1`) before reimporting the labs, then the pyATS
+`trustsec-phase1` run is the first thing to try. ISE came down right
+after, all five resources: `45-ise-down.sh` needed two fixes first,
+recorded in the same PR. az 2.89 refuses `--tag` with
+`--resource-group`, so the tag query now filters by resource group in
+JMESPath; and the portal deploy leaves the NIC (`ise1nic`) and public IP
+(`ise1-ip`) untagged, so `25-ise-up.sh` tags them now and both were
+tagged by hand this time so the teardown caught them. Next session
+starts with nothing running in Azure but the persistent root; ISE is a
+fresh portal deploy plus `25-ise-up.sh --post-deploy` again.
+
+PRs #10 and #11 merged at session end: #10 (Catalyst 9000v in the reference platform)
 and #11 (the transit bridge, the `bridge1` rename in the Phase 1 lab,
 smoke test, and verify script, these lessons and this entry).
 
