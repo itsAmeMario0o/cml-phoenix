@@ -6,6 +6,46 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-17, afternoon: first pyATS Phase 1 run, first MAB session, CoA proven
+
+`scripts/80-verify-lab.sh trustsec-phase1` ran against a live lab for the
+first time. RadiusServerReachable and RadiusAccessAccept pass: the C8000v
+edge authenticated a real ISE internal user over the routed path.
+CoAReceived fails at 0 on the edge, and that is accurate, not a bug: ISE
+only sends a CoA for a live session, sessions are keyed by endpoint MAC,
+and a router with no endpoints never has one. Three latent bugs fixed on
+the way (PR #16): the pyATS console hop checked the operator's own
+`known_hosts` and broke after every rebuild (now pinned to
+`keys/known_hosts` by `gen_testbed.py`), IOS XE nodes were logged in to as
+`cisco` instead of `admin`, and the CoA check used a command this image
+rejects; the counters are under `show aaa clients` as `CoA: requests: N`.
+The run needs a throwaway ISE identity: `trustsec-verify`, created over
+ERS, credentials in gitignored `labs.env` as `TRUSTSEC_TEST_*`. ISE is
+redeployed each session, so it has to be recreated each time until
+`ise_config.py` learns to do it.
+
+CoA was then proven where it can be, on the switch. On `sw1` in the
+cat9kv probe lab, `authentication port-control auto` plus `mab` on
+Gi1/0/1 authorized `ep1` (`5254.008b.adb0`) on the first frame: switch
+side `Status: Authorized, mab Authc Success`, ISE side passed, method
+mab, NAS 10.100.0.3, profile PermitAccess, 80 ms. That needed one more
+ISE authorization rule, `trustsec-poc-sw1` (NAS-IP 10.100.0.3 to
+PermitAccess), made with the existing `ensure_authorization_rule`; the
+only rule before it matched the edge's address. With a real session to
+act on, `GET /admin/API/mnt/CoA/Reauth/ise1/<mac>/1` returned
+`results: true`, and the switch showed `CoA: requests: 1, Ack responses:
+1`, 4 ms. Everything ADR 0003 set out to make possible now works: a
+switch seen by ISE at its own address, no NAT, RADIUS both ways, and CoA
+back to the right device. ISE's monitoring API is the useful window for
+this work: `/admin/API/mnt/AuthStatus/MACAddress/<mac>/<secs>/<n>/All`
+for the pass or failure reason, `/Session/ActiveList` for sessions.
+
+The MAB port config and the `sw1` rule exist only on the running switch
+and the running ISE. They are the seed of Phase 2's day-0 and policy,
+not something to codify as they stand. Next: the Phase 2 spec, with FTDv
+and Kali in the topology, SGTs in place of PermitAccess, and the CoA
+check moved from the edge scenario to the switch.
+
 ## 2026-09-17, later: rebuilt, RADIUS answered, the routed path is proven
 
 Rebuilt CML and ISE from nothing and closed the open problem. A lab
