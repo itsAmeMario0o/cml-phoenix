@@ -6,10 +6,14 @@
 # CA values and the certutil block come from the operator's AWS Quick Start
 # (cfn-ps-microsoft-pki, scripts/archive/Invoke-EnterpriseCaConfig.ps1)
 # with the Secrets Manager, S3 CRL publishing, and CloudFormation signals
-# removed. Two additions for this lab: the CA keeps subject alternative
-# names from a request, without which ISE's SAN never survives signing, and
-# domain controllers may enroll from the WebServer template, so a later CSR
-# can be signed from a plain run command. Reruns are safe. ADR 0010.
+# removed. One addition for this lab: domain controllers may enroll from
+# the WebServer template, so a later CSR can be signed from a plain run
+# command. Nothing is done about subject alternative names, on purpose: ISE
+# carries its SANs inside the CSR and WebServer is a supply-in-the-request
+# template, so they survive signing as they are. The flag that lets a
+# submitter add SANs as request attributes (EDITF_ATTRIBSUBJECTALTNAME2) is
+# a known escalation path and Server 2025's certutil no longer accepts its
+# name. Reruns are safe. ADR 0010.
 param(
     [Parameter(Mandatory = $true)][string]$CaCommonName,
     [Parameter(Mandatory = $true)][string]$NetbiosName,
@@ -20,6 +24,16 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $null = New-Item -ItemType Directory -Force -Path 'C:\lab\log'
 $null = Start-Transcript -Path 'C:\lab\log\20-install-ca.txt' -Append
+
+function Set-CaRegistry {
+    # certutil is a native command: it fails by exit code, not by exception,
+    # and the first build lost a failure here by discarding the output.
+    param([string]$Name, [string]$Value)
+    $out = & certutil.exe -setreg $Name $Value 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "certutil -setreg $Name $Value failed ($LASTEXITCODE): $($out | Select-Object -Last 1)"
+    }
+}
 
 function Wait-Directory {
     # The reboot after promotion and the first start of AD DS take several
@@ -59,12 +73,13 @@ try {
         -KeyLength 4096 -HashAlgorithm 'SHA256' -CryptoProviderName 'RSA#Microsoft Software Key Storage Provider' `
         -ValidityPeriod 'Years' -ValidityPeriodUnits 5 -Force
 
-    & certutil.exe -setreg CA\CRLOverlapPeriodUnits '12' > $null
-    & certutil.exe -setreg CA\CRLOverlapPeriod 'Hours' > $null
-    & certutil.exe -setreg CA\ValidityPeriodUnits '5' > $null
-    & certutil.exe -setreg CA\ValidityPeriod 'Years' > $null
-    & certutil.exe -setreg CA\AuditFilter '127' > $null
-    & certutil.exe -setreg policy\EditFlags +EDITF_ATTRIBSUBJECTALTNAME2 > $null
+    # The value the CA reads is CRLOverlapUnits. The Quick Start this block
+    # came from writes CRLOverlapPeriodUnits, which nothing reads.
+    Set-CaRegistry -Name 'CA\CRLOverlapUnits' -Value '12'
+    Set-CaRegistry -Name 'CA\CRLOverlapPeriod' -Value 'Hours'
+    Set-CaRegistry -Name 'CA\ValidityPeriodUnits' -Value '5'
+    Set-CaRegistry -Name 'CA\ValidityPeriod' -Value 'Years'
+    Set-CaRegistry -Name 'CA\AuditFilter' -Value '127'
     Restart-Service -Name 'certsvc'
     & certutil.exe -crl > $null
 

@@ -33,6 +33,12 @@ path proven. Six things it assumed are now known to be otherwise:
   routed path works (ADR 0003 and its 09-17 amendment), so a lab endpoint
   can reach the DC. The draft said nothing in the lab would talk to it;
   a domain-joined Windows endpoint in CML now could, and should be able to.
+- **The CA does not need the subject alternative name flag.** The draft had
+  the CA script set `EDITF_ATTRIBSUBJECTALTNAME2`, on the belief that a
+  Windows CA strips SANs from a request. It does not strip SANs that are
+  inside the CSR when the template takes its subject from the request, as
+  `WebServer` does, and that is how ISE sends them. The flag is an
+  escalation path and Server 2025's `certutil` rejects its name. Dropped.
 - **802.1X is proven with ISE's internal users** (PEAP from a Linux
   supplicant, MAB, CoA). AD replaces the identity store behind a working
   path; it is no longer a prerequisite for proving the path.

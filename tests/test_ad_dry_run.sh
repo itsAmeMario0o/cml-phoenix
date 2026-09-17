@@ -80,7 +80,11 @@ for ps in 10-promote-forest 20-install-ca 30-create-identities; do
 done
 assert_contains "promotion is skipped on a DC" "already a domain controller" "$(cat "${REPO_ROOT}/scripts/ad/10-promote-forest.ps1")"
 assert_contains "CA install is skipped when present" "already installed" "$(cat "${REPO_ROOT}/scripts/ad/20-install-ca.ps1")"
-assert_contains "CA keeps SANs for ISE" "EDITF_ATTRIBSUBJECTALTNAME2" "$(cat "${REPO_ROOT}/scripts/ad/20-install-ca.ps1")"
+ca_src="$(cat "${REPO_ROOT}/scripts/ad/20-install-ca.ps1")"
+assert_contains "certutil failures are not discarded" "if (\$LASTEXITCODE -ne 0)" "${ca_src}"
+assert_contains "CRL overlap uses the value the CA reads" "CA\\CRLOverlapUnits" "${ca_src}"
+assert_not_contains "the unread Quick Start value is gone" "CRLOverlapPeriodUnits'" "${ca_src}"
+assert_not_contains "the SAN attribute flag is never set" "-setreg policy" "${ca_src}"
 if command -v pwsh >/dev/null 2>&1; then
   for ps in "${REPO_ROOT}"/scripts/ad/*.ps1; do
     if pwsh -NoProfile -NonInteractive -Command "\$e=\$null; [void][System.Management.Automation.Language.Parser]::ParseFile('${ps}',[ref]\$null,[ref]\$e); exit \$e.Count" >/dev/null 2>&1; then

@@ -154,25 +154,31 @@ destroyed every night has nothing for that to protect.
 | Signature hash | SHA256 |
 | CA certificate validity | 5 years |
 | Issued certificate validity | up to 5 years |
-| CRL overlap | 12 hours |
+| CRL overlap | 12 hours (`CRLOverlapUnits`; the Quick Start's `CRLOverlapPeriodUnits` is a value nothing reads) |
 | Auditing | filter 127, every CA event |
 
-Two settings exist for ISE's sake. A Windows CA strips subject alternative
-names out of a request by default, and an ISE certificate without its SAN is
-rejected by modern clients, so the CA is told to keep them
-(`EDITF_ATTRIBSUBJECTALTNAME2`). And domain controllers are granted the right
+One setting exists for ISE's sake: domain controllers are granted the right
 to enroll from the built-in `WebServer` template, which is the template ISE's
-certificate is issued from. That second one is what lets a certificate
-request be signed by a command sent to the DC, without anyone logging in to
-it.
+certificate is issued from. That is what lets a certificate request be signed
+by a command sent to the DC, without anyone logging in to it.
+
+One setting is absent on purpose. An ISE certificate needs its subject
+alternative names, and a common recipe for that is a CA flag,
+`EDITF_ATTRIBSUBJECTALTNAME2`, that lets whoever submits a request attach
+SANs to it. The lab does not set it. ISE writes its SANs inside the request
+itself, `WebServer` is a template that takes the subject from the request,
+and the CA copies them into the certificate as they are. The flag is a
+well-known way to escalate privileges through a CA, and Windows Server 2025's
+`certutil` no longer accepts its name.
 
 Because it is an Enterprise CA, its root certificate is published into the
 directory, and any machine that joins the domain trusts it automatically.
 
 ### Time
 
-`dc1` holds the PDC emulator role, which makes it the domain's time source,
-and it keeps Windows' default time configuration. ISE takes its time from
+`dc1` holds the PDC emulator role, which makes it the domain's time source.
+It takes its own time from the Azure host it runs on (`w32tm` reports the
+`VM IC Time Synchronization Provider`), not from an internet server. ISE takes its time from
 `time.google.com`, set at deployment. Kerberos tolerates five minutes of
 difference, and both track real time closely enough that this has not
 needed attention.
