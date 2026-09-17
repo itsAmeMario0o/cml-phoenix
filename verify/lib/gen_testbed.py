@@ -148,6 +148,36 @@ def patch_terminal_server_credentials(testbed_text: str, username: str, password
     return testbed_text.replace(placeholder, replacement, 1)
 
 
+# Every rebuild gives the CML console server a new host key. Every other
+# script pins it in the repo-local keys/known_hosts (scripts/lib/common.sh,
+# CML_SSH_OPTS); a bare "protocol: ssh" here would check the operator's
+# own ~/.ssh/known_hosts instead and refuse the first connection after a
+# rebuild (caught live 2026-09-17).
+KNOWN_HOSTS = Path(__file__).resolve().parents[2] / "keys" / "known_hosts"
+
+
+def patch_terminal_server_ssh_options(testbed_text: str, known_hosts: Path = KNOWN_HOSTS) -> str:
+    """Point the terminal_server hop at the repo-local known_hosts file.
+
+    Inserts ssh_options after the terminal_server's "protocol: ssh" line
+    only; real devices connect by a console command through that proxy
+    and have no ssh line of their own. Raises TestbedError if the block
+    or the line is missing, rather than silently connecting unpinned.
+    """
+    head, sep, tail = testbed_text.partition("  terminal_server:\n")
+    line = "        protocol: ssh\n"
+    if not sep or line not in tail:
+        raise TestbedError(
+            "terminal_server's 'protocol: ssh' line not found; "
+            "CML's testbed export format may have changed"
+        )
+    # ponytail: the path is unquoted inside the option string, fine while
+    # the repo path has no spaces; quote it if that ever changes.
+    options = f"-o UserKnownHostsFile={known_hosts} -o StrictHostKeyChecking=accept-new"
+    patched = tail.replace(line, line + f"        ssh_options: {_yaml_single_quoted(options)}\n", 1)
+    return head + sep + patched
+
+
 _DEVICE_BLOCK_SPLIT_RE = re.compile(r"(?=^  \S[\w-]*:\n)", re.M)
 _DEVICE_NAME_RE = re.compile(r"^  (\S[\w-]*):\n")
 _DEVICE_CREDENTIALS_PLACEHOLDER = (
@@ -196,7 +226,11 @@ def patch_device_credentials(testbed_text: str, lab_password: str) -> str:
             continue
         if _DEVICE_CREDENTIALS_PLACEHOLDER not in chunk:
             continue
-        if "\n    os: nxos\n" in chunk:
+        # Every Cisco network OS node in labs/ boots with "username admin"
+        # in its day-0 config (labs/README.md); only the Linux hosts keep
+        # cisco. iosxe was missing until the first run against an IOS XE
+        # lab sent cisco to the C8000v edge: "Bad Password" (2026-09-17).
+        if any(f"\n    os: {net_os}\n" in chunk for net_os in ("nxos", "iosxe")):
             username = "admin"
         else:
             username = _HOST_USERNAME_OVERRIDES.get(name_match.group(1), "cisco")
@@ -251,6 +285,7 @@ def main(argv: list[str]) -> int:
         token = authenticate(base_url, username, password)
         testbed = fetch_testbed(base_url, token, lab_title)
         testbed = patch_terminal_server_credentials(testbed, username, password)
+        testbed = patch_terminal_server_ssh_options(testbed)
         testbed = patch_device_credentials(testbed, lab_password)
     except TestbedError as exc:
         print(f"gen_testbed: {exc}", file=sys.stderr)

@@ -107,6 +107,20 @@ class PatchDeviceCredentialsTest(unittest.TestCase):
         self.assertIn("username: 'admin'", spine_block)
         self.assertIn("password: 'labrats1'", spine_block)
 
+    def test_iosxe_device_gets_admin_username(self) -> None:
+        text = (
+            "devices:\n"
+            "  edge:\n"
+            "    credentials:\n"
+            "      default:\n"
+            "        password: cisco\n"
+            "        username: cisco\n"
+            "    os: iosxe\n"
+        )
+        out = gen_testbed.patch_device_credentials(text, "labpw")
+        self.assertIn("        username: 'admin'\n", out)
+        self.assertNotIn("username: cisco", out)
+
     def test_linux_host_keeps_cisco_username(self) -> None:
         out = gen_testbed.patch_device_credentials(self.DEVICES_TEXT, "labrats1")
         host_block = out.split("  blue-endpoint:\n", 1)[1].split("  kind-host:\n", 1)[0]
@@ -232,6 +246,47 @@ class FetchTestbedTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(out_path.exists())
             self.assertNotIn("secret", result.stderr)
+
+
+class PatchTerminalServerSshOptionsTest(unittest.TestCase):
+    """gen_testbed.patch_terminal_server_ssh_options, no server needed."""
+
+    TESTBED = (
+        "devices:\n"
+        "  edge:\n"
+        "    connections:\n"
+        "      a:\n"
+        "        command: open /lab/edge/0\n"
+        "        proxy: terminal_server\n"
+        "  terminal_server:\n"
+        "    connections:\n"
+        "      cli:\n"
+        "        ip: 192.0.2.10\n"
+        "        port: 22\n"
+        "        protocol: ssh\n"
+        "    os: linux\n"
+    )
+
+    def test_pins_the_console_hop_to_the_given_known_hosts(self) -> None:
+        out = gen_testbed.patch_terminal_server_ssh_options(self.TESTBED, Path("/repo/keys/known_hosts"))
+        self.assertIn(
+            "        protocol: ssh\n"
+            "        ssh_options: '-o UserKnownHostsFile=/repo/keys/known_hosts -o StrictHostKeyChecking=accept-new'\n",
+            out,
+        )
+
+    def test_only_the_terminal_server_block_changes(self) -> None:
+        out = gen_testbed.patch_terminal_server_ssh_options(self.TESTBED, Path("/repo/keys/known_hosts"))
+        edge_block = out.split("  terminal_server:\n", 1)[0]
+        self.assertNotIn("ssh_options", edge_block)
+        self.assertEqual(out.count("ssh_options"), 1)
+
+    def test_default_is_the_repo_local_known_hosts(self) -> None:
+        self.assertEqual(gen_testbed.KNOWN_HOSTS, REPO / "keys" / "known_hosts")
+
+    def test_raises_when_the_ssh_line_is_absent(self) -> None:
+        with self.assertRaises(gen_testbed.TestbedError):
+            gen_testbed.patch_terminal_server_ssh_options("devices:\n  terminal_server:\n    os: linux\n")
 
 
 if __name__ == "__main__":
