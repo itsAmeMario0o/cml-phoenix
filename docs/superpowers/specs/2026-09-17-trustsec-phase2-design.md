@@ -1,6 +1,7 @@
-# TrustSec Phase 2: access switch, SGTs, FTD enforcement, and profiling
+# TrustSec Phase 2: SNMP inventory first, then tags and enforcement
 
-Status: draft for operator review, 2026-09-17. Nothing here is built yet.
+Status: draft for operator review, 2026-09-17, second revision. Nothing
+here is built yet.
 
 Phase 1 (`2026-09-12-trustsec-phase1-routed-ise-design.md`) promised a
 routed, no-NAT path to an external ISE with working CoA. That is now
@@ -11,23 +12,27 @@ document is the design itself.
 
 ## Goal
 
-One lab, `labs/trustsec-phase2.yaml`, that demonstrates three things to
-Cisco and to a customer moving off ForeScout and Arista:
+One lab, `labs/trustsec-phase2.yaml`, told in two acts, for Cisco and for
+a customer moving off ForeScout and Arista.
 
-1. **Identity to tag.** A wired endpoint gets a Security Group Tag from
-   ISE by who or what it is: an employee by 802.1X, an agentless device by
-   MAB plus profiling.
-2. **Tag to enforcement, in two places.** The access switch enforces
-   east-west between endpoints with SGACLs. A Threat Defense firewall
-   enforces north-south toward a server by source SGT. Same tags, two
-   enforcement points, no IP-based rules for the endpoints.
-3. **Profiling as inventory.** ISE's view of an agentless endpoint,
-   collected without an agent, set beside the operator's ForeScout sample
-   and their five-step SNMP procedure.
+**Act 1, the same inventory job, natively in ISE.** The operator's
+five-step procedure, exactly as pitched: no authentication changes on the
+switches, no cloud services, standard SNMP. The switch is defined in ISE
+with SNMP settings only, RADIUS untouched, and ISE builds a continuous
+endpoint inventory from polling and traps. This act needs the switch and
+the endpoints and nothing else, so it can be built, demonstrated, and
+judged on its own.
 
-Success is a repeatable demo: Kali and the employee PC send the same
-traffic to the same server, the firewall drops one and passes the other,
-and the only difference between them is the tag ISE assigned.
+**Act 2, what the same platform does next.** Once the customer is ready
+to touch authentication: an endpoint gets a Security Group Tag from ISE
+by who or what it is, the access switch enforces east-west with SGACLs,
+and a Threat Defense firewall enforces north-south by source tag. Kali
+and the employee PC send the same traffic to the same server, the
+firewall drops one and passes the other, and the only difference between
+them is the tag ISE assigned.
+
+Act 1 is the pitch. Act 2 is the reason to consolidate on one platform,
+the "one system to keep, not two" on the slide.
 
 ## What is already proven, and what is not
 
@@ -36,22 +41,32 @@ Proven live on 2026-09-17, so the design leans on it freely:
 - `cat9000v-uadp` accepts every command this design needs: access
   switchports, `mab`, dot1x authenticator, `cts role-based enforcement`,
   static SGT maps, `cts manual` with `propagate sgt`, SXP, device-sensor,
-  DHCP snooping, device tracking. Licensed `network-advantage` and
-  `dna-advantage`.
+  DHCP snooping, device tracking, `snmp-server community`. Licensed
+  `network-advantage` and `dna-advantage`.
 - A switch at 10.100.0.3 on `bridge1` reaches ISE with RADIUS at its own
   address, MAB authorizes an endpoint on the first frame, and ISE's CoA
-  reaches the switch and is ACKed.
+  reaches the switch and is ACKed. ISE can therefore also reach the
+  switch on UDP 161; the same NSG rule covers it.
 - FTDv 10.0.0 registers to cdFMC when the key is generated after boot
   (LESSONS-LEARNED). Kali 2026.2 runs with its own node definition.
 
-Not proven, and each is a gate in the build order below, with a fallback:
+Not proven. Each is a gate in the build order, with a fallback, because
+nearly every untested assumption in this lab has turned out wrong so far:
 
-| Unknown | Why it matters | Fallback |
+| Unknown | Act | Fallback |
 |---|---|---|
-| The virtual Cat9000v enforces SGACLs in its software data plane. Cisco's page lists only basic L2, OSPF, SVIs, and VLANs as tested, at about 250 Kbps | East-west enforcement | Show classification and the matrix on the switch and in ISE; enforce everything on FTD |
-| The switch downloads SGTs and SGACLs from ISE (CTS credentials, environment data) | Policy from ISE, not typed on the switch | Static `cts role-based permissions` on the switch |
-| FTDv on KVM reads the inline SGT from a frame arriving on a virtio interface | North-south enforcement by tag | SXP from the switch to FTD for IP-to-SGT mappings |
-| ISE's profiler probes can be switched on through an API | Policy as code | One documented GUI step per ISE deploy |
+| What ISE creates from SNMP alone. Polling is documented to read interfaces, CDP and LLDP neighbors, and ARP, but whether an endpoint record appears from polling alone or only after a trap names its MAC is not something to assume | 1 | Traps become required, not optional; say so in the comparison |
+| The virtual switch emits link and MAC-notification traps. The slide itself says to verify trap support per platform | 1 | Polling only, with a shorter interval; record the latency cost |
+| ISE's profiler probes (SNMPQUERY, SNMPTRAP) can be switched on through an API | 1 | One documented GUI step per ISE deploy |
+| EAPOL passes between an endpoint and the switch inside CML. Plain Linux bridges drop it; CML's links run through its own fabric process, which is why LACP and LLDP work here, so it should | 2 | MAB for every endpoint; 802.1X shown as configuration only |
+| The virtual switch enforces SGACLs in its software data plane (Cisco lists only basic L2, OSPF, SVIs, and VLANs as tested, at about 250 Kbps) | 2 | Show classification and the matrix; enforce everything on FTD |
+| The switch downloads SGTs and SGACLs from ISE | 2 | Static `cts role-based permissions` on the switch |
+| `cts manual` works on a routed port of the virtual switch, and FTDv on KVM reads the inline tag from a frame arriving on virtio | 2 | SXP from the switch to FTD for IP-to-SGT mappings |
+
+The EAPOL question is cheap to settle before anything else is built: add
+a Cisco node to today's running probe lab as an 802.1X supplicant
+(`dot1x pae supplicant`) on a port of `sw1` and watch the session. It is
+step 0 of the build order.
 
 ## Topology
 
@@ -60,15 +75,15 @@ ISE 10.20.2.20 (Azure, apps subnet)
       |  UDR, lab-transit-in and -out, no NAT
 CML host, bridge1 10.100.0.1/24
       |
-      |  Gi1/0/24, VLAN 100, SVI 10.100.0.3: RADIUS, CoA, SNMP
-    sw1  cat9000v-uadp, the access switch and the only RADIUS client
-      |  Gi1/0/1  emp-pc   ubuntu   802.1X    SGT 10 Employees
-      |  Gi1/0/2  iot-dev  alpine   MAB       SGT 20 IoT
-      |  Gi1/0/3  kali     kali     MAB       SGT 40 Unknown
+      |  Gi1/0/24, VLAN 100, SVI 10.100.0.3: SNMP, and in Act 2 RADIUS and CoA
+    sw1  cat9000v-uadp: access switch, VLAN 10 gateway 10.100.10.1, DHCP server
+      |  Gi1/0/1  emp-pc   ubuntu   Act 2: 802.1X   SGT 10 Employees
+      |  Gi1/0/2  iot-dev  alpine   Act 2: MAB      SGT 20 IoT
+      |  Gi1/0/3  kali     kali     Act 2: MAB      SGT 40 Unknown
       |
-      |  Gi1/0/23, VLAN 10 untagged, cts manual, propagate sgt
-    ftd1 FTDv, routed, cdFMC managed
-      |    Gi0/0 inside  10.100.10.1/24, gateway for VLAN 10, DHCP server
+      |  Gi1/0/23, routed 10.100.11.1/30, Act 2: cts manual, propagate sgt
+    ftd1 FTDv, routed, cdFMC managed. Act 2 only
+      |    Gi0/0 inside  10.100.11.2/30
       |    Gi0/1 servers 10.100.20.1/24
       |    Management0/0 on the NAT connector, 192.168.255.81, to cdFMC
       |
@@ -76,32 +91,75 @@ CML host, bridge1 10.100.0.1/24
 ```
 
 Eight nodes: the `bridge1` and NAT connectors, `sw1`, `ftd1`, and four
-hosts. The three endpoints share VLAN 10 on purpose, so that traffic
-between them never leaves the switch and only an SGACL can stop it.
+hosts. Act 1 needs only `sw1` and the three endpoints; the firewall and
+server can stay stopped.
 
-Two choices worth stating:
+Three choices worth stating:
 
+- **The switch is the VLAN 10 gateway, not the firewall.** The first
+  draft had it the other way round. Step 3 of the procedure reads ARP to
+  bind an IP to a MAC, and a pure layer 2 switch holds no ARP entries for
+  its endpoints, so the inventory would have come back without addresses.
+  A routed access layer is also closer to a real campus. The three
+  endpoints still share one VLAN on purpose: traffic between them never
+  leaves the switch, so only an SGACL can stop it.
 - **No C8000v edge.** Phase 1 needed it as the RADIUS client. Here the
-  switch sits on `bridge1` itself, the way `sw1` was proven today, and
-  nothing in this lab needs routing beyond the transit /24: ISE talks to
-  the switch, never to the endpoints. The host's route for the rest of
+  switch sits on `bridge1` itself, as proven today, and ISE talks to the
+  switch, never to the endpoints. The host's route for the rest of
   10.100.0.0/16 via 10.100.0.2 stays in place and unused. The edge comes
   back when a second site or an SXP peer needs it.
 - **ISE and the firewall never meet in v1.** FTD learns the tag from the
   frame, not from ISE. That keeps cdFMC-to-ISE pxGrid, which has to cross
-  the internet to reach a cloud manager, out of the critical path. It is
-  the first thing to add afterward.
+  the internet to reach a cloud manager, off the critical path. It is the
+  first thing to add afterward.
 
 ## Address plan
 
 | Segment | Prefix | Members |
 |---|---|---|
 | Transit, `bridge1` | 10.100.0.0/24 | host .1, `sw1` Vlan100 .3 |
-| Endpoints, VLAN 10 | 10.100.10.0/24 | `ftd1` inside .1, DHCP pool .100 to .199 |
+| Endpoints, VLAN 10 | 10.100.10.0/24 | `sw1` Vlan10 .1, DHCP pool .100 to .199 |
+| Switch to firewall | 10.100.11.0/30 | `sw1` .1, `ftd1` inside .2 |
 | Servers | 10.100.20.0/24 | `ftd1` servers .1, `srv` .10 |
 | FTD management | 192.168.255.0/24 | NAT connector .1, `ftd1` .81 |
 
-## Tags and policy
+## Act 1: the inventory job, step by step
+
+The slide's five steps, and what each is in this lab.
+
+| Step | In the lab |
+|---|---|
+| 1. Define the switches | `sw1` as an ISE network device with SNMP settings only: version, community, polling interval, link and MAC trap queries on. No RADIUS shared secret in Act 1; that absence is the point |
+| 2. Group the estate | A network device group, `Location#All Locations#Lab` and a device type for access switches, with `sw1` in it, so policy and reports scope to exactly these switches |
+| 3. Poll: SNMP Query | ISE's SNMPQUERY probe to 10.100.0.3 on UDP 161: system, interface state, VLANs, CDP and LLDP neighbors, ARP. The existing `lab-transit-in` rule already allows it |
+| 4. Listen: SNMP Trap | ISE's SNMPTRAP probe. On `sw1`: link up and down traps, MAC notification on the three endpoint ports, `snmp-server host` pointing at ISE. Needs one new rule on `ise-nsg`, UDP 162 from 10.100.0.0/16 |
+| 5. Read and publish | Context Visibility as the live inventory; the ERS endpoint API read by a script as the "feed it onward" proof. Syslog and pxGrid are named as options, not built |
+
+The lab uses SNMP v2c with a community from `config/mcp-env/labs.env`
+(`SNMP_COMMUNITY`, a placeholder in the tracked topology per ADR 0006).
+The customer's estate may need v3; that changes the network device
+settings and the switch lines, not the design.
+
+Endpoints matter as much as the switch here. `iot-dev` is an alpine node
+given a DHCP hostname and vendor class that look like a device class ISE
+profiles out of the box, and an LLDP daemon if the image carries one, so
+that the neighbor tables have something to say. Kali is left as it is,
+because "ISE does not know what this is" is a result worth showing.
+
+**The deliverable is a comparison table**, ISE's endpoint record beside
+the operator's ForeScout sample, attribute by attribute: collected,
+collected differently, not collected. The slide's honesty box stays in
+it: ISE does not replicate SPAN-based traffic analysis, and if a flow map
+is required that is Secure Network Analytics fed by flow telemetry, not
+this. The table is a finding, not a foregone conclusion, and an empty
+cell is a legitimate result.
+
+## Act 2: tags and policy
+
+Act 2 adds a RADIUS shared secret, TrustSec settings, and CoA to the same
+network device Act 1 defined. Nothing from Act 1 is removed; SNMP keeps
+feeding the profiler, and device sensor joins it, carrying DHCP, CDP, and
+LLDP to ISE inside RADIUS accounting.
 
 | SGT | Name | Assigned by |
 |---|---|---|
@@ -110,8 +168,8 @@ Two choices worth stating:
 | 40 | Unknown | MAB, no profile match. The default for anything agentless |
 | 30 | Servers | Not assigned to an endpoint; named for the matrix and for v2 |
 
-East-west on the switch, the SGACL matrix: Employees to IoT permit,
-IoT to Employees deny, Unknown to anything deny, IoT to IoT deny.
+East-west on the switch, the SGACL matrix: Employees to IoT permit, IoT
+to Employees deny, Unknown to anything deny, IoT to IoT deny.
 
 North-south on FTD, access control rules by source SGT toward the server
 network object: Employees allow HTTP and SSH, IoT allow HTTP only, Unknown
@@ -119,93 +177,84 @@ block with logging, default block. Destination stays a network object in
 v1, because a destination SGT needs an IP-to-SGT mapping the firewall can
 only get from SXP or pxGrid.
 
-FTD needs to know the tag numbers to write those rules. Without ISE
-integration, cdFMC takes them as custom Security Group Tag objects, three
-objects created once in the manager. The inside interface gets "Propagate
-Security Group Tag" enabled. Both are manager-side steps the runbook
-section of the lab README will list, like the HA pair and inline set were
-for the IPS lab.
+FTD needs the tag numbers to write those rules. Without ISE integration,
+cdFMC takes them as custom Security Group Tag objects, three objects
+created once in the manager, and the inside interface gets "Propagate
+Security Group Tag" enabled. Both are manager-side steps the lab README
+will list in order, like the HA pair and inline set were for the IPS lab.
 
 Employee authentication is PEAP-MSCHAPv2 against an ISE internal user,
 with the supplicant not validating ISE's self-signed certificate. That is
 a lab shortcut and the README will say so. Active Directory and a real
 certificate chain have their own draft spec
 (`2026-09-13-active-directory-session-design.md`) and slot in later by
-swapping the identity store; nothing in this design blocks on them.
-
-## Profiling
-
-Three feeds, all from the switch, none needing an agent or a span port:
-
-- **RADIUS probe.** On by default. MAC, NAS port, and the MAB request
-  itself.
-- **Device sensor.** The switch gleans DHCP, CDP, and LLDP from the
-  endpoint and sends them to ISE inside RADIUS accounting. This is Cisco's
-  native answer to the inventory job, and it is why no DHCP relay toward
-  ISE is needed even though the firewall is the DHCP server.
-- **SNMP query probe.** ISE polls `sw1` at 10.100.0.3 for its MAC and
-  interface tables, which maps onto the operator's five-step SNMP
-  procedure. The existing `lab-transit-in` rule already allows it.
-
-The demo artifact is ISE's endpoint record for `iot-dev` and for Kali,
-read from Context Visibility or the ERS endpoint API, set beside the
-ForeScout sample the operator already has. The honest expectation is most
-of the identity and network attributes and none of the ones that need
-credentials on the endpoint; the comparison table is a deliverable, not a
-foregone conclusion. `iot-dev` is an alpine node with a DHCP hostname and
-vendor class chosen to look like a device class ISE profiles out of the
-box; Kali is left as it is, because "ISE does not know what this is, so it
-gets Unknown" is the point.
+swapping the identity store; nothing here blocks on them.
 
 ## ISE policy as code
 
-`scripts/lib/ise_config.py` grows to apply Phase 2 on every ISE deploy,
-idempotent like the rest: the three endpoint SGTs plus Servers, the
-SGACLs and the egress matrix cells, the Employees identity group with one
-demo user, the `sw1` network device with its TrustSec and SNMP settings,
-and the authorization rules that return a security group instead of
-`PermitAccess`. The throwaway `trustsec-verify` identity the pyATS run
-needs joins it, so the verification works on a fresh ISE without a manual
-call. Each new object type gets its shape confirmed against the live node
+`scripts/lib/ise_config.py` grows in two stages that match the acts, both
+idempotent like the rest, and selectable so an Act 1 demo can run on an
+ISE that has never heard of RADIUS for this switch:
+
+- **Act 1**: the network device group, `sw1` with SNMP settings only, and
+  the profiler probes if the API allows it.
+- **Act 2**: the RADIUS secret and TrustSec settings on the same device,
+  the four SGTs, the SGACLs and egress matrix cells, the Employees group
+  with one demo user, the authorization rules that return a security
+  group, and the throwaway `trustsec-verify` identity the pyATS run needs.
+
+Each new object type gets its shape confirmed against the live node
 before the code is written and a fake-API test after, the way the first
 two were. The Phase 1 rules (`trustsec-poc`, `trustsec-poc-sw1`) are
-replaced, not kept beside the new ones.
+replaced, not kept beside the new ones. `scripts/25-ise-up.sh` gains the
+UDP 162 rule on `ise-nsg`.
 
 ## Verification
 
-`verify/trustsec-phase2/verify.py`, same layer as the two scenarios that
-exist (ADR 0009), run by `scripts/80-verify-lab.sh trustsec-phase2`:
+`verify/trustsec-phase2/verify.py`, same layer as the scenarios that
+exist (ADR 0009), run by `scripts/80-verify-lab.sh trustsec-phase2`.
 
-1. `sw1` shows the ISE RADIUS server up and `test aaa` returns
-   Access-Accept.
-2. Gi1/0/1 session: Authorized, method dot1x, SGT 10.
-3. Gi1/0/2 and Gi1/0/3 sessions: Authorized, method mab, SGT 20 and 40.
-4. `show cts role-based permissions` holds the matrix, and the deny
+Act 1:
+
+1. `sw1` answers SNMP from the host's side of the path, and its config
+   carries the community, the trap host, and MAC notification on the
+   three ports.
+2. ISE holds an endpoint record for each of the three MACs, read through
+   the ERS endpoint API, with a switch port and an IP address on it.
+3. A port bounce on `sw1` shows up as a trap received by ISE.
+
+Act 2:
+
+4. `test aaa` from `sw1` returns Access-Accept.
+5. Gi1/0/1 session: Authorized, method dot1x, SGT 10. Gi1/0/2 and
+   Gi1/0/3: Authorized, method mab, SGT 20 and 40.
+6. `show cts role-based permissions` holds the matrix, and the deny
    counter moves when IoT pings Employees.
-5. CoA: `show aaa clients` reads `CoA: requests` of at least 1 after the
+7. CoA: `show aaa clients` reads `CoA: requests` of at least 1 after the
    job asks ISE to reauthenticate one session through the monitoring API.
    This is the CoA check moved from the Phase 1 edge, where it can never
    pass, to the device where it can.
-6. From the hosts: employee to `srv` on HTTP succeeds, Kali to `srv` on
+8. From the hosts: employee to `srv` on HTTP succeeds, Kali to `srv` on
    HTTP fails, both by the hosts' own `curl` exit codes.
 
-ISE-side reads in the job use the monitoring API already used by hand
-today (`AuthStatus/MACAddress`, `Session/ActiveList`). Firewall-side
+ISE-side reads use the APIs already used by hand today
+(`AuthStatus/MACAddress`, `Session/ActiveList`, ERS). Firewall-side
 evidence, connection events by SGT, stays a manual look in cdFMC.
 
 ## Sizing
 
-| Node | Count | vCPU | RAM |
-|---|---|---|---|
-| cat9000v-uadp | 1 | 4 | 18 GB |
-| ftdv | 1 | 4 | 8 GB |
-| kali | 1 | 2 | 4 GB |
-| ubuntu | 2 | 2 | 4 GB |
-| alpine | 1 | 1 | 0.5 GB |
-| total | 6 | 13 | about 35 GB |
+| Node | Count | vCPU | RAM | Act |
+|---|---|---|---|---|
+| cat9000v-uadp | 1 | 4 | 18 GB | 1 |
+| kali | 1 | 2 | 4 GB | 1 |
+| ubuntu (`emp-pc`) | 1 | 1 | 2 GB | 1 |
+| alpine | 1 | 1 | 0.5 GB | 1 |
+| ftdv | 1 | 4 | 8 GB | 2 |
+| ubuntu (`srv`) | 1 | 1 | 2 GB | 2 |
+| total | 6 | 13 | about 35 GB | |
 
-The host has 20 vCPU and 157 GB, 133 GB free with today's two small labs
-running. It does not fit beside the Cilium fabric's 84 GB comfortably;
+Act 1 alone is about 25 GB and 8 vCPU. The host has 20 vCPU and 157 GB.
+The full lab does not fit comfortably beside the Cilium fabric's 84 GB;
 run one or the other.
 
 ## Build order
@@ -214,44 +263,56 @@ Each step ends in a live check. A step whose unknown fails takes its
 fallback from the table above and the build continues; nothing later
 assumes an unproven step worked.
 
-1. Topology file with day-0 for the switch and hosts, FTD booting
-   unregistered. Gate: `sw1` answers `test aaa`, as today.
-2. Sessions and tags. MAB for `iot-dev` and Kali, 802.1X for `emp-pc`,
-   ISE returning SGTs. Gate: the three sessions show their tags.
-3. Switch enforcement. CTS credentials and policy download, then the
+0. The 802.1X question, on today's running probe lab: a Cisco node as a
+   supplicant on `sw1`. Gate: an EAPOL exchange and a dot1x session, or a
+   clear answer that EAPOL does not pass.
+1. Topology file with day-0 for the switch and hosts, FTD present but
+   stopped. Gate: endpoints get DHCP leases from `sw1` and `sw1` holds
+   ARP entries for them.
+2. Act 1, steps 1 to 3: the device group, `sw1` with SNMP only, the query
+   probe. Gate: what ISE shows for the three endpoints from polling
+   alone, written down whatever it is.
+3. Act 1, step 4: traps on the switch, the probe in ISE, the NSG rule.
+   Gate: a port bounce and a new MAC reach ISE.
+4. Act 1, step 5: the ERS read and the comparison table against the
+   ForeScout sample. Gate: the table is filled in, empty cells included.
+   Act 1 is demonstrable here.
+5. Act 2, sessions and tags: RADIUS and TrustSec added to the device, MAB
+   for `iot-dev` and Kali, 802.1X for `emp-pc` if step 0 allows. Gate:
+   three sessions with their tags.
+6. Act 2, switch enforcement: CTS credentials, policy download, the
    matrix. Gate: the IoT to Employees deny counter moves.
-4. Firewall. Register to cdFMC, routed interfaces, DHCP, an allow-all
-   baseline. Gate: all three endpoints reach `srv`.
-5. Firewall by tag. Propagate SGT, the three tag objects, the rules.
-   Gate: employee passes, Kali is blocked, and the event shows the tag.
-6. Profiling. Device sensor and the SNMP probe. Gate: `iot-dev`'s ISE
-   record carries DHCP and switch-port attributes; the comparison table
-   gets filled in.
-7. `ise_config.py` and the pyATS scenario catch up with what steps 2 to 6
+7. Act 2, firewall: register to cdFMC, routed interfaces, an allow-all
+   baseline, then Propagate SGT, the tag objects, and the rules. Gate:
+   employee passes, Kali is blocked, the event shows the tag.
+8. `ise_config.py` and the pyATS scenario catch up with what steps 2 to 7
    settled by hand, then one clean rebuild of ISE proves the code alone
-   reproduces it.
+   reproduces both acts.
 
 ## Out of scope
 
 Active Directory and certificates (own spec). pxGrid or SXP between ISE
 and the firewall, FTD high availability, the C8000v edge, a second site.
-SD-Access. Anything in `terraform/`: Phase 2 is lab content and ISE
-policy; the Azure side is finished as of today.
+SNMP v3. Secure Network Analytics and any flow telemetry. SD-Access.
+Nothing in `terraform/persistent` changes; the one Azure-side change is
+the UDP 162 rule that `25-ise-up.sh` adds to the NSG it already owns.
 
 ## Open points
 
-- The switch needs an ADR when this is built (CLAUDE.md, definition of
-  done): the Catalyst 9000v as the lab's access layer and FTDv inside CML
-  as the tag enforcement point. ADR 0003's consequence still holds,
-  inline tagging cannot cross the VNet; this design does not contradict
-  it, it puts the firewall on the lab side of the VNet where the tag
-  never has to cross.
+- This needs an ADR when it is built (CLAUDE.md, definition of done): the
+  Catalyst 9000v as the lab's access layer and FTDv inside CML as the tag
+  enforcement point. ADR 0003's consequence still holds, inline tagging
+  cannot cross the VNet; this design does not contradict it, it puts the
+  firewall on the lab side of the VNet where the tag never has to cross.
 - Which ISE profile `iot-dev` should imitate. A printer or an IP phone
   profiles cleanly from DHCP attributes alone; the operator's real
   environment may suggest a better one.
-- The ForeScout sample and the five-step procedure exist as images in a
-  past session only. They need to live in the repo, or be restated in
-  text, before the comparison table can be written against them.
+- The five-step slide is restated in this document. The ForeScout sample
+  still exists only as an image in a past session; it needs to live in
+  the repo, or be restated in text, before the comparison table can be
+  written against it.
+- The customer's SNMP version and whether their Arista-to-Cisco cutover
+  keeps the same communities or credentials. It does not change the lab,
+  it changes what the demo can claim.
 - cdFMC work is the operator's by hand, as with the IPS lab: device
-  registration, interfaces, the three tag objects, the policy. The README
-  section will list it in order.
+  registration, interfaces, the three tag objects, the policy.
