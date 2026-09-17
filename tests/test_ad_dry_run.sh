@@ -79,6 +79,15 @@ for ps in 10-promote-forest 20-install-ca 30-create-identities; do
   assert_contains "${ps}: param block" "param(" "${src}"
 done
 assert_contains "promotion is skipped on a DC" "already a domain controller" "$(cat "${REPO_ROOT}/scripts/ad/10-promote-forest.ps1")"
+promote_src="$(cat "${REPO_ROOT}/scripts/ad/10-promote-forest.ps1")"
+assert_contains "the DC accepts ISE's legacy password change (FN74321)" "SamrChangeUserPasswordApiPolicy' -Type DWord -Value 3" "${promote_src}"
+policy_line="$(grep -n "SamrChangeUserPasswordApiPolicy'" "${REPO_ROOT}/scripts/ad/10-promote-forest.ps1" | cut -d: -f1)"
+reboot_line="$(grep -n "shutdown.exe /r" "${REPO_ROOT}/scripts/ad/10-promote-forest.ps1" | cut -d: -f1)"
+if [[ "${policy_line}" -lt "${reboot_line}" ]]; then
+  echo "[OK]    the SAM policy is set before the promotion reboot"
+else
+  echo "[FAIL]  the SAM policy must be set before the promotion reboot"; failures=$((failures + 1))
+fi
 assert_contains "CA install is skipped when present" "already installed" "$(cat "${REPO_ROOT}/scripts/ad/20-install-ca.ps1")"
 ca_src="$(cat "${REPO_ROOT}/scripts/ad/20-install-ca.ps1")"
 assert_contains "certutil failures are not discarded" "if (\$LASTEXITCODE -ne 0)" "${ca_src}"

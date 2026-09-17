@@ -60,7 +60,21 @@ domain yet.
         -SafeModeAdministratorPassword $dsrm -InstallDns `
         -NoRebootOnCompletion -Force
 
+    $sam = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\SAM'
+    New-Item -Path $sam -Force | Out-Null
+    Set-ItemProperty -Path $sam -Name SamrChangeUserPasswordApiPolicy -Type DWord -Value 3
+
     shutdown.exe /r /t 15 /c 'forest promotion'
+
+The registry value between the promotion and the reboot has nothing to do
+with promotion. It is there because of when it is read. A Windows Server
+2025 domain controller refuses the older SAM RPC password change methods,
+ISE 3.5 still uses one of them when it joins a domain, and the join fails
+with access denied until the DC is told to allow them (Part 3 has the proof,
+ADR 0010 the decision and its risk). The DC reads this value when it starts,
+so setting it on a running DC does nothing until the next restart. Set ahead
+of the promotion reboot, it is in effect from the DC's first boot as a
+domain controller and costs no restart of its own.
 
 The script gets the restore mode password from Terraform, which generated it
 and stores it nowhere else. By hand you choose one. The reboot is put fifteen
@@ -77,6 +91,7 @@ five minutes for it, and by hand the test is the same one:
 
     (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole    # 5
     (Get-ADDomain).DNSRoot                                          # corp.rooez.com
+    (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\SAM').SamrChangeUserPasswordApiPolicy    # 3
 
 `Get-ADDomain` throwing an error means AD DS is still starting. Wait and ask
 again. Nothing in stage 2 or 3 works before it answers.
@@ -400,12 +415,13 @@ in a mode 0600 file under the gitignored `config/mcp-env/`, send it with
 `-d @file`, and delete the file afterward. The `node` value has to be the
 FQDN. With the short name `ise1` the call fails with "Falied to send http
 get request", which is ISE's spelling and says nothing about the cause.
+A join that works answers 204 with no body.
 
 ### When the join fails
 
 The API answers a failed join with HTTP 500 and "nodes not able to
-join/remove : [ise1.corp.rooez.com]". That message carries no reason. Of
-the four places to look, one has it:
+join/remove : [ise1.corp.rooez.com]". That message carries no reason. What
+each place to look showed:
 
 | Place | What it showed |
 |---|---|
@@ -413,6 +429,7 @@ the four places to look, one has it:
 | `ad_agent.log` on ISE, at its default level | `LW_ERROR_NOT_JOINED_TO_AD` status lines and nothing about the attempt |
 | The Security log on `dc1` | Audit Success only: a TGT for `svc-ise`, a password reset on `ISE1$`, the account enabled. An LDAP write that is denied is not audited by default, so the refusal leaves no event |
 | `ise-psc.log` on ISE | The join's full step log, and the final error with its name and code |
+| The System log on `dc1` | Event 16984 from SAM at the time of each failed join. Nobody looked there until later (below) |
 
 So read `ise-psc.log`:
 
@@ -453,16 +470,15 @@ the OS attributes as optional. They were the only visible denials in the
 log, and they sent the debugging the wrong way for a while. The grant stays,
 for the reasons in Part 1, but it is not what the join was waiting for.
 
-### Where the join stands
+### The cause: the DC refuses the password change ISE uses
 
-<!-- join-outcome: replace this section's text when the workaround has been decided and tested -->
-The join is blocked. Its signature is a step log in which everything
-succeeds, a last line of access denied with error code 5, and a DC Security
-log with nothing but Audit Success.
+<!-- join-outcome: settled 2026-09-17 -->
+The signature is a step log in which everything succeeds, a last line of
+access denied with error code 5, and a DC Security log with nothing but
+Audit Success.
 
-The likely cause is known and is not proven in this lab. Cisco Field Notice
-FN74321, "Cisco Identity Services Engine Fails to Join Microsoft Active
-Directory Domain Services Hosted on Windows Server 2025"
+Cisco Field Notice FN74321, "Cisco Identity Services Engine Fails to Join
+Microsoft Active Directory Domain Services Hosted on Windows Server 2025"
 (https://www.cisco.com/c/en/us/support/docs/field-notices/743/fn74321.html),
 with regression bug CSCwr77017, describes it. A Windows Server 2025 domain
 controller by default refuses the legacy SAM RPC password change methods
@@ -471,13 +487,40 @@ when they are called remotely (`SamrChangePasswordUser`,
 only `SamrUnicodeChangePasswordUser4` (Microsoft, "What's new in Windows
 Server 2025",
 https://learn.microsoft.com/windows-server/get-started/whats-new-windows-server-2025).
-ISE uses the legacy methods during a join. The notice's second scenario is
-our message exactly: access is denied, error code 5.
+ISE uses a legacy method during a join. The notice's second scenario is our
+message exactly. It lists ISE 3.1 through 3.4 P1 as affected and does not
+mention 3.5, and the bug lists 3.4 builds and no fixed version. Ours is
+3.5.0.527, and the notice applies to it all the same. The DC's own log
+proved it.
 
-What keeps this from being certain: the notice lists ISE 3.1 through 3.4 P1
-as affected and does not mention 3.5, and the regression bug lists 3.4
-builds and no fixed version. Our ISE is 3.5.0.527. Whether the notice
-applies to it is what trying the workaround would show.
+The DC can be made to say which legacy calls it receives. On `dc1`, under
+`HKLM\SYSTEM\CurrentControlSet\Control\SAM`, the DWORD
+`AuditLegacyPasswordRpcMethods` set to 1 turns on logging and nothing else
+(Microsoft KB5004605):
+
+    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SAM' `
+        -Name AuditLegacyPasswordRpcMethods -Value 1 -Type DWord
+
+SAM then writes event 16985 to the System log, provider
+`Microsoft-Windows-Directory-Services-SAM`, once for each legacy call, with
+the method and the caller. During a join it logged two, both with Client
+Network Address 10.20.2.20 and Username `ISE1$`:
+
+| Order | RPC Method | Blocked by Server 2025 |
+|---|---|---|
+| 1 | `SamrSetInformationUser` | no |
+| 2 | `SamrUnicodeChangePasswordUser2` | yes, one of the three |
+
+To read them:
+
+    Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-Directory-Services-SAM'; Id=16984,16985} |
+        Select-Object TimeCreated, Id, Message
+
+Set the value back to 0 when done. Even without it the DC leaves a trace:
+summary event 16984, "detected N legacy password change or set RPC method
+calls in the past 60 minutes", had appeared at the times of the failed joins
+(19:58:34 and 21:13:54 UTC). That event is the cheap first thing to look for
+when a join ends in access denied.
 
 Cisco's workaround is a policy on the DC: Computer Configuration >
 Administrative Templates > System > Security Account Manager > "Configure
@@ -492,23 +535,166 @@ RPC methods". As a registry value it is the DWORD
 | 2 | Allow only the strong encryption method. What a DC does when the value is unset |
 | 3 | Allow all of them. The workaround |
 
-The workaround has not been applied. It lowers a security default on a
-domain controller, so it waits for the operator's decision, and it is
-untested here.
+The operator approved it and set the value to 3 on the running DC, and it
+read back as 3. The join failed again with the same error. Then `dc1` was
+restarted (`az vm restart`, boot at 21:22 UTC, the directory answering about
+two minutes later), and the same join call, with nothing else changed,
+returned HTTP 204. ISE was joined.
+
+So the policy is read when the DC starts. Neither Cisco's notice nor the
+policy's own description says a restart is needed. On a DC that is already
+running, set the value and restart it. On a DC built by this repo the value
+is set in stage 1 ahead of the promotion reboot (Part 1), and none of this
+should come up. No DC has been built from nothing since that change, so the
+first build after it is the test. Stage 1 skips a server that is already a
+domain controller, so rerunning `24-ad-up.sh` does not put the value on an
+existing DC.
+
+Value 3 makes the DC accept the older, more weakly encrypted password change
+methods again, as Server 2022 and earlier did. That is accepted for this
+lab and bounded in ADR 0010's amendment: `dc1` has no public address, only
+`snet-apps` and the lab range reach it, its passwords are generated, and it
+is destroyed with the session. It comes out when Cisco ships a fix for 3.5.
+A customer with a Server 2025 domain will need the same setting, or an ISE
+patch that carries the fix.
+
+### Selecting the groups
+
+ISE can use a directory group in a rule only after the group has been
+selected on the join point. In the GUI that is the join point's Groups tab >
+Add > Select Groups From Directory. Over ERS it is two calls.
+
+Ask the join point what groups the domain has:
+
+    PUT https://localhost:8443/ers/config/activedirectory/<id>/getGroupsByDomain
+
+    {"OperationAdditionalData": {"additionalData": [
+        {"name": "domain", "value": "corp.rooez.com"}]}}
+
+On 2026-09-17 it returned 53 groups, each with a name, a SID, and a type.
+The two that matter:
+
+    corp.rooez.com/Users/Mushroom-Kingdom    GLOBAL
+    corp.rooez.com/Users/Koopa-Troop         GLOBAL
+
+Take each group's `sid` from this answer. SIDs are different in every build
+of the forest, so they are never written down or hardcoded.
+
+Then add the groups. The obvious call, a plain
+`PUT /ers/config/activedirectory/<id>` with the updated object, is refused
+with HTTP 405, "The requested Method is not supported for that resource".
+The one that works:
+
+    PUT https://localhost:8443/ers/config/activedirectory/<id>/addGroups
+
+    {"ERSActiveDirectory": {
+        ...the join point exactly as GET returned it, without "link"...,
+        "adgroups": {"groups": [
+            {"name": "corp.rooez.com/Users/Mushroom-Kingdom", "sid": "<from getGroupsByDomain>", "type": "GLOBAL"},
+            {"name": "corp.rooez.com/Users/Koopa-Troop",      "sid": "<from getGroupsByDomain>", "type": "GLOBAL"}]}}}
+
+It answers 204, and `GET /ers/config/activedirectory/<id>` then lists both
+groups under `adgroups`.
+
+### Checking what ISE sees for a user
+
+    PUT https://localhost:8443/ers/config/activedirectory/<id>/getUserGroups
+
+    {"OperationAdditionalData": {"additionalData": [
+        {"name": "username", "value": "mario"}]}}
+
+| User | Groups ISE returned |
+|---|---|
+| `mario` | `Builtin/Users`, `Users/Mushroom-Kingdom`, `Users/Domain Users` |
+| `bowser` | `Builtin/Users`, `Users/Domain Users`, `Users/Koopa-Troop` |
+
+That is the CSV, read back through ISE.
+
+### End to end: a directory user from the switch
+
+No ISE policy change was needed for this. The Default policy set
+authenticates against `All_User_ID_Stores`, and that sequence includes
+`All_AD_Join_Points` as ISE ships. We did not change it. A joined domain is
+searched as soon as the join succeeds.
+
+On `sw1`, the Catalyst 9000v that ISE knows as the network device
+10.100.0.3, with its RADIUS servers in the group `ISE-GROUP`:
+
+    sw1# test aaa group radius mario <AD_LAB_USER_PASSWORD> new-code
+    User successfully authenticated
+
+    sw1# test aaa group radius mario <a wrong password> new-code
+    User rejected
+
+The placeholder stands for the value of `AD_LAB_USER_PASSWORD` in `ad.env`.
+Typed this way the password lands in the switch's command history, which is
+tolerable for a generated lab password on a lab switch and nowhere else.
+
+The DC's Security log shows that Active Directory gave both answers, and not
+ISE's internal store. Event 4776, Logon Account `mario@corp.rooez.com`,
+Source Workstation `\\ISE1`:
+
+| Attempt | Error Code |
+|---|---|
+| Right password | `0x0` |
+| Wrong password | `0xC000006A` |
+
+    Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4776} -MaxEvents 10 |
+        Select-Object TimeCreated, Message
+
+### If the API stops answering partway through
+
+The `ise` tunnel on `localhost:8443` does not survive ISE's restarts. After
+the repoint it answered first with connection reset and then with connection
+refused, which looks like ISE being down. It was the tunnel.
+`scripts/50-tunnels.sh status` shows the forwards, and
+`scripts/50-tunnels.sh up` restored this one.
+
+### A PEAP login from an endpoint as a directory user
+
+`test aaa` is the switch asking on its own behalf. It proves the path from
+RADIUS to the directory and nothing about a supplicant, so the last check is
+a real 802.1X login. `emp-pc` is an Ubuntu node on `sw1` Gi1/0/2 running
+`wpa_supplicant` from a systemd unit, `wired-peap`. Its config,
+`/etc/wpa_supplicant/wired-peap.conf` (mode 0600), names the user; the
+password is `AD_LAB_USER_PASSWORD` from `config/mcp-env/ad.env`:
+
+    ctrl_interface=/run/wpa_supplicant
+    ap_scan=0
+    network={
+        key_mgmt=IEEE8021X
+        eap=PEAP
+        identity="mario"
+        password="<AD_LAB_USER_PASSWORD>"
+        phase2="auth=MSCHAPV2"
+        eapol_flags=0
+    }
+
+Then `sudo systemctl restart wired-peap` and
+`sudo journalctl -u wired-peap --since -1m`. On 2026-09-17 it read:
+
+    CTRL-EVENT-EAP-METHOD EAP vendor 0 method 25 (PEAP) selected
+    CTRL-EVENT-EAP-PEER-CERT depth=0 subject='/CN=ise1.corp.rooez.com'
+    EAP-MSCHAPV2: Authentication succeeded
+    CTRL-EVENT-EAP-SUCCESS EAP authentication completed successfully
+
+The certificate is the self-signed one ISE generated when its domain name
+changed. The config has no `ca_cert` line, so the supplicant does not check
+it; that ends when ISE carries a certificate from `corp-rooez-CA`.
+
+On the switch, `show access-session interface GigabitEthernet1/0/2 details`
+showed `User-Name: mario`, `Status: Authorized`, `dot1x Authc Success`. On
+the DC, event 4776 for `mario@corp.rooez.com` from workstation `\\ISE1`,
+error code 0x0, carried the same second as the supplicant's success.
 
 ## Part 4: what is still ahead
 
-None of this is done. It is listed in the order it has to happen, all of it
-after a successful join.
+None of this is done.
 
-1. On the join point, select the groups `Mushroom-Kingdom` and
-   `Koopa-Troop`, so they can be used as conditions in authorization rules.
-2. Put Active Directory in the identity source sequence, so a login is
-   checked against the directory.
-3. Prove it from the lab: `test aaa` from `sw1`, then a PEAP login from
-   `emp-pc` as `mario`. Both have only ever passed against ISE's internal
-   users.
-4. Give ISE a certificate signed by `corp-rooez-CA`: import the CA's root
+1. Authorization rules that use `Mushroom-Kingdom` and `Koopa-Troop`. The
+   groups are selected and no rule refers to them. Mapping a group to a
+   Security Group Tag belongs to TrustSec Phase 2.
+2. A certificate for ISE signed by `corp-rooez-CA`: import the CA's root
    into ISE's trusted store, generate a request for EAP and admin use, have
    the CA sign it from the `WebServer` template, and bind the result. That
    replaces the self-signed certificate the domain name change generated.

@@ -747,29 +747,63 @@ in Azure, which is the cheapest place to learn them.
   `svc-ise`. Every step in `ise-psc.log` succeeds, attributes included, and
   the join ends with "Join Operation Failed: Access is denied, Error Name:
   ERROR_ACCESS_DENIED, Error Code: 5". The DC's Security log is all Audit
-  Success. Seen 2026-09-17, still open.
-- Cause: likely, and not proven in this lab, Cisco Field Notice FN74321,
-  "Cisco Identity Services Engine Fails to Join Microsoft Active Directory
-  Domain Services Hosted on Windows Server 2025"
+  Success. Seen 2026-09-17.
+- Cause: Cisco Field Notice FN74321, "Cisco Identity Services Engine Fails
+  to Join Microsoft Active Directory Domain Services Hosted on Windows
+  Server 2025"
   (https://www.cisco.com/c/en/us/support/docs/field-notices/743/fn74321.html),
   regression bug CSCwr77017. A Server 2025 DC by default refuses the legacy
   SAM RPC password change methods when called remotely
   (`SamrChangePasswordUser`, `SamrOemChangePasswordUser2`,
   `SamrUnicodeChangePasswordUser2`) and accepts only
-  `SamrUnicodeChangePasswordUser4`; ISE uses the legacy ones during a join.
-  The notice's second scenario is this exact message. It lists ISE 3.1
-  through 3.4 P1 as affected and does not mention 3.5, and the bug lists
-  3.4 builds and no fixed version, so whether it applies to 3.5.0.527 is
-  what a test would show.
-- Fix: none applied. Cisco's workaround is the DC policy Computer
-  Configuration > Administrative Templates > System > Security Account
-  Manager > "Configure SAM change password RPC methods policy" set to
-  "Allow all change password RPC methods"; in the registry,
+  `SamrUnicodeChangePasswordUser4`. The notice lists ISE 3.1 through 3.4 P1
+  and does not mention 3.5, but it applies. Proven on the DC: with
+  `HKLM\SYSTEM\CurrentControlSet\Control\SAM`, DWORD
+  `AuditLegacyPasswordRpcMethods` = 1 (logging only, Microsoft KB5004605),
+  SAM logged event 16985 in the System log (provider
+  `Microsoft-Windows-Directory-Services-SAM`) twice during a join, both
+  from 10.20.2.20 as `ISE1$`: `SamrSetInformationUser`, then
+  `SamrUnicodeChangePasswordUser2`, one of the three blocked methods.
+- Fix: on the DC,
   `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\SAM`,
-  DWORD `SamrChangeUserPasswordApiPolicy`, where 1 blocks all, 2 allows the
-  strong method only (the DC's behavior when unset), and 3 allows all. It
-  lowers a security default on a domain controller, so it waits for the
-  operator's decision and is untested here. `docs/ISE-AD-BUILD.md`, Part 3.
+  DWORD `SamrChangeUserPasswordApiPolicy` = 3 (1 blocks all, 2 allows the
+  strong method only and is the behavior when unset, 3 allows all), and
+  then restart the DC. The value is read at startup. Set on the running DC
+  and read back as 3, it changed nothing and the join failed the same way;
+  after `az vm restart` of `dc1` the same join call returned 204. Neither
+  Cisco's notice nor the policy's description mentions a restart.
+  `10-promote-forest.ps1` sets the value before the promotion reboot so a
+  new DC needs no extra one. The cheap first check next time: summary event
+  16984 in the DC's System log, "detected N legacy password change or set
+  RPC method calls in the past 60 minutes", appears at the time of each
+  failed join even without the verbose value. Value 3 lowers a DC default
+  and is accepted for this lab only, until Cisco fixes 3.5 (ADR 0010
+  amendment). A customer's Server 2025 domain will need the same setting or
+  a fixed ISE patch.
+
+## Updating an ISE join point over ERS returns 405
+
+- Symptom: `PUT /ers/config/activedirectory/<id>` with the join point and
+  its new groups was refused with HTTP 405, "The requested Method is not
+  supported for that resource". Seen 2026-09-17.
+- Cause: the Active Directory resource does not support a plain update.
+  Changes go through named operations on the join point.
+- Fix: `PUT /ers/config/activedirectory/<id>/addGroups`, with
+  `{"ERSActiveDirectory": {...}}` holding the object as GET returned it
+  minus `link`, plus `"adgroups": {"groups": [{"name", "sid", "type"}]}`.
+  It returns 204. The names, SIDs, and types come from
+  `PUT .../<id>/getGroupsByDomain` with additionalData
+  `domain=corp.rooez.com`. SIDs change with every build of the forest, so
+  read them each time and never hardcode them.
+
+## ISE's API gives connection reset, then refused, after ISE restarts
+
+- Symptom: calls to `https://localhost:8443` failed with connection reset
+  and later connection refused, after the restarts of the DNS repoint. It
+  looked like ISE still coming up. Seen 2026-09-17.
+- Cause: the `ise` SSH forward through the CML host had dropped. ISE was
+  fine.
+- Fix: `scripts/50-tunnels.sh up`. Check the tunnel before waiting on ISE.
 
 ## `AD_ADMIN_USERNAME` already carries the domain prefix
 

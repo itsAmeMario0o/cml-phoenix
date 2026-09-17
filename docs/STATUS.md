@@ -6,7 +6,67 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-17, late night: ISE joined to the domain, mario authenticates against AD
+
+ISE is joined to `corp.rooez.com` as `svc-ise`, and a directory user
+authenticates from a lab switch. On `sw1` (NAD 10.100.0.3, RADIUS group
+`ISE-GROUP`), `test aaa group radius mario <password> new-code` gave "User
+successfully authenticated" with the password in `AD_LAB_USER_PASSWORD` and
+"User rejected" with a wrong one. The DC's Security log shows AD gave both
+answers: event 4776, `mario@corp.rooez.com`, Source Workstation `\\ISE1`,
+error code `0x0` and then `0xC000006A`. No ISE policy change was needed; the
+Default policy set's `All_User_ID_Stores` includes `All_AD_Join_Points` as
+ISE ships.
+
+The join had been blocked by Cisco Field Notice FN74321, and that is now
+proven, on an ISE version the notice does not list (3.5.0.527). With the
+logging-only value `AuditLegacyPasswordRpcMethods` = 1 on the DC, SAM logged
+event 16985 twice during a join, from 10.20.2.20 as `ISE1$`:
+`SamrSetInformationUser`, then `SamrUnicodeChangePasswordUser2`, which
+Server 2025 blocks. Summary event 16984 had been in the System log at the
+time of each failed join all along (19:58:34 and 21:13:54 UTC). The operator
+approved Cisco's workaround, `SamrChangeUserPasswordApiPolicy` = 3. Set on
+the running DC it changed nothing. After `az vm restart` of `dc1` (boot
+21:22 UTC) the same join call returned 204, so the value is read at startup,
+which neither the notice nor the policy text says. The build is getting the
+value in `scripts/ad/10-promote-forest.ps1`, before the promotion reboot, so
+a new DC comes up with it in effect. The verbose audit value goes back to 0.
+The risk and its bounds are ADR 0010's new amendment: weaker password change
+methods accepted again, on a DC with no public address that ends with the
+session, until Cisco fixes 3.5. For the customer story, a Server 2025 domain
+needs this setting or a fixed ISE patch.
+
+The session's permission classifier refused to let the assistant set the
+SAM value even after the operator said to apply it, because it lowers a DC
+security default, so the operator ran the one `az` command. A future session
+that tries it by hand will meet the same refusal; with the value in the
+build script it stops mattering.
+
+After the join, over ERS: `getGroupsByDomain` returned 53 groups,
+`addGroups` selected `Mushroom-Kingdom` and `Koopa-Troop` (a plain PUT to
+the join point is a 405), and `getUserGroups` put `mario` in
+`Mushroom-Kingdom` and `bowser` in `Koopa-Troop`. The `ise` tunnel had
+dropped during ISE's restarts and needed `scripts/50-tunnels.sh up`. All of
+it is in `docs/ISE-AD-BUILD.md`, Part 3, and LESSONS-LEARNED.
+
+None of the ISE side is code. It lives on the running ISE and has to be
+redone on the next one until `ise_config.py` learns it.
+
+PEAP followed the same hour. `emp-pc`'s supplicant was switched from the
+internal user to `mario` with his directory password: EAP-MSCHAPv2
+succeeded, `sw1` shows Gi1/0/2 authorized by dot1x as `mario`, and the DC
+logged event 4776 for him from `ISE1` in the same second. `emp-pc` now logs
+in as `mario`, not `trustsec-verify`.
+
+Next: an ISE certificate signed by `corp-rooez-CA`. Authorization by group, the two groups to SGTs, is Phase 2.
+
+Running in Azure: CML, ISE, and the DC. PR #18 is open.
+
 ## 2026-09-17, night: ISE repointed at the DC, join point made, join blocked
+
+> Superseded on the join by the entry above: the cause was FN74321, the
+> workaround plus a DC restart fixed it, and ISE is joined. The repoint and
+> the delegation finding below still hold.
 
 ISE now uses the directory for DNS. The ISE deployed that morning had
 8.8.8.8 and the domain `rooez.com`, and it was repointed from its CLI:

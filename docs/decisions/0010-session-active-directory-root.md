@@ -72,3 +72,48 @@ from the internet reaches the DC.
 3. Samba as the directory, in CML. Rejected: the point is to show ISE
    against the Active Directory a customer runs.
 4. A disposable Windows VM in its own root. Chosen.
+
+## Amendment, 2026-09-17: the DC allows the legacy SAM password change methods
+
+The decision stands. One setting on the DC was not foreseen, and it lowers a
+Windows Server 2025 default, so it is recorded here.
+
+ISE could not join the domain. A Server 2025 domain controller refuses the
+legacy SAM RPC password change methods when they are called remotely, and
+ISE uses one of them during a join, which then ends in "Access is denied",
+error code 5. Cisco describes this in Field Notice FN74321 (regression bug
+CSCwr77017), for ISE 3.1 through 3.4 P1. Our ISE is 3.5.0.527, which the
+notice does not list, so it was proven and not assumed: with SAM's
+logging-only audit value turned on, the DC recorded `ISE1$` at 10.20.2.20
+calling `SamrUnicodeChangePasswordUser2`, one of the three blocked methods,
+during the join.
+
+`dc1` therefore carries Cisco's workaround, the policy "Configure SAM change
+password RPC methods policy" set to allow all methods:
+`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\SAM`, DWORD
+`SamrChangeUserPasswordApiPolicy` = 3. The operator approved it on
+2026-09-17. The DC reads the value at startup, so
+`scripts/ad/10-promote-forest.ps1` sets it before the promotion reboot. On
+the DC of that day it was set by hand and took effect only after a restart,
+after which the join succeeded.
+
+The risk accepted: the DC again accepts the older password change methods,
+whose encryption is weaker, as Server 2022 and earlier did by default. The
+bounds:
+`dc1` has no public address, its NSG admits only `snet-apps` and RDP from
+the CML host, the lab range reaches it through the routed path and nothing
+else does, every password in the domain is generated, and the DC is
+destroyed with the session.
+
+Alternatives rejected:
+
+1. A Windows Server 2022 image. It would join without the setting, and it
+   would no longer match the Server 2025 environment the lab is there to
+   model. Finding this problem is part of what the lab is for.
+2. No Active Directory. It blocks the lab's purpose, which is ISE against
+   the directory a customer runs.
+
+Exit condition: an ISE 3.5 release or patch that fixes CSCwr77017. When the
+lab's ISE runs it, remove the value from `10-promote-forest.ps1` and confirm
+a join on a fresh DC. A customer with a Server 2025 domain faces the same
+choice, this setting or a fixed ISE.

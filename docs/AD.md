@@ -58,6 +58,8 @@ reasons are below.
 It installs the AD DS and DNS roles and calls `Install-ADDSForest` for
 `corp.rooez.com`, NetBIOS name `CORP`, with a Directory Services Restore Mode
 password that Terraform generated and that is never written anywhere else.
+It also sets one SAM policy value that ISE's join depends on, ahead of the
+reboot that puts it into effect (the ISE section below has the reason).
 Promotion needs a reboot. The script schedules it fifteen seconds out instead
 of taking it at once, so the run command can report success before the
 machine goes down. If the server is already a domain controller, it says so
@@ -218,8 +220,8 @@ Two accounts are not in the file:
   and an object's creator is not allowed to write those three. A join does
   not depend on the second grant, but without it the join's log fills with
   denied writes that look like a cause and are not (`docs/ISE-AD-BUILD.md`,
-  Part 3). The account is made by the script and not the CSV so that no row
-  in that file is secretly special.
+  Part 3). ISE joined with it on 2026-09-17. The account is made by the
+  script and not the CSV so that no row in that file is secretly special.
 
 ### Passwords
 
@@ -279,8 +281,47 @@ beside it, ISE can do what it does in production:
   signed by `corp-rooez-CA`, replace the self-signed one that supplicants
   are currently told not to check.
 
-The first is done, as of 2026-09-17. The join has been attempted and is
-blocked, and the other three wait on it. The last section lists them.
+Where each stood at the end of 2026-09-17:
+
+| | State |
+|---|---|
+| Find the domain | Done. ISE was repointed from its CLI and checked |
+| Join it | Done. `ISE1` is joined as `svc-ise` |
+| Authenticate against it | Done for `test aaa` from `sw1` as `mario`, right and wrong password, with the DC's event 4776 showing AD gave both answers, and for PEAP with MSCHAPv2 from `emp-pc` as `mario` on `sw1` Gi1/0/2 |
+| Authorize by group | Both groups are selected on the join point. No rule uses them yet; that is Phase 2 |
+| Carry a certificate the lab trusts | Not done |
+
+Authentication needed no policy change. ISE's Default policy set looks users
+up in `All_User_ID_Stores`, which includes every Active Directory join point
+as ISE ships, so a joined domain is searched from the moment the join
+succeeds.
+
+### The join and Windows Server 2025
+
+The join did not work at first, and the reason applies to anyone putting
+ISE beside a Server 2025 domain. A Server 2025 domain controller refuses the
+older SAM RPC password change methods when they are called remotely. ISE
+uses one of them, `SamrUnicodeChangePasswordUser2`, while joining, and the
+join ends in "Access is denied", error code 5, after a log in which every
+step succeeded. Cisco describes this in Field Notice FN74321 (bug
+CSCwr77017). The notice lists ISE 3.1 through 3.4 P1 and not 3.5; the DC's
+own log showed that 3.5.0.527 does the same.
+
+Cisco's workaround is a policy on the DC, "Configure SAM change password RPC
+methods policy" set to allow all methods, which is the registry value
+`SamrChangeUserPasswordApiPolicy` = 3. The DC reads it when it starts, which
+neither the notice nor the policy text says: set on the running DC it
+changed nothing, and after a restart of `dc1` the same join call succeeded.
+`10-promote-forest.ps1` sets the value before the promotion reboot, so a DC
+built by this repo has it in effect from its first boot.
+
+This lowers a default. The DC again accepts the more weakly encrypted
+password change methods that Server 2022 and earlier accepted. It is
+accepted for a DC with no public address, reachable only from `snet-apps`
+and the lab range, holding generated passwords, and destroyed with the
+session, and it comes out when Cisco ships a fix for 3.5. The decision is
+ADR 0010's amendment; the diagnosis, with the events to look for, is in
+`docs/ISE-AD-BUILD.md`, Part 3.
 
 ### The rule: the directory first, and one domain
 
@@ -379,25 +420,25 @@ Then it prints what ISE's portal form needs:
 | An ERS call to ISE returns 401 with the right password | The client signed in as `admin`. The Marketplace image's account, for ERS too, is `iseadmin` | Use `iseadmin` |
 | The ISE join fails with HTTP 500, "nodes not able to join/remove" | That message never carries the reason | `show logging application ise-psc.log \| include Fatal` on ISE's CLI holds the join's step log. The DC's Security log will not help: a denied LDAP write is not audited by default |
 | The join's step log shows `operatingSystem` and two other attributes with no success line | `svc-ise` lacks write property on computer objects. Not fatal to a join, but misleading | The second `dsacls` grant in `docs/ISE-AD-BUILD.md`, Part 1 |
-| The join's step log succeeds throughout and still ends in "Access is denied", error code 5; the DC logs only Audit Success | Likely Cisco Field Notice FN74321: a Windows Server 2025 DC refuses the legacy SAM RPC password change methods ISE uses. Not proven here; the notice does not list ISE 3.5 | The workaround lowers a security default on the DC and is the operator's decision. It has not been applied. `docs/ISE-AD-BUILD.md`, Part 3 |
+| The join's step log succeeds throughout and still ends in "Access is denied", error code 5; the DC's Security log has only Audit Success | Cisco Field Notice FN74321: a Windows Server 2025 DC refuses the legacy SAM RPC password change method ISE uses. Proven here on ISE 3.5.0.527, which the notice does not list. The DC's System log has event 16984 from SAM at the time of each failed join | `SamrChangeUserPasswordApiPolicy` = 3 on the DC, then restart the DC: the value is read at startup and does nothing before that. The build sets it before the promotion reboot, so this should only appear on a DC built before that change. `docs/ISE-AD-BUILD.md`, Part 3 |
+| Updating the join point over ERS returns 405 | A plain `PUT /ers/config/activedirectory/<id>` is not supported | `PUT .../<id>/addGroups` to select groups |
+| ISE's API on `localhost:8443` gives connection reset or refused after an ISE restart | The `ise` SSH tunnel dropped | `scripts/50-tunnels.sh up` |
 | Anything else | | The transcripts under `C:\lab\log` on the DC, over RDP |
 
 ## Not built yet
 
-These are done by hand for now, in this order. `docs/ISE-AD-BUILD.md` has
-the steps for the first two.
+Done by hand on 2026-09-17, with the steps in `docs/ISE-AD-BUILD.md`: ISE
+pointed at the DC for DNS, the join point `corp.rooez.com` created and ISE
+joined as `svc-ise`, the groups `Mushroom-Kingdom` and `Koopa-Troop`
+selected, and `mario` authenticated against the directory from `sw1` and,
+over PEAP, from `emp-pc`. None
+of it is code yet, so a new ISE needs it again.
 
-1. Point ISE at the DC for DNS, at deploy or from its CLI. Done on
-   2026-09-17, from the CLI, and verified.
-2. Add `corp.rooez.com` as an Active Directory join point and join as
-   `svc-ise`. In progress. The join point exists. The join is blocked with
-   access denied, error code 5. The suspected cause is Cisco Field Notice
-   FN74321 (Windows Server 2025 refuses the legacy SAM RPC password change
-   methods), and its workaround, a SAM policy on the DC, is untested here
-   and waits for the operator's decision.
-3. Select the groups `Mushroom-Kingdom` and `Koopa-Troop` and put Active
-   Directory in the identity source sequence.
-4. Import `corp-rooez-CA`'s root certificate into ISE's trusted store,
+Not done, in this order:
+
+1. Authorization rules that use the two groups. Mapping a group to a
+   Security Group Tag is TrustSec Phase 2.
+2. Import `corp-rooez-CA`'s root certificate into ISE's trusted store,
    generate a certificate request for EAP and admin use, have the CA sign it
    from the `WebServer` template, and bind the result.
 
