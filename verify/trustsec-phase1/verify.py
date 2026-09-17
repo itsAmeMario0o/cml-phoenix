@@ -169,17 +169,15 @@ class CoAReceived(aetest.Testcase):
         checked_any = False
         failures: list[str] = []
         for device in _iosxe_devices(testbed):
-            # "show aaa server radius dynamic-author" is this task's best
-            # known command for the CoA client's counters; the brief itself
-            # leaves the exact form open ("show aaa ... dynamic-author").
-            # No Genie parser is assumed, only a regex over the counter
-            # line reporting requests received. Both the command name and
-            # the counter's exact label are confirmed at the Task 7 live
-            # run, once ISE has actually sent a CoA to this edge
-            # (labs/trustsec-phase1.yaml configures "aaa server radius
-            # dynamic-author" as the CoA client).
-            output = device.execute("show aaa server radius dynamic-author")
-            match = re.search(r"CoA[^\n]*Requests?\s*Received[:\s]+(\d+)", output, re.IGNORECASE)
+            # Confirmed live on cat8000v-17-18-02 (2026-09-17): the
+            # dynamic-author counters are under "show aaa clients", as
+            #   Dynamic Author Client <ise ip>
+            #       CoA: requests: N, transactions: N
+            # "show aaa server radius dynamic-author", the first guess here,
+            # is rejected as invalid input on this image. No Genie parser
+            # is assumed, only a regex over that counter line.
+            output = device.execute("show aaa clients")
+            match = re.search(r"CoA:\s*requests:\s*(\d+)", output, re.IGNORECASE)
             if match is None:
                 continue
             checked_any = True
@@ -188,9 +186,8 @@ class CoAReceived(aetest.Testcase):
                 failures.append(f"{device.name}: CoA requests received = {received}")
         if not checked_any:
             self.failed(
-                "no CoA request counter found in 'show aaa server radius "
-                "dynamic-author' output on any IOS XE edge; the command and "
-                "counter label assumed here are unconfirmed (see comment above)"
+                "no 'CoA: requests:' counter found in 'show aaa clients' output "
+                "on any IOS XE edge; is 'aaa server radius dynamic-author' configured?"
             )
         if failures:
             self.failed("no CoA received: " + "; ".join(failures))
