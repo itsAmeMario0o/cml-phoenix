@@ -100,9 +100,16 @@ Three choices worth stating:
   draft had it the other way round. Step 3 of the procedure reads ARP to
   bind an IP to a MAC, and a pure layer 2 switch holds no ARP entries for
   its endpoints, so the inventory would have come back without addresses.
-  A routed access layer is also closer to a real campus. The three
-  endpoints still share one VLAN on purpose: traffic between them never
-  leaves the switch, so only an SGACL can stop it.
+  Routed access is also the honest model: the customer's real fabric is
+  VXLAN EVPN on IOS XE, which this lab does not build, and a routed
+  access layer is its nearest plain equivalent. The operator's direction
+  is to bias toward routed access and still be able to show switched
+  access. The lab does both from one topology: `sw1` routes VLAN 10 by
+  default, and the switched variant is the same switch with the SVI
+  removed and the VLAN carried to the firewall, a day-0 option rather
+  than a second lab. The inventory job is against the switches in either
+  case. The three endpoints still share one VLAN on purpose: traffic
+  between them never leaves the switch, so only an SGACL can stop it.
 - **No C8000v edge.** Phase 1 needed it as the RADIUS client. Here the
   switch sits on `bridge1` itself, as proven today, and ISE talks to the
   switch, never to the endpoints. The host's route for the rest of
