@@ -9,7 +9,7 @@ case "$*" in
   # 45-ise-down.sh: find_ise_resources reads this directly, dry run
   # included, so the plan can show exactly what would be deleted. Fixed
   # ids for one of each resource type 25-ise-up.sh creates.
-  *"resource list"*"role=ise"*)
+  *"resource list"*"tags.role=='ise'"*)
     printf '%s\n' \
       "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/virtualMachines/ise	Microsoft.Compute/virtualMachines	ise" \
       "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/networkInterfaces/iseVMNic	Microsoft.Network/networkInterfaces	iseVMNic" \

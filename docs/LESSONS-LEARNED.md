@@ -858,3 +858,19 @@ in Azure, which is the cheapest place to learn them.
 - Fix: run teardown and build scripts unpiped, or under `pipefail` with
   `PIPESTATUS` printed, and check Azure afterwards:
   `az vm list -g rg-cml-lab` should be empty.
+
+## `45-ise-down.sh` reported success and left the ISE disk behind
+
+- Symptom: the script listed and deleted the NIC, the NSG, and the public
+  address, printed `[OK]`, and `ise1osdisk` was still in the resource group,
+  tagged `role=ise` and billing. Seen 2026-09-17.
+- Cause: the lookup ran `az resource list --tag role=ise` across the
+  subscription and kept rows whose `resourceGroup` equalled `rg-cml-lab`.
+  Azure reports a disk's resource group in upper case, `RG-CML-LAB`, and a
+  JMESPath comparison is case sensitive, so the disk never made the list.
+  Nothing failed, because nothing was asked to delete it.
+- Fix: `az resource list --resource-group <rg>` with the tag in the query,
+  `[?tags.role=='ise']`. The resource group filter runs on Azure's side and
+  ignores case. Do not compare `resourceGroup` in a query anywhere. After a
+  teardown, list the resource group and read it; an `[OK]` only says the
+  script deleted what it found.
