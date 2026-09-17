@@ -40,6 +40,12 @@ from the internet reaches the DC.
 
 ## Consequences
 
+- The directory is a prerequisite for ISE, not a companion. ISE's DNS
+  domain is `corp.rooez.com` and its name server is the DC, so that every
+  lab name resolves in one place. The scripts are numbered in that order,
+  the ISE walkthrough refuses to start without it in words, and
+  `25-ise-up.sh` warns when it finds no directory.
+
 - The domain, its users, and its CA are rebuilt from tracked data each
   session. Nothing about them is precious, and nothing bills between
   sessions.

@@ -47,8 +47,9 @@ first build was refused for it.
 
 `scripts/24-ad-up.sh` runs `terraform apply`. Terraform creates the VM and
 then hands it three PowerShell scripts, one after another, as Azure run
-commands. Each script checks its own state first, so running the whole thing
-again after a failure only does what is left. The order matters, and the
+commands. Each script checks its own state first, and `24-ad-up.sh` clears
+any run command that failed before it applies again, so running the whole
+thing after a failure only does what is left. The order matters, and the
 reasons are below.
 
 **1. `scripts/ad/10-promote-forest.ps1`: a server becomes a forest.**
@@ -61,19 +62,34 @@ machine goes down. If the server is already a domain controller, it says so
 and stops.
 
 **2. `scripts/ad/20-install-ca.ps1`: DNS forwarding, then the CA.**
-It starts by waiting, up to twenty minutes, for `Get-ADDomain` to answer.
-That is the signal that the reboot finished and the directory is up. Then it
-points the DNS server's forwarder at Azure's resolver, installs the
+It points the DNS server's forwarder at Azure's resolver, installs the
 certificate services role, and creates the certification authority. This
-script does not run as SYSTEM like the first one. An Enterprise CA writes
-into the forest's configuration partition, which takes membership of
-Enterprise Admins, and SYSTEM on a domain controller is only the machine
-account. It runs as `CORP\labadmin` instead.
+script cannot run as SYSTEM like the first one. An Enterprise CA writes into
+the forest's configuration partition, which takes membership of Enterprise
+Admins, and SYSTEM on a domain controller is only the machine account. It
+runs as `CORP\labadmin`, and getting it there takes a wrapper, described
+next.
 
 **3. `scripts/ad/30-create-identities.ps1`: people, a service account, and
 ISE's name.** It reads `config/ad-identities.csv`, creates the groups and
 users, creates `svc-ise`, and adds ISE's DNS records. It also runs as
-`CORP\labadmin`.
+`CORP\labadmin`, through the same wrapper.
+
+**The wrapper, `scripts/ad/run-as-admin.ps1`.** Azure's run command has a
+run-as option, and it does not work here: it looks the user up as a local
+account, and a domain controller has none. So steps 2 and 3 are delivered
+inside a small wrapper that runs as SYSTEM. It waits, up to twenty five
+minutes, for `Get-ADDomain` to answer, which is the signal that the reboot
+finished and the directory is up; a domain logon attempted before that
+fails, which is how the first build died. Then it writes the inner script to
+`C:\lab\bin`, registers a one-shot scheduled task as `CORP\labadmin` with
+that account's password, runs it, waits for it, prints the end of its
+transcript, and removes the task. A scheduled task gets a full logon token,
+which an Enterprise CA install needs and a remote session would not give.
+The inner script's arguments, passwords among them for step 3, travel as one
+protected parameter and reach the task through a file that only
+administrators can read and that is deleted afterward. Nothing sensitive
+appears on a command line.
 
 The forest call and the CA's values come from scripts the operator already
 trusted on AWS (the `cfn-ps-microsoft-activedirectory` and
@@ -253,14 +269,24 @@ beside it, ISE can do what it does in production:
 None of those five is done yet. They are by hand in the ISE GUI for now, and
 the last section lists them.
 
-One thing to know about the ISE that is running today: it was deployed
-before the directory existed, with a public resolver and the domain
-`rooez.com`, so it calls itself `ise1.rooez.com`. It can be repointed from
-its command line with `ip name-server 10.20.2.10` and
+### The rule: the directory first, and one domain
+
+ISE depends on DNS, and the lab's names resolve in one place. So ISE's
+domain is the directory's, `corp.rooez.com`, its name server is the domain
+controller, and the domain controller is built and checked before ISE is
+deployed. That is the operator's decision of 2026-09-17, and it is why
+`24-ad-up.sh` is numbered ahead of `25-ise-up.sh` and ends by printing the
+two values the ISE portal form takes. `25-ise-up.sh` warns when it finds no
+directory.
+
+The first ISE of that day predates the rule. It was deployed with a public
+resolver and the domain `rooez.com`, so it calls itself `ise1.rooez.com` and
+knows nothing of the lab's names. An ISE in that state is repointed from its
+command line with `ip name-server 10.20.2.10` and
 `ip domain-name corp.rooez.com`. Either restarts the ISE application, about
 fifteen minutes, and a new domain name means a new self-signed certificate,
-which the CA step replaces anyway. The cleaner path is the next deploy, with
-the two values `24-ad-up.sh` prints typed into the portal form.
+which the CA step replaces anyway. Every deploy after it simply starts
+right.
 
 ## Network
 
@@ -326,10 +352,11 @@ Then it prints what ISE's portal form needs:
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| The apply fails on a run command | The command started in the seconds before the promotion reboot and was killed by it | Run `scripts/24-ad-up.sh` again. Finished steps are skipped |
+| The apply fails on a run command | Anything a script threw; its message is in the apply error | Fix it and run `scripts/24-ad-up.sh` again. It deletes the failed run command first, because one that failed exists in Azure but not in Terraform's state and would stop the next apply at "already exists". Finished steps are skipped |
 | The VM is refused with a `patch_mode` error | An `azure-edition` image SKU | Keep `image_sku` on a non-hotpatch SKU |
 | The VM is refused for quota | The size's family has none | `vm_size` in `terraform/ad/terraform.tfvars`. `Standard_B2ms` and `Standard_D2s_v4` had room on 2026-09-17 |
-| The CA script fails with access denied | It ran as SYSTEM | The run command must keep `run_as_user` set to `CORP\labadmin` |
+| `System error thrown for RunAs user` | Someone set `run_as_user` on a run command; it cannot log a domain account on to a DC | Remove it. The wrapper is the way to run as `CORP\labadmin` |
+| The CA script fails with access denied | It ran as SYSTEM, outside the wrapper | Deliver it through `run-as-admin.ps1` |
 | A check fails but the apply succeeded | The directory was still starting | Rerun the script; the checks run again |
 | Anything else | | The transcripts under `C:\lab\log` on the DC, over RDP |
 

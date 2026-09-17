@@ -16,6 +16,13 @@ where the rest of the kit expects it.
 
 ## Before you start
 
+- **The domain controller comes first.** ISE depends on DNS, and its DNS is
+  the directory's. Run `scripts/24-ad-up.sh` and wait for its three checks
+  to pass before opening this wizard; it ends by printing the two values
+  the Network Settings tab needs. An ISE deployed without the directory
+  gets a name outside the domain and a resolver that knows nothing about
+  the lab, and both take an application restart to correct afterward
+  (`docs/AD.md`, ADR 0010).
 - Sign in to the Azure portal as the same account the CLI uses, and make
   sure the active subscription is the lab subscription.
 - The Marketplace terms for the ISE 3.5 image are already accepted on the
@@ -68,8 +75,8 @@ after **Create**: the Basics tab asks for Host Name and Time Zone.
 | Key pair name | any name, for example `cml-lab` | just a label |
 | Private IP Address | **`10.20.2.20`** | static; the routed path and lab config assume it |
 | Public IP Address | new, `ise1-ip`, Standard SKU, Static | outbound for Security Cloud Control and Entra; Standard is inbound-closed by default |
-| DNS domain name | `rooez.com` | |
-| Primary Name Server | `8.8.8.8` | reachable once the public IP gives outbound |
+| DNS domain name | **`corp.rooez.com`** | the Active Directory domain, so ISE is `ise1.corp.rooez.com`, the name the DC already holds a record for |
+| Primary Name Server | **`10.20.2.10`** | the domain controller. It answers the lab's names itself and forwards public ones to Azure's resolver, so ISE still resolves Security Cloud Control and Entra |
 | Primary NTP Server | `time.google.com` | NTP is critical for ISE, keep this correct |
 
 Leave the secondary and tertiary DNS and NTP fields blank.

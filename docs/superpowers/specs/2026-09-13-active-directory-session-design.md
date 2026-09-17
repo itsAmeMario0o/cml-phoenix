@@ -383,9 +383,10 @@ The lifetime, domain name, deploy method, identity scope, and script source
 were each decided with the operator on 2026-09-13. Two are open after the
 2026-09-17 revision:
 
-- Whether to repoint the running ISE at the DC from its CLI, or to let the
-  next portal deploy pick it up. The second costs nothing but waits for a
-  rebuild.
+- Settled 2026-09-17: ISE's domain is `corp.rooez.com` and its name server
+  the DC, and the DC is a prerequisite for any ISE deploy. What remains
+  open is only the ISE already running that day: repoint it from its CLI
+  now, or let the next deploy start right.
 - Whether a Windows endpoint inside CML is wanted as the domain-joined
   client. CML 2.10's node definitions support UEFI with Secure Boot
   firmware, an emulated TPM 2.0, and a VNC console, so Windows 11 runs
