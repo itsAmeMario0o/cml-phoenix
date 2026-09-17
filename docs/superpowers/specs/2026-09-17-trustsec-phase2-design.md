@@ -26,7 +26,9 @@ judged on its own.
 **Act 2, what the same platform does next.** Once the customer is ready
 to touch authentication: an endpoint gets a Security Group Tag from ISE
 by who or what it is, the access switch enforces east-west with SGACLs,
-and a Threat Defense firewall enforces north-south by source tag. Kali
+and a firewall enforces north-south by source tag. Two firewalls can play
+that part, one at a time: ASAv, driven from its own CLI, and Threat
+Defense, driven from cdFMC. Kali
 and the employee PC send the same traffic to the same server, the
 firewall drops one and passes the other, and the only difference between
 them is the tag ISE assigned.
@@ -69,7 +71,7 @@ nearly every untested assumption in this lab has turned out wrong so far:
 | ISE's profiler probes (SNMPQUERY, SNMPTRAP) can be switched on through an API | 1 | One documented GUI step per ISE deploy |
 | The virtual switch enforces SGACLs in its software data plane (Cisco lists only basic L2, OSPF, SVIs, and VLANs as tested, at about 250 Kbps) | 2 | Show classification and the matrix; enforce everything on FTD |
 | The switch downloads SGTs and SGACLs from ISE | 2 | Static `cts role-based permissions` on the switch |
-| `cts manual` works on a routed port of the virtual switch, and FTDv on KVM reads the inline tag from a frame arriving on virtio | 2 | SXP from the switch to FTD for IP-to-SGT mappings |
+| `cts manual` on the virtual switch puts the tag on the wire, and a firewall on KVM reads it from a frame arriving on virtio. Tested on ASAv first, where a capture on the CML link and `show cts` on the ASA answer it in minutes | 2 | SXP from the switch to the firewall for IP-to-SGT mappings |
 
 The 802.1X question was settled on 2026-09-17 on the running probe lab,
 as step 0 of the build order, first with a Cisco supplicant and EAP-MD5
@@ -89,18 +91,24 @@ CML host, bridge1 10.100.0.1/24
       |  Gi1/0/2  iot-dev  alpine   Act 2: MAB      SGT 20 IoT
       |  Gi1/0/3  kali     kali     Act 2: MAB      SGT 40 Unknown
       |
-      |  Gi1/0/23, routed 10.100.11.1/30, Act 2: cts manual, propagate sgt
-    ftd1 FTDv, routed, cdFMC managed. Act 2 only
-      |    Gi0/0 inside  10.100.11.2/30
-      |    Gi0/1 servers 10.100.20.1/24
-      |    Management0/0 on the NAT connector, 192.168.255.81, to cdFMC
+      |  VLAN 11, SVI 10.100.11.1/29, the firewall segment. Act 2 only
+      |  Gi1/0/22 and Gi1/0/23, access VLAN 11, cts manual, propagate sgt
       |
-    srv  ubuntu 10.100.20.10, a web server and an SSH server
+      +-- asa1 ASAv, routed, local CLI            } one of the two runs
+      |     Gi0/0 inside  10.100.11.2             } at a time; they hold
+      |     Gi0/1 servers 10.100.20.1             } the same addresses
+      +-- ftd1 FTDv, routed, cdFMC managed        }
+      |     Gi0/0 inside  10.100.11.2
+      |     Gi0/1 servers 10.100.20.1
+      |     Management0/0 on the NAT connector, 192.168.255.81, to cdFMC
+      |
+    srv  ubuntu 10.100.20.10 behind an unmanaged switch both firewalls
+         reach: a web server and an SSH server
 ```
 
-Eight nodes: the `bridge1` and NAT connectors, `sw1`, `ftd1`, and four
-hosts. Act 1 needs only `sw1` and the three endpoints; the firewall and
-server can stay stopped.
+Ten nodes: the `bridge1` and NAT connectors, `sw1`, `asa1`, `ftd1`, an
+unmanaged switch in front of `srv`, and four hosts. Act 1 needs only `sw1`
+and the three endpoints; the firewalls and server can stay stopped.
 
 Three choices worth stating:
 
@@ -118,13 +126,25 @@ Three choices worth stating:
   than a second lab. The inventory job is against the switches in either
   case. The three endpoints still share one VLAN on purpose: traffic
   between them never leaves the switch, so only an SGACL can stop it.
+- **Two firewalls, same addresses, one running.** ASAv and FTDv both sit on
+  VLAN 11 as 10.100.11.2 and both own 10.100.20.1 toward the server.
+  Swapping the enforcement point is stopping one node and starting the
+  other; the switch's route and the server's gateway never change. They
+  must never run together, and the lab README will say so first. ASAv is
+  there because it is the shortest path to proving the tag reaches a
+  firewall: about 2 GB against 8, a local CLI that a day-0 file and pyATS
+  can drive, and rules that take a tag number directly
+  (`security-group tag 10`), so it needs neither a cloud manager nor any
+  ISE integration. FTDv is there because it is what a Firepower customer
+  runs. `asav-9-24-1` is on the base refplat ISO and joins
+  `config/refplat.txt` the way the Catalyst 9000v images did.
 - **No C8000v edge.** Phase 1 needed it as the RADIUS client. Here the
   switch sits on `bridge1` itself, as proven today, and ISE talks to the
   switch, never to the endpoints. The host's route for the rest of
   10.100.0.0/16 via 10.100.0.2 stays in place and unused. The edge comes
   back when a second site or an SXP peer needs it.
-- **ISE and the firewall never meet in v1.** FTD learns the tag from the
-  frame, not from ISE. That keeps cdFMC-to-ISE pxGrid, which has to cross
+- **ISE and the firewall never meet in v1.** Either firewall learns the tag
+  from the frame, not from ISE. That keeps cdFMC-to-ISE pxGrid, which has to cross
   the internet to reach a cloud manager, off the critical path. It is the
   first thing to add afterward.
 
@@ -134,8 +154,8 @@ Three choices worth stating:
 |---|---|---|
 | Transit, `bridge1` | 10.100.0.0/24 | host .1, `sw1` Vlan100 .3 |
 | Endpoints, VLAN 10 | 10.100.10.0/24 | `sw1` Vlan10 .1, DHCP pool .100 to .199 |
-| Switch to firewall | 10.100.11.0/30 | `sw1` .1, `ftd1` inside .2 |
-| Servers | 10.100.20.0/24 | `ftd1` servers .1, `srv` .10 |
+| Switch to firewall, VLAN 11 | 10.100.11.0/29 | `sw1` Vlan11 .1, the running firewall's inside .2 |
+| Servers | 10.100.20.0/24 | the running firewall's servers .1, `srv` .10 |
 | FTD management | 192.168.255.0/24 | NAT connector .1, `ftd1` .81 |
 
 ## Act 1: the inventory job, step by step
@@ -186,14 +206,18 @@ LLDP to ISE inside RADIUS accounting.
 East-west on the switch, the SGACL matrix: Employees to IoT permit, IoT
 to Employees deny, Unknown to anything deny, IoT to IoT deny.
 
-North-south on FTD, access control rules by source SGT toward the server
-network object: Employees allow HTTP and SSH, IoT allow HTTP only, Unknown
+North-south on the firewall, rules by source SGT toward the server
+network object, the same policy on either one: Employees allow HTTP and SSH, IoT allow HTTP only, Unknown
 block with logging, default block. Destination stays a network object in
 v1, because a destination SGT needs an IP-to-SGT mapping the firewall can
 only get from SXP or pxGrid.
 
-FTD needs the tag numbers to write those rules. Without ISE integration,
-cdFMC takes them as custom Security Group Tag objects, three objects
+On ASAv the policy is a few lines of ACL with `security-group tag`
+matches and `cts manual` on the inside interface, all of it in the day-0
+file, which makes ASAv the one enforcement point this lab can express
+entirely as code and verify from its own counters. FTD needs the tag
+numbers to write its rules. Without ISE integration, cdFMC takes them as
+custom Security Group Tag objects, three objects
 created once in the manager, and the inside interface gets "Propagate
 Security Group Tag" enabled. Both are manager-side steps the lab README
 will list in order, like the HA pair and inline set were for the IPS lab.
@@ -252,6 +276,9 @@ Act 2:
 8. From the hosts: employee to `srv` on HTTP succeeds, Kali to `srv` on
    HTTP fails, both by the hosts' own `curl` exit codes.
 
+With ASAv running, the job also reads the firewall: the deny rule's hit
+count moves when Kali tries, and the permit rule's when the employee does.
+
 ISE-side reads use the APIs already used by hand today
 (`AuthStatus/MACAddress`, `Session/ActiveList`, ERS). Firewall-side
 evidence, connection events by SGT, stays a manual look in cdFMC.
@@ -264,9 +291,11 @@ evidence, connection events by SGT, stays a manual look in cdFMC.
 | kali | 1 | 2 | 4 GB | 1 |
 | ubuntu (`emp-pc`) | 1 | 1 | 2 GB | 1 |
 | alpine | 1 | 1 | 0.5 GB | 1 |
-| ftdv | 1 | 4 | 8 GB | 2 |
+| asav | 1 | 1 | 2 GB | 2 |
+| ftdv | 1 | 4 | 8 GB | 2, instead of asav |
 | ubuntu (`srv`) | 1 | 1 | 2 GB | 2 |
-| total | 6 | 13 | about 35 GB | |
+| total, FTDv running | 6 | 13 | about 35 GB | |
+| total, ASAv running | 6 | 10 | about 29 GB | |
 
 Act 1 alone is about 25 GB and 8 vCPU. The host has 20 vCPU and 157 GB.
 The full lab does not fit comfortably beside the Cilium fabric's 84 GB;
@@ -296,10 +325,15 @@ assumes an unproven step worked.
    sessions with their tags.
 6. Act 2, switch enforcement: CTS credentials, policy download, the
    matrix. Gate: the IoT to Employees deny counter moves.
-7. Act 2, firewall: register to cdFMC, routed interfaces, an allow-all
-   baseline, then Propagate SGT, the tag objects, and the rules. Gate:
-   employee passes, Kali is blocked, the event shows the tag.
-8. `ise_config.py` and the pyATS scenario catch up with what steps 2 to 7
+7. Act 2, firewall by tag on ASAv: day-0 with the interfaces, `cts
+   manual`, and the tag ACL. Gate: a capture on the CML link shows the tag
+   in the frame, employee passes, Kali is blocked, and the ACL's hit
+   counts say why.
+8. Act 2, the same on FTDv, with ASAv stopped: register to cdFMC, routed
+   interfaces, an allow-all baseline, then Propagate SGT, the tag objects,
+   and the rules. Gate: the same two results, and the connection event
+   shows the tag.
+9. `ise_config.py` and the pyATS scenario catch up with what steps 2 to 8
    settled by hand, then one clean rebuild of ISE proves the code alone
    reproduces both acts.
 
@@ -329,4 +363,8 @@ the UDP 162 rule that `25-ise-up.sh` adds to the NSG it already owns.
   keeps the same communities or credentials. It does not change the lab,
   it changes what the demo can claim.
 - cdFMC work is the operator's by hand, as with the IPS lab: device
-  registration, interfaces, the three tag objects, the policy.
+  registration, interfaces, the three tag objects, the policy. ASAv needs
+  none of it.
+- ASAv's Smart Licensing. Unlicensed, ASAv runs rate limited, which does
+  not matter at this lab's traffic levels, but the limit should be checked
+  against 9.24 before relying on it.

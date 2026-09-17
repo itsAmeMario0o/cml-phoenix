@@ -1,6 +1,8 @@
 # Active Directory for the ISE session
 
-Status: draft, 2026-09-13.
+Status: draft, 2026-09-13. Revised 2026-09-17 to match what the week's live
+work settled; the section "What changed on 2026-09-17" lists the
+differences. Still not built.
 
 ISE needs a DNS server it can trust for internal names, an identity store to
 authenticate lab users against, and a certificate authority to sign its
@@ -8,6 +10,35 @@ admin and EAP certificates. One Windows Server VM running Active Directory
 Domain Services covers all three. This spec adds that VM as a disposable
 Terraform root that is built before ISE and destroyed after it, so that no
 disk, no domain, and no certificate outlives a session.
+
+## What changed on 2026-09-17
+
+The first draft was written before ISE had ever been deployed or the routed
+path proven. Six things it assumed are now known to be otherwise:
+
+- **ISE is reached through the CML host, not its public IP.** The kit's NSG
+  admits 443 and 22 to ISE from the CML host's address only, the GUI is an
+  SSH forward (`ise 8443 10.20.2.20 443` in `config/tunnels.conf`), and the
+  ISE CLI answers key-based SSH through the same jump. The draft's plan to
+  open ISE to the operator's addresses is dropped.
+- **`scripts/25-ise-up.sh --post-deploy` already exists** and has run
+  against real ISE twice. This spec no longer adds it, only relies on it.
+- **An ISE is already running with a public resolver.** The portal form is
+  still the supported way to point ISE at the DC, on the next deploy. A
+  running ISE can be repointed from its CLI (`ip name-server`,
+  `ip domain-name`), at the cost of an application restart.
+- **ISE's host name is `ise1`.** The DNS record this spec creates is
+  `ise1.corp.rooez.com`, not `ise`.
+- **Lab nodes can reach the apps subnet at their own addresses.** The
+  routed path works (ADR 0003 and its 09-17 amendment), so a lab endpoint
+  can reach the DC. The draft said nothing in the lab would talk to it;
+  a domain-joined Windows endpoint in CML now could, and should be able to.
+- **802.1X is proven with ISE's internal users** (PEAP from a Linux
+  supplicant, MAB, CoA). AD replaces the identity store behind a working
+  path; it is no longer a prerequisite for proving the path.
+
+Nothing about the lifetime, the domain name, the VM, the three scripts, or
+the delivery method changed.
 
 ## Context
 
@@ -55,9 +86,11 @@ In scope:
 - Operator scripts `24-ad-up.sh`, `46-ad-down.sh`, and `27-ad-ca.sh`, with
   dry run tests, and a runbook `docs/AD.md`.
 - Changes to the ISE walkthrough so ISE is deployed with the DC as its DNS
-  server and reached over its public IP from the operator's allowed
-  addresses, and a `--post-deploy` mode on `scripts/25-ise-up.sh` so its
-  still live steps can run after a portal deploy.
+  server and `corp.rooez.com` as its domain, and a short procedure for
+  repointing an ISE that is already running. `scripts/25-ise-up.sh
+  --post-deploy` is used as it stands.
+- A `dc` line in `config/tunnels.conf.example` for RDP through the CML
+  host.
 - ADR 0010 for a fourth root with session lifetime.
 
 Out of scope, each with its own item on the roadmap or in a later spec:
@@ -83,8 +116,9 @@ One `azurerm_windows_virtual_machine` named `dc1`, size `Standard_B2as_v2`
 2025-datacenter-azure-edition-smalldisk:latest`, on a 32 GB Standard SSD OS
 disk. No data disk. A static private address `10.20.2.10` on `snet-apps`,
 which the persistent root already owns. The apps subnet's route table sends
-the lab summary toward the CML host, which does not affect the DC because
-nothing in the lab topologies talks to it.
+the lab summary toward the CML host, so the DC, like ISE, can answer a lab
+node at its own address. That is wanted: a domain-joined endpoint inside
+CML needs DNS, Kerberos, and LDAP from the DC.
 
 The size is a burstable one because a lab domain controller idles. If the
 subscription's quota for that family is zero, `Standard_D2s_v5` is the
@@ -111,6 +145,15 @@ RPC dynamic range 49152 to 65535, and RDP 3389. The default rules deny
 everything else inbound. Nothing from the internet reaches the DC on any
 port.
 
+`VirtualNetwork` means more here than the VNet's own prefix. Azure expands
+that tag per NIC from the NIC's effective routes, and `snet-apps` carries
+the route for the lab summary, so on the DC's NIC the tag includes
+`10.100.0.0/16` (LESSONS-LEARNED, 2026-09-17; visible under `tagMap` in
+`az network nic list-effective-nsg`). Lab endpoints are therefore admitted
+on the directory ports by the same rules, on purpose. The forward leg needs
+nothing new either: the CML NIC's `lab-transit-out` rule already allows the
+lab summary to the apps subnet on any port.
+
 RDP from inside the VNet covers the one supported path: an SSH forward
 through the CML host that `scripts/50-tunnels.sh` already manages, the same
 pattern the kit uses for every other lab VM. Azure Bastion is out of scope
@@ -122,12 +165,13 @@ only.
 
 ### ISE reachability
 
-ISE keeps the Standard public IP its Marketplace deploy creates, and the NSG
-rule the kit adds after the portal deploy admits 443 and 22 from the
-operator's allowed address list, the same two ranges the CML host NSG
-trusts, instead of only from the CML host. The operator opens a browser to
-ISE's public IP. The walkthrough and `scripts/25-ise-up.sh` change to
-match. The RADIUS rule from the lab summary is unchanged.
+Unchanged from how the kit works today. ISE keeps the Standard public IP its
+Marketplace deploy creates, used only for outbound to Security Cloud Control
+and Entra. The NSG `scripts/25-ise-up.sh` attaches admits RADIUS from the
+lab summary and 443 and 22 from the CML host alone. The operator reaches the
+GUI through the `ise` SSH forward and the CLI by key through the same jump.
+The DC is reached the same way: a `dc 3389 10.20.2.10 3389` forward and an
+RDP client pointed at `localhost`.
 
 ### The three scripts
 
@@ -165,8 +209,8 @@ flag ISE's SAN never survives signing, no matter what the request asks for.
 groups it names, creates each user with the shared lab password and adds it
 to its groups, creates `svc-ise` with its own password and delegates it the
 right to create computer objects in the default Computers container, and
-adds the `ise` A record at `10.20.2.20` plus the reverse zone for
-`10.20.2.0/24`. Every step is skipped when its object already exists.
+adds the `ise1` A record at `10.20.2.20`, matching the host name the ISE
+walkthrough uses, plus the reverse zone for `10.20.2.0/24`. Every step is skipped when its object already exists.
 
 ### Delivery to the VM
 
@@ -189,9 +233,14 @@ command is the transport.
 The forest install makes the DC authoritative for `corp.rooez.com` and
 points its own DNS client at itself. Nothing at VNet level changes: the
 VNet keeps Azure DNS as its default, so the CML host and every future VM
-resolve as they do today. ISE is the only client that uses the DC, because
-its portal form gets `10.20.2.10` as the primary name server and
-`corp.rooez.com` as the domain. Public names ISE needs, Security Cloud
+resolve as they do today. ISE uses the DC because its portal form gets
+`10.20.2.10` as the primary name server and `corp.rooez.com` as the domain,
+which makes it `ise1.corp.rooez.com`. An ISE that is already running with a
+public resolver is repointed from its CLI with `ip name-server 10.20.2.10`
+and `ip domain-name corp.rooez.com`; ISE restarts its application for
+either, about fifteen minutes, and a changed domain name means a new
+self-signed certificate, which the CA step replaces anyway. A lab endpoint
+that joins the domain points its own DNS at the DC the same way. Public names ISE needs, Security Cloud
 Control and Entra among them, resolve through the forwarder.
 
 `lab.rooez.com` is the Cloudflare front door and lives in the public zone.
@@ -251,9 +300,9 @@ then the ISE internal user path still works and the env example says so.
    Windows first boot and the reboot after promotion.
 2. The ISE portal deploy, per `docs/ISE-MARKETPLACE-DEPLOY.md`, with those
    two values entered.
-3. `scripts/25-ise-up.sh --post-deploy`. The existing NSG, tagging,
-   readiness, and policy steps, with the admin rule now scoped to the
-   operator's addresses.
+3. `scripts/25-ise-up.sh --post-deploy`, unchanged: the NSG, tagging,
+   readiness, and policy steps. Then `scripts/50-tunnels.sh up` for the
+   `ise` and `dc` forwards.
 4. In the ISE GUI, by hand this round: import the root CA certificate that
    `scripts/27-ad-ca.sh export-root` saved to
    `config/mcp-env/ad-root-ca.cer`, generate a CSR, sign it with
@@ -320,10 +369,25 @@ is a roadmap item alongside CI.
 - If Azure retires the `smalldisk` SKU the image reference is one variable.
 - ISE's `test aaa` against AD depends on ISE being joined, which is manual
   this round. The verification keeps working against the ISE internal user
-  until then.
+  `trustsec-verify` until then.
+- `46-ad-down.sh` must not copy the first `45-ise-down.sh`: az 2.89 rejects
+  `--tag` together with `--resource-group`. This root is Terraform, so
+  `terraform destroy` is the teardown and no tag query is needed.
+- Changing an NSG from this session's tooling is refused by its classifier.
+  That does not bite here, because the DC's NSG is a Terraform resource and
+  `terraform apply` is the operator's step in any case.
 
 ## Open questions
 
-None at the time of writing. The lifetime, domain name, deploy method,
-access paths, identity scope, and script source were each decided with the
-operator on 2026-09-13.
+The lifetime, domain name, deploy method, identity scope, and script source
+were each decided with the operator on 2026-09-13. Two are open after the
+2026-09-17 revision:
+
+- Whether to repoint the running ISE at the DC from its CLI, or to let the
+  next portal deploy pick it up. The second costs nothing but waits for a
+  rebuild.
+- Whether a Windows endpoint inside CML is wanted as the domain-joined
+  client. CML 2.10's node definitions support UEFI with Secure Boot
+  firmware, an emulated TPM 2.0, and a VNC console, so Windows 11 runs
+  there; it would be the natural consumer of this directory and the CA for
+  machine and user 802.1X. It would be its own small spec, after this one.
