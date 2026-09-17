@@ -4,7 +4,7 @@
 # on their own: the edge sits on the host transit bridge and talks to
 # ISE with no NAT in between (ADR 0003).
 #
-# The external connector maps onto br-transit, the Linux bridge a fork
+# The external connector maps onto bridge1, the libvirt routed network a fork
 # customize script creates on the CML host at 10.100.0.1/24 (Task 2 of
 # this build). The edge takes 10.100.0.2/24 on that segment with a
 # default route back through the host.
@@ -25,7 +25,7 @@ lab:
   version: 0.1.0
 nodes:
 - id: n0
-  label: br-transit
+  label: bridge1
   node_definition: external_connector
   x: -300
   y: 0
@@ -36,7 +36,7 @@ nodes:
     slot: 0
   configuration:
   - name: default
-    content: br-transit
+    content: bridge1
 - id: n1
   label: edge
   node_definition: cat8000v

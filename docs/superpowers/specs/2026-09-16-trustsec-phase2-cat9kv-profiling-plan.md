@@ -122,3 +122,78 @@ merged into `main`. Nothing else changed; no lab, refplat, or
 node-definition file was edited. The CML build from earlier this
 session, ISE and `trustsec-phase1.yaml`, was left running, not torn
 down.
+
+## Update, 2026-09-17: images live, transit bridge built, RADIUS not yet answered
+
+Where the build stopped when the session ended, in order of what a fresh
+session needs to know.
+
+**Done and on the controller.** Both `cat9000v-uadp` and `cat9000v-q200`
+are in blob and registered on the running controller through the
+dropfolder and `POST /images/upload` (LESSONS-LEARNED). A scratch lab
+"cat9kv probe" (`f13f801f`, not tracked, YAML in the session scratchpad)
+runs one UADP switch `sw1` at 10.100.0.3 on the transit bridge with an
+alpine `ep1` on Gi1/0/1. The CLI probe on that switch accepted every
+command that matters: `switchport mode access`, `mab`, `dot1x pae
+authenticator`, `access-session port-control auto` (with the one-time
+IBNS 2.0 conversion prompt), `cts role-based enforcement` globally, per
+VLAN and per interface, `cts role-based sgt-map`, `cts manual` with
+`policy static sgt` and `propagate sgt`, `cts sxp enable`,
+`device-sensor`, `ip dhcp snooping`, `device-tracking policy`. Licensing
+shows `network-advantage` and `dna-advantage`. `cat9kv-sw1` (10.100.0.3)
+is a network device in ISE, created through `ise_config.py`.
+
+**The routed path exists now, host side.** It never had: STATUS from
+2026-09-13 recorded that `06-transit-bridge.sh` "never landed", and the
+Phase 1 pyATS run had never executed. The fork now carries it as a
+libvirt routed network named `transit` with bridge `bridge1` (the
+controller's scan only accepts `bridgeN`, `virbrN`, `vlanN`, `localN`),
+host 10.100.0.1/24, the /16 routed to the edge at 10.100.0.2, autostart.
+It was run by hand on the live host, the connector "Bridge 1" is
+registered, and both labs' connector nodes point at `bridge1` and are
+`BOOTED` with taps on the bridge. The tracked `labs/trustsec-phase1.yaml`,
+`scripts/90-smoke-test.sh`, and `verify/trustsec-phase1/verify.py` use
+`bridge1` now. PR #11 carries all of it.
+
+**What works on the wire, proven with tcpdump on the host.** The switch's
+RADIUS Access-Request arrives on `bridge1`, the host forwards it out
+`eth0` toward 10.20.2.20 (firewalld no longer rejects; the `!A` of the
+netplan version is gone). Azure Network Watcher confirms the ISE end:
+ISE's effective route to 10.100.0.3 is the UDR via 10.20.1.10, its NSG
+allows the request in (`allow-radius`) and the reply out.
+
+**What does not work yet, and where to look.** No reply ever comes back:
+nothing from 10.20.2.20 on `eth0 In` in a 40 second capture with a
+request every few seconds. The one hop Azure's tooling could not test is
+the CML NIC's outbound NSG evaluation of a forwarded packet whose source
+(10.100.0.3) is not a VNet address; `test-ip-flow` refuses a local IP
+that is not the NIC's own. The other possibility is ISE receiving the
+request and not answering. Next step, in order:
+
+1. Look from ISE's side. Either the RADIUS Live Logs in the GUI (the `ise`
+   tunnel in `config/tunnels.conf` forwards local 8443), or `tech dumptcp 0
+   count 12` on ISE's CLI, which is SSH key-only: the try with
+   `keys/cml-lab` was interrupted before it ran, so first confirm which
+   public key the Marketplace deploy was given. If ISE sees no request,
+   the drop is on the Azure side between the CML NIC and ISE.
+2. If it is the CML NIC, add an explicit outbound rule on `cml-sg` in
+   `terraform/persistent` (source 10.100.0.0/16, destination the apps
+   subnet, any port) rather than relying on the `VirtualNetwork` tag, then
+   `terraform plan` and a gated apply.
+3. If ISE sees the request and does not answer, check Operations >
+   RADIUS > Live Logs for the drop reason (unknown NAD, shared secret).
+   Both NAD entries read back correctly over ERS (RADIUS, /32, profile
+   Cisco), so the secret is the first suspect after the NAD lookup.
+4. Only then: MAB on `ep1`'s port, the first real session, and the
+   Phase 2 spec (FTDv and Kali added to the topology, FTD enforcing by
+   SGT with inline tagging on its inside interface, cdFMC managed).
+
+**Housekeeping to know.** The rendered `config/cml.yml` secrets, including
+sysadmin's sudo password, appeared unmasked in this session's tool output
+and in an editor selection; rotate them at the next build, as was done
+once before for the admin password. The `test-dot1x2` probe on the Phase
+1 edge left GigabitEthernet2 with an IBNS 2.0 conversion in
+running-config only (interface down, not saved). Active Directory has a
+draft spec (`2026-09-13-active-directory-session-design.md`), nothing
+implemented; Phase 2's first 802.1X session can use an ISE internal user
+and swap to AD later.

@@ -147,7 +147,7 @@ that gets back to the right switch. No Catalyst 9000v fabric yet; that
 arrives with the TrustSec policy in Phase 2. Spec:
 `docs/superpowers/specs/2026-09-12-trustsec-phase1-routed-ise-design.md`.
 
-The external connector maps onto `br-transit`, a bridge that a fork
+The external connector maps onto `bridge1`, a bridge that a fork
 customize script creates on the CML host at 10.100.0.1/24. The edge sits
 on that segment at 10.100.0.2/24, with a default route back through the
 host and no NAT anywhere on the path; NAT would collapse every switch to

@@ -6,6 +6,64 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-17, Catalyst 9000v live, transit bridge built, RADIUS one hop short
+
+Both Catalyst 9000v flavors are on the controller without a rebuild:
+uploaded to blob from the base ISO, then registered on the running host
+through the dropfolder and the `POST /images/upload` API (PR #10,
+LESSONS-LEARNED). A scratch lab "cat9kv probe" runs one `cat9000v-uadp`
+as `sw1` at 10.100.0.3 with an alpine on an access port, and the CLI
+probe accepted everything the design needs: switchport access mode,
+MAB, dot1x authenticator, `access-session`, CTS enforcement globally
+and per VLAN and interface, static SGT maps, `cts manual` inline
+tagging with `propagate sgt`, SXP, device-sensor, DHCP snooping,
+device tracking. `network-advantage` and `dna-advantage` are licensed.
+`cat9kv-sw1` is a network device in ISE. The Cisco doc for the node
+lists only basic L2, OSPF, SVIs, and VLANs as tested, so the functional
+proof (a real MAB session, SGACL hits) is still owed.
+
+The bigger finding: the routed path to ISE had never been built on the
+host. The 2026-09-13 entry below said so ("the fork customize script
+never landed") and I had read past it. No lab node could reach ISE and
+the Phase 1 pyATS run had never executed. It exists now, after three
+rounds on the live host: a netplan bridge named `br-transit` (the
+controller's connector scan ignores any name that is not `bridgeN`,
+`virbrN`, `vlanN`, or `localN`), then `bridge1` (firewalld on the CML
+host rejected every forwarded packet with "administratively
+prohibited"), then the shape that works, a libvirt routed network named
+`transit` on `bridge1` with the /16 route to the edge in its XML, which
+brings its own firewalld zone and policies. That is what
+`06-transit-bridge.sh` in the fork does now, listed under
+`app.customize`, with `tests/test_transit.sh` covering its dry-run
+paths (PR #11, submodule bumped twice). The operator ran it by hand on
+the live host each time, since the auto-mode classifier refuses remote
+`sudo`; both labs' connector nodes point at `bridge1` and are up.
+
+Proven with tcpdump on the host: the switch's RADIUS request arrives on
+`bridge1` and leaves `eth0` toward ISE. Network Watcher confirms ISE's
+route back is the UDR and its NSG allows the request in and the reply
+out. Yet no reply ever returns. The untested hop is the CML NIC's
+outbound NSG evaluation of a forwarded packet with a non-VNet source
+(Azure's `test-ip-flow` refuses to model it), and the alternative is
+ISE receiving and not answering. The next session starts from ISE's
+side: RADIUS Live Logs through the `ise` tunnel, or `tech dumptcp` on
+its CLI once the SSH key the Marketplace deploy was given is known
+(SSH there is key-only; the try with `keys/cml-lab` was interrupted).
+Full state, the exact next steps, and the Phase 2 topology with FTDv
+and Kali added are in the Phase 2 note,
+`docs/superpowers/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`.
+
+Two things to carry forward. The rendered `config/cml.yml` secrets,
+sysadmin's sudo password among them, appeared unmasked in this
+session's tool output and an editor selection; rotate at the next
+build. And a ping from the lab range to ISE can never succeed
+(`ise-nsg` has no ICMP rule), so RADIUS is the only valid test of that
+path; two hours went into learning that.
+
+Open PRs at session end: #10 (Catalyst 9000v in the reference platform)
+and #11 (the transit bridge, the `bridge1` rename in the Phase 1 lab,
+smoke test, and verify script, these lessons and this entry).
+
 ## 2026-09-16, TrustSec Phase 2 scoped: profiling, and why it needs a real switch
 
 Brainstormed folding ISE profiling into the TrustSec lab. The real goal

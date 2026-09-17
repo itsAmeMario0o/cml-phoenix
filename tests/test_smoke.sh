@@ -17,7 +17,7 @@ assert_contains "summary printed" "summary:" "${out}"
 src="$(cat "${SCRIPT}")"
 assert_contains "check_transit_bridge defined" "check_transit_bridge() {" "${src}"
 assert_contains "check_transit_bridge called from main" "  check_transit_bridge" "${src}"
-assert_contains "checks br-transit address exactly" "10.100.0.1/24" "${src}"
+assert_contains "checks bridge1 address exactly" "10.100.0.1/24" "${src}"
 assert_contains "checks ip_forward" "net.ipv4.ip_forward" "${src}"
 
 finish "test_smoke"
