@@ -33,15 +33,24 @@ ISE splits these two object kinds across two APIs (ADR 0008, and a Phase
 one). Network devices are only ever registered through ERS (External
 RESTful Services), so ensure_network_device stays there. Policy sets and
 authorization rules are served by real ISE 3.x under the ISE OpenAPI
-(/api/v1/policy/network-access/...) as plain JSON arrays, not the ERS
-"SearchResult" wrapper; ISE never serves those two object kinds under
-ERS, so find_policy_set_id, find_authorization_rule_id,
-create_authorization_rule, and ensure_authorization_rule use the OpenAPI
-client instead. Both APIs terminate TLS with a self-signed certificate
-on this disposable lab node; there is no CA to verify against and no
-certificate to pin, so verification is turned off deliberately for both.
-The routed path to either exists only inside the lab's own address space
-(ADR 0003), never on a public address. Stdlib only.
+(/api/v1/policy/network-access/...), not the ERS "SearchResult" wrapper;
+ISE never serves those two object kinds under ERS, so find_policy_set_id,
+find_authorization_rule_id, create_authorization_rule, and
+ensure_authorization_rule use the OpenAPI client instead. The OpenAPI
+shape is its own envelope, {"version": ..., "response": ...}, not a bare
+array as first assumed: a policy-set list's response is a flat array of
+{"id", "name", ...}, but an authorization-rule list's response nests
+each rule's id/name/state/condition under a "rule" key alongside sibling
+"profile"/"securityGroup" keys, and a single created rule comes back as
+{"response": {"rule": {...}, "profile": [...], ...}}, an object instead
+of a list. All confirmed live against real ISE 3.5 (Task 7); the
+original flat-array assumption surfaced as a live 'str' object has no
+attribute 'get' the moment this code first ran for real. Both APIs
+terminate TLS with a self-signed certificate on this disposable lab
+node; there is no CA to verify against and no certificate to pin, so
+verification is turned off deliberately for both. The routed path to
+either exists only inside the lab's own address space (ADR 0003), never
+on a public address. Stdlib only.
 """
 from __future__ import annotations
 
@@ -193,26 +202,34 @@ def ensure_network_device(client: IseErsClient, name: str, ip_address: str, radi
 
 
 def find_policy_set_id(client: IseOpenApiClient, name: str) -> str:
-    """GET .../policy-set returns a plain JSON array of {"id", "name",
-    ...}, not the ERS "SearchResult" wrapper (see the module docstring)."""
+    """GET .../policy-set returns {"version": ..., "response": [{"id",
+    "name", ...}, ...]}, an envelope around a flat array, not the ERS
+    "SearchResult" wrapper and not a bare array either (confirmed live
+    against real ISE 3.5, Task 7; the prior code assumed a bare array
+    and got 'str' object has no attribute 'get', since iterating the
+    envelope dict directly walks its keys)."""
     body, status, _ = client.request("GET", "/policy-set")
     if status == 404 or body is None:
         raise IseConfigError(f"no policy sets returned looking for {name!r}")
-    for item in body:
+    for item in body.get("response", []):
         if item.get("name") == name:
             return str(item["id"])
     raise IseConfigError(f"policy set {name!r} not found")
 
 
 def find_authorization_rule_id(client: IseOpenApiClient, policy_set_id: str, name: str) -> str | None:
-    """GET .../policy-set/<id>/authorization returns a plain JSON array
-    of rules, same OpenAPI shape as find_policy_set_id."""
+    """GET .../policy-set/<id>/authorization returns the same {"response":
+    [...]} envelope as find_policy_set_id, but each list item nests the
+    actual rule's id/name/state/condition under a "rule" key, alongside
+    sibling "profile" and "securityGroup" keys, not flat like a policy
+    set (confirmed live, Task 7)."""
     body, status, _ = client.request("GET", f"/policy-set/{policy_set_id}/authorization")
     if status == 404 or body is None:
         return None
-    for item in body:
-        if item.get("name") == name:
-            return str(item["id"])
+    for item in body.get("response", []):
+        rule = item.get("rule", {})
+        if rule.get("name") == name:
+            return str(rule["id"])
     return None
 
 
@@ -223,28 +240,36 @@ def create_authorization_rule(
     gets the named (built-in) authorization profile. That is enough to
     prove RADIUS and CoA; a real TrustSec matrix is a later spec.
 
-    The payload below follows the documented ISE 3.x OpenAPI shape for
-    an authorization rule (a flat object, not the ERS "rule" wrapper).
-    This is an assumption the first real deploy against ISE 3.5 in
-    Task 7 confirms; nothing here has been exercised against real ISE.
+    The payload nests name/state/condition under a "rule" key, with
+    "profile" as a sibling, mirroring the GET response shape
+    (find_authorization_rule_id's docstring); the create response
+    wraps the created object as {"response": {"rule": {...}, "profile":
+    [...], ...}}, a single object this time, not a list, since one
+    resource was created. Both confirmed live by creating the actual
+    trustsec-poc rule against real ISE 3.5 (Task 7); the prior flat
+    payload and response shape were unverified assumptions that turned
+    out wrong once find_policy_set_id's envelope bug was fixed and this
+    function actually ran.
     """
     payload = {
-        "name": name,
-        "state": "enabled",
-        "condition": {
-            "conditionType": "ConditionAttributes",
-            "isNegate": False,
-            "dictionaryName": "Radius",
-            "attributeName": "NAS-IP-Address",
-            "operator": "equals",
-            "attributeValue": nad_ip,
+        "rule": {
+            "name": name,
+            "state": "enabled",
+            "condition": {
+                "conditionType": "ConditionAttributes",
+                "isNegate": False,
+                "dictionaryName": "Radius",
+                "attributeName": "NAS-IP-Address",
+                "operator": "equals",
+                "attributeValue": nad_ip,
+            },
         },
         "profile": [profile_name],
     }
     body, status, _ = client.request("POST", f"/policy-set/{policy_set_id}/authorization", payload)
     if status not in (200, 201):
         raise IseConfigError(f"POST authorization for {name!r}: unexpected status {status}")
-    rule_id = str((body or {}).get("id", ""))
+    rule_id = str((body or {}).get("response", {}).get("rule", {}).get("id", ""))
     if not rule_id:
         raise IseConfigError(f"POST authorization for {name!r} returned no id")
     return rule_id
@@ -270,7 +295,14 @@ def main(argv: list[str]) -> int:
     # scripts/25-ise-up.sh sets ISE_API_BASE to a forwarded 127.0.0.1
     # URL after tunneling through the CML host jump; it wins when set.
     api_base = os.environ.get("ISE_API_BASE", "")
-    admin_user = os.environ.get("ISE_ADMIN_USERNAME", "admin")
+    # "iseadmin", not "admin": the Azure Marketplace ISE image's admin
+    # account is always named iseadmin (fixed by the deploy wizard's User
+    # Details tab, docs/ISE-MARKETPLACE-DEPLOY.md), never customizable to
+    # plain "admin". The wrong default here caused a live 401 on the ERS
+    # call while the same password authenticated fine as iseadmin against
+    # the mnt API (caught live, first real deploy). ISE_ADMIN_USERNAME
+    # still overrides, for a differently-provisioned ISE node.
+    admin_user = os.environ.get("ISE_ADMIN_USERNAME", "iseadmin")
     admin_password = os.environ.get("ISE_ADMIN_PASSWORD", "")
     radius_secret = os.environ.get("RADIUS_SECRET", "")
     if not (ise_ip or api_base) or not admin_password or not radius_secret:

@@ -9,11 +9,17 @@ the Phase 1 review): network devices stay under ERS
 (/ers/config/networkdevice, wrapped in a "NetworkDevice" key, list
 endpoints wrapped in a "SearchResult"), while policy sets and
 authorization rules are served under the OpenAPI
-(/api/v1/policy/network-access/...) as plain JSON arrays with no
-envelope. This fake mirrors that split so the tests catch a client that
-guesses the wrong shape for either API, which is exactly the gap a prior
-review found (authorization rules were being read and written through
-the ERS shape against a server that never serves them that way).
+(/api/v1/policy/network-access/...), wrapped in their own
+{"version": ..., "response": ...} envelope (confirmed live against real
+ISE 3.5, Task 7). A policy-set list's response is a flat array of
+{"id", "name", ...}; an authorization-rule list's response nests each
+rule's id/name/state/condition under a "rule" key, alongside sibling
+"profile"/"securityGroup" keys; a single created rule's response is
+{"rule": {...}, "profile": [...], ...} directly, an object rather than
+a list. This fake mirrors that shape so the tests catch a client that
+guesses wrong, which is exactly the gap the first live run found (the
+prior version of this fake, and of scripts/lib/ise_config.py, both
+assumed a bare flat array).
 
 Serves plain HTTP, not HTTPS. ise_config.py's verify-off SSL context only
 changes hostname and certificate checks, both irrelevant to a plain http
@@ -80,18 +86,18 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send(200, {"NetworkDevice": device})
             return
-        # Policy sets and authorization rules: OpenAPI, plain arrays, no
-        # SearchResult envelope. Real ISE 3.x does not serve these under
-        # ERS at all; see the module docstring.
+        # Policy sets and authorization rules: OpenAPI, {"response": ...}
+        # envelope, no ERS SearchResult wrapper. Real ISE 3.x does not
+        # serve these under ERS at all; see the module docstring.
         if path == "/api/v1/policy/network-access/policy-set":
             resources = [{"id": ps["id"], "name": ps["name"]} for ps in STATE["policy_sets"].values()]
-            self._send(200, resources)
+            self._send(200, {"version": "1.0.0", "response": resources})
             return
         if path.startswith("/api/v1/policy/network-access/policy-set/") and path.endswith("/authorization"):
             policy_set_id = path.split("/")[6]
             rules = STATE["authorization_rules"].get(policy_set_id, {})
-            resources = [rule for rule in rules.values()]
-            self._send(200, resources)
+            resources = list(rules.values())
+            self._send(200, {"version": "1.0.0", "response": resources})
             return
         self._send(404, {})
 
@@ -118,17 +124,25 @@ class Handler(BaseHTTPRequestHandler):
             if policy_set_id not in STATE["policy_sets"]:
                 self._send(404, {})
                 return
-            name = body["name"]
+            # Real ISE 3.5 wants name/state/condition nested under "rule",
+            # "profile" as a sibling (confirmed live, Task 7).
+            name = body["rule"]["name"]
             rules = STATE["authorization_rules"].setdefault(policy_set_id, {})
             if name in rules:
                 self._send(400, {"description": "authorization rule already exists"})
                 return
             rule_id = _next_id()
-            created = {**body, "id": rule_id}
+            created = {
+                "rule": {**body["rule"], "id": rule_id},
+                "profile": body.get("profile", []),
+                "securityGroup": body.get("securityGroup"),
+            }
             rules[name] = created
-            # OpenAPI create returns the created object directly, no
-            # Location header and no SearchResult wrapper.
-            self._send(201, created)
+            # OpenAPI create wraps the created object in the same
+            # {"version", "response"} envelope as a GET, but "response"
+            # is a single object here, not a list, since one resource
+            # was created; no Location header, no ERS wrapper.
+            self._send(201, {"version": "1.0.0", "response": created})
             return
         self._send(404, {})
 
