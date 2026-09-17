@@ -111,6 +111,12 @@ tag_resources() {
     --name "${ISE_HOSTNAME}" --resource-type Microsoft.Compute/virtualMachines
   run az disk update -g "${RESOURCE_GROUP}" -n "${ISE_HOSTNAME}osdisk" \
     --set tags.project=cml-azure-lab tags.role=ise
+  # The wizard names the NIC <host>nic and the public IP <host>-ip. Without
+  # the tag, 45-ise-down.sh leaves both behind; seen on 2026-09-17.
+  run az resource tag -g "${RESOURCE_GROUP}" --tags project=cml-azure-lab role=ise \
+    --name "${ISE_HOSTNAME}nic" --resource-type Microsoft.Network/networkInterfaces
+  run az resource tag -g "${RESOURCE_GROUP}" --tags project=cml-azure-lab role=ise \
+    --name "${ISE_HOSTNAME}-ip" --resource-type Microsoft.Network/publicIPAddresses
 }
 
 # wait_for_ise_ready: any HTTP response (curl's %{http_code} not 000)

@@ -70,7 +70,15 @@ into this session on its own. The next build ships
 `06-transit-bridge.sh` through cloud-init for the first time; check
 `/var/log/provision/06-transit-bridge.log` and the connector list
 (`Bridge 1` on `bridge1`) before reimporting the labs, then the pyATS
-`trustsec-phase1` run is the first thing to try. ISE stayed up.
+`trustsec-phase1` run is the first thing to try. ISE came down right
+after, all five resources: `45-ise-down.sh` needed two fixes first,
+recorded in the same PR. az 2.89 refuses `--tag` with
+`--resource-group`, so the tag query now filters by resource group in
+JMESPath; and the portal deploy leaves the NIC (`ise1nic`) and public IP
+(`ise1-ip`) untagged, so `25-ise-up.sh` tags them now and both were
+tagged by hand this time so the teardown caught them. Next session
+starts with nothing running in Azure but the persistent root; ISE is a
+fresh portal deploy plus `25-ise-up.sh --post-deploy` again.
 
 PRs #10 and #11 merged at session end: #10 (Catalyst 9000v in the reference platform)
 and #11 (the transit bridge, the `bridge1` rename in the Phase 1 lab,

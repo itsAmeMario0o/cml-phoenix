@@ -21,10 +21,12 @@ DRY_RUN=0
 # everything tagged role=ise in the lab resource group. Read-only, so it
 # always runs for real, dry run included, and shows exactly what would
 # be deleted.
+# az 2.89 refuses --tag together with --resource-group, so the tag query
+# runs subscription-wide and the resource group is a query filter.
 find_ise_resources() {
   local rg
   rg="$(out_or_placeholder resource_group_name)"
-  az resource list -g "${rg}" --tag role=ise --query "[].{id:id,type:type,name:name}" -o tsv
+  az resource list --tag role=ise --query "[?resourceGroup=='${rg}'].{id:id,type:type,name:name}" -o tsv
 }
 
 # delete_by_type ID TYPE NAME: dispatch to the right az subcommand. An
