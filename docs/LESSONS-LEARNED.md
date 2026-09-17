@@ -501,3 +501,40 @@ in Azure, which is the cheapest place to learn them.
   `python3` invocation reading a small tracked file, the cause is
   broader than this one and worth a fresh investigation rather than
   assuming the same fix applies.
+
+## The controller never lists a custom bridge as an external connector
+
+- Symptom: `br-transit` existed on the host at 10.100.0.1/24, but the
+  connector rescan (`PUT /api/v0/system/external_connectors`) kept
+  listing only `virbr0`, and every lab's `br-transit` connector node
+  stayed `DEFINED_ON_CORE` with a null device. Seen 2026-09-16.
+- Cause: the low-level driver's scan only admits bridges whose name
+  matches `^(bridge|virbr|vlan|local)[0-9]{1,4}$`
+  (`simple_drivers/low_level_driver/disk_utils.py`). The name is the
+  contract, and `bridge0` is reserved for the system bridge.
+- Fix: the transit bridge is `bridge1`. The connector appears as
+  "Bridge 1" after a rescan, and a lab connector node whose
+  configuration is `bridge1` resolves to it (the key is the device
+  name). The tracked topologies and the smoke test use that name now.
+
+## The host forwards nothing from the transit bridge: firewalld
+
+- Symptom: with `bridge1` up and `ip_forward` on, a switch on the
+  bridge could ping the host at 10.100.0.1 but a traceroute toward ISE
+  ended at hop 2 with `10.100.0.1 !A`, administratively prohibited from
+  the host itself. Seen 2026-09-16.
+- Cause: CML ships firewalld active (`virl2-initial-setup.py` configures
+  it), and firewalld rejects forwarding between interfaces unless a
+  policy allows it. A netplan bridge has no such policy.
+- Fix: define the transit network as a libvirt network in routed mode
+  (`06-transit-bridge.sh`). libvirt creates the bridge, enables
+  forwarding, and places it in its `libvirt-routed` zone, whose
+  `libvirt-routed-in` and `-out` policies are `ACCEPT` both ways. No
+  hand-written firewall rule, and the static route for the rest of
+  10.100.0.0/16 lives in the same XML. The `!A` disappeared on the first
+  run. Two related facts from the same evening: a ping from the lab
+  range to ISE can never succeed, because `ise-nsg` allows only UDP
+  1812/1813 and TCP 443/22 and no ICMP, so RADIUS is the only valid
+  reachability test; and SSH to the Marketplace ISE is key-only
+  (`Permission denied (publickey)` for `iseadmin`), so an ISE-side
+  capture needs the key the deploy was given, or the GUI.

@@ -5,12 +5,12 @@ labs/trustsec-phase1.yaml: the ISE RADIUS server is configured and shows as
 reachable, a test AAA authentication against it returns Access-Accept, and a
 CoA (RFC 3576) request has actually been received by the edge's
 dynamic-author client. All three target the C8000v edge, the one CML node in
-this topology; br-transit is an external connector, not a device pyATS
+this topology; bridge1 is an external connector, not a device pyATS
 connects to.
 
 This is authored now and run later (Task 7), once the TrustSec lab is
 actually deployed: ISE up on the apps subnet and the host transit bridge
-(br-transit) in place (ADR 0003). Until then there is nothing to connect to,
+(bridge1) in place (ADR 0003). Until then there is nothing to connect to,
 so the build lane only syntax-checks this file with py_compile; it never
 imports pyATS or runs easypy against it here.
 
@@ -63,7 +63,7 @@ def _iosxe_devices(testbed: Testbed) -> Iterator[Device]:
     """The IOS XE edge from the testbed.
 
     The TrustSec Phase 1 topology (labs/trustsec-phase1.yaml) has one
-    routed node, the cat8000v edge, plus the external br-transit connector,
+    routed node, the cat8000v edge, plus the external bridge1 connector,
     which is not a device pyATS connects to. This relies on CML's generated
     testbed tagging the cat8000v node with os "iosxe", the same kind of
     assumption the Cilium os:nxos filter carries (see that file's Task 7
