@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Dry-run tests for the fork's 06-transit-bridge.sh (ADR 0003). The script
+# Dry-run tests for the fork's 06-transit.sh (ADR 0003). The script
 # runs on Ubuntu as root; here DRY_RUN=1 prints the commands it would run
 # and the PRETEND_* variables stand in for the libvirt, bridge, route, and
 # nftables probes.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT="${REPO_ROOT}/vendor/cloud-cml/modules/deploy/data/06-transit-bridge.sh"
+SCRIPT="${REPO_ROOT}/vendor/cloud-cml/modules/deploy/data/06-transit.sh"
 TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
 trap 'rm -rf "${TMP}"' EXIT
 # shellcheck source=tests/lib/asserts.sh
@@ -33,7 +33,7 @@ assert_contains "libvirt NAT rule is fine" "masquerade rules leave 10.100.0.0/16
 assert_not_contains "no warning for libvirt NAT rule" "WARN" "${out}"
 assert_contains "verifies the address" "bridge1 holds 10.100.0.1/24" "${out}"
 assert_contains "verifies the route" "10.100.0.0/16 routes via 10.100.0.2" "${out}"
-assert_contains "logs done" "[06-transit-bridge] done" "${out}"
+assert_contains "logs done" "[06-transit] done" "${out}"
 
 # 2. Rerun on a host where the network exists and is active: no redefine,
 #    no restart, autostart reasserted.
@@ -89,7 +89,12 @@ assert_eq "missing route exits nonzero" "1" "${rc}"
 assert_contains "missing route names the problem" "FAIL: no route to 10.100.0.0/16 via 10.100.0.2" "${out}"
 
 # 7. Log file lands in LOG_DIR.
-[[ -f "${TMP}/06-transit-bridge.log" ]] && log_present=1 || log_present=0
+[[ -f "${TMP}/06-transit.log" ]] && log_present=1 || log_present=0
 assert_eq "log file written" "1" "${log_present}"
+
+# 8. cml.sh postprocess only runs names matching this pattern; a name it
+#    skips means the bridge is never built (seen 2026-09-17).
+if grep -qE '[0-9]{2}-[[:alnum:]_]+\.sh' <<<"/provision/$(basename "${SCRIPT}")"; then name_ok=1; else name_ok=0; fi
+assert_eq "script name matches the postprocess filter" "1" "${name_ok}"
 
 echo "test_transit: all passed"

@@ -538,3 +538,15 @@ in Azure, which is the cheapest place to learn them.
   reachability test; and SSH to the Marketplace ISE is key-only
   (`Permission denied (publickey)` for `iseadmin`), so an ISE-side
   capture needs the key the deploy was given, or the GUI.
+
+## A customize script is shipped to the host and never runs
+
+- Symptom: the first build carrying `06-transit-bridge.sh` copied it to
+  `/provision`, and nothing else: no log under `/var/log/provision`, no
+  `bridge1`. `05-persist.sh` beside it ran as usual. Seen 2026-09-17.
+- Cause: `cml.sh` `postprocess` picks its scripts with
+  `grep -E '[0-9]{2}-[[:alnum:]_]+\.sh'`. That class has no hyphen, so a
+  name with a second hyphen never matches, and nothing reports the skip.
+- Fix: the script is `06-transit.sh`. Name fork customize scripts
+  `NN-word.sh` or `NN-two_words.sh`. `tests/test_transit.sh` now asserts
+  the name against the same pattern.
