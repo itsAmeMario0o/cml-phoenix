@@ -39,6 +39,12 @@ variable "vm_size" {
   default     = "Standard_B2ms"
 }
 
+variable "image_sku" {
+  description = "Windows Server image SKU. Not an azure-edition SKU: those are hotpatch images, which Azure only accepts with platform-managed patching, and this VM is never patched."
+  type        = string
+  default     = "2025-datacenter-smalldisk-g2"
+}
+
 variable "dc_private_ip" {
   description = "Static address of the DC on snet-apps, beside ISE at .20."
   type        = string
