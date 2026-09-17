@@ -37,6 +37,11 @@ family, which has room). It is a supported ISE 3.5 evaluation size.
 Open the tile **Cisco Identity Services Engine (ISE)** and choose the plan
 **Cisco Identity Services Engine (ISE) BYOL 3.5**, then **Create**.
 
+The Marketplace shows two tiles with that exact name. Take the one labeled
+**Azure Application** (Cisco's solution template, ADR 0008), not **Virtual
+Machine**, which is the raw image with none of the fields below. The check
+after **Create**: the Basics tab asks for Host Name and Time Zone.
+
 ### Basics
 
 | Field | Value | Why |

@@ -538,3 +538,37 @@ in Azure, which is the cheapest place to learn them.
   reachability test; and SSH to the Marketplace ISE is key-only
   (`Permission denied (publickey)` for `iseadmin`), so an ISE-side
   capture needs the key the deploy was given, or the GUI.
+
+## A customize script is shipped to the host and never runs
+
+- Symptom: the first build carrying `06-transit-bridge.sh` copied it to
+  `/provision`, and nothing else: no log under `/var/log/provision`, no
+  `bridge1`. `05-persist.sh` beside it ran as usual. Seen 2026-09-17.
+- Cause: `cml.sh` `postprocess` picks its scripts with
+  `grep -E '[0-9]{2}-[[:alnum:]_]+\.sh'`. That class has no hyphen, so a
+  name with a second hyphen never matches, and nothing reports the skip.
+- Fix: the script is `06-transit.sh`. Name fork customize scripts
+  `NN-word.sh` or `NN-two_words.sh`. `tests/test_transit.sh` now asserts
+  the name against the same pattern.
+
+## RADIUS leaves the CML host and never reaches ISE
+
+- Symptom: a lab switch's Access-Request showed on `bridge1` and again on
+  `eth0 Out` in a host tcpdump, and nothing ever came back. A RADIUS
+  filtered `tech dumptcp` on ISE's own interface saw zero packets while
+  the switch was sending. Host firewall, UDR, ISE's NSG, and both NAD
+  entries all checked out. Two sessions, 2026-09-16 and 09-17.
+- Cause: the `VirtualNetwork` service tag expands per NIC from that NIC's
+  effective routes (`az network nic list-effective-nsg`, `tagMap`). Only
+  `snet-apps` has the UDR for 10.100.0.0/16, so ISE's NIC counts the lab
+  range as VirtualNetwork and the CML NIC does not. A forwarded packet
+  sourced from 10.100.0.3 matched neither `AllowVnetOutBound` nor
+  `AllowInternetOutBound` on the CML NIC, and `DenyAllOutBound` dropped
+  it silently. `test-ip-flow` cannot model this; it refuses a local IP
+  that is not the NIC's own.
+- Fix: `lab-transit-out` on the CML NSG, outbound, 10.100.0.0/16 to the
+  apps subnet, the mirror of `lab-transit-in`. It is in the fork's
+  `azure/main.tf` for every build from now on. The first reply arrived
+  400 ms after the rule did. The rule was added by hand to the running
+  NSG that day, so it is absent from that root's Terraform state; the
+  next teardown removes the NSG and the next build owns the rule.

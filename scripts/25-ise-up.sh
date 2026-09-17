@@ -124,6 +124,14 @@ tag_resources() {
 # it to authenticate a caller. Runs as a foreground loop with visible
 # elapsed-time progress rather than a single blocking call, since the
 # wait is the long pole (30-45 minutes).
+# is_ready_status CODE: true for a three-digit status below 500. ISE's
+# front end answers 502 for minutes before the application behind it is
+# up, so a 5xx is still "not ready"; 200, 401, and 404 all prove the
+# application is serving.
+is_ready_status() {
+  [[ "$1" =~ ^[1-4][0-9][0-9]$ ]]
+}
+
 wait_for_ise_ready() {
   local ip="$1" jump="$2" key="$3" elapsed=0 code
   if [[ "${DRY_RUN}" == "1" ]]; then
@@ -134,7 +142,11 @@ wait_for_ise_ready() {
   while (( elapsed < READY_TIMEOUT_S )); do
     code="$(ssh -p 1122 -i "${key}" "${CML_SSH_OPTS[@]}" -o ConnectTimeout=10 "sysadmin@${jump}" \
       "curl -sk -o /dev/null -w '%{http_code}' --max-time 10 https://${ip}/admin/API/mnt/Version" 2>/dev/null || echo 000)"
-    if [[ "${code}" != "000" ]]; then
+    # A refused connection makes the remote curl print 000 and exit
+    # nonzero, so the fallback above appends a second 000. Only a real
+    # HTTP status below 500 counts; "000000" declared ISE ready at 0s and
+    # a 502 declared it ready at 28m, both on 2026-09-17.
+    if is_ready_status "${code}"; then
       pass "ISE answered (HTTP ${code}) after $((elapsed / 60))m$((elapsed % 60))s"
       return 0
     fi
