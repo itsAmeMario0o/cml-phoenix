@@ -6,6 +6,51 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-17, end of day: everything torn down, nothing running
+
+The operator called a stop. No VM is left in `rg-cml-lab`: the directory
+went with `scripts/46-ad-down.sh` (13 resources), CML with
+`scripts/40-down.sh`, and the operator deleted the ISE VM by hand. Left from
+ISE when this was written: `ise1osdisk`, `ise1nic`, `ise-nsg`, and `ise1-ip`,
+all tagged `role=ise`. The disk and the public address bill until
+`scripts/45-ise-down.sh` removes them. The persistent resources are
+untouched.
+
+The CML teardown needed a hand. The export (`exports/20260917T214927Z`,
+also in blob) and the license release passed, then the destroy failed
+because the rendered `config/cml.yml` still named `06-transit-bridge.sh`;
+the line was corrected and the destroy step rerun, 13 resources destroyed
+(LESSONS-LEARNED). Before the export, `sw1`'s running configuration was
+extracted into the "cat9kv probe" lab, so its working AAA, RADIUS, 802.1X,
+and MAB lines are in that export. That lab was a hand-built test lab and is
+not the TrustSec lab. The TrustSec lab is the Phase 2 design, which has a
+spec, no implementation plan, and no topology; the export is an input to it.
+
+New today: `docs/BUILD-FROM-SCRATCH.md`, the whole build in order for
+someone starting from a clone and an empty subscription, linking to the
+detailed documents. Writing it turned up things no document said before: on
+another subscription `terraform/persistent/backend.tf` needs the bootstrap
+root's storage account name, the image upload has to follow the persistent
+apply, and `config/refplat.txt` mixes images from two ISOs. It also
+questions this file's 2026-09-17 early entry: the admin and sysadmin
+`random_password` resources live in `terraform/persistent`, so a CML
+teardown probably does not rotate them. Not checked yet.
+
+Code that has not yet run in a clean build, all of it expected to work: the
+fork's `06-transit.sh` from cloud-init and its `lab-transit-out` rule, the
+SAM policy in `10-promote-forest.ps1`, the second `svc-ise` grant, and an
+ISE deployed with the DC's address in the portal form. The next build is
+the test of all five. Order: `20-up.sh`, `24-ad-up.sh`, the ISE portal
+deploy with the two values it prints, `25-ise-up.sh --post-deploy`, then
+`docs/ISE-AD-BUILD.md` Part 3 by hand.
+
+Still by hand on every new ISE until `ise_config.py` learns it: the join
+point, the join, the two groups, `cat9kv-sw1`, and its authorization rule.
+After that comes an ISE certificate from `corp-rooez-CA`, then the Phase 2
+implementation plan. PR #18 is open. `CLAUDE.md` does not yet list
+`terraform/ad`, `scripts/ad/`, or the two AD scripts; that edit waits for
+the operator's word.
+
 ## 2026-09-17, late night: ISE joined to the domain, mario authenticates against AD
 
 ISE is joined to `corp.rooez.com` as `svc-ise`, and a directory user

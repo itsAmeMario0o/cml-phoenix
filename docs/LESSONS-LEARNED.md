@@ -817,3 +817,44 @@ in Azure, which is the cheapest place to learn them.
   of its marker line, delivered by `az vm run-command invoke`, with the
   password read from a mode 0600 file through az's `@file` argument syntax
   so it never shows in a process listing.
+
+## `40-down.sh` fails at the destroy with "no file exists at 06-transit-bridge.sh"
+
+- Symptom: the export and the license release passed, then
+  `terraform destroy` in `vendor/cloud-cml` stopped with "Error in function
+  call" on the `templatefile` of `cloud-config.txt`: no file exists at
+  `data/06-transit-bridge.sh`. The CML VM kept running. Seen 2026-09-17.
+- Cause: Terraform renders the cloud-config template for a destroy as well
+  as for a build, and the template reads every script named under
+  `app.customize` in `config/cml.yml`. That file is rendered at build time
+  and gitignored. It was rendered before the fork renamed the script to
+  `06-transit.sh`, so it named a file that no longer existed.
+- Fix: correct the name in `config/cml.yml`, then run the destroy step of
+  `40-down.sh` again with its three `TF_VAR_` exports. When a customize
+  script is renamed or removed in the fork while a CML VM is up, fix the
+  rendered `config/cml.yml` in the same sitting.
+
+## A lab export does not contain what was typed on a running node
+
+- Symptom: none yet; caught before the teardown on 2026-09-17. `sw1` in the
+  hand-built "cat9kv probe" lab carried its whole AAA, RADIUS, 802.1X, and
+  MAB configuration in running-config only.
+- Cause: `30-export-labs.sh` downloads each lab as CML holds it, and CML
+  holds the configuration the node was created with. It asks a node for its
+  running configuration only when told to.
+- Fix: before the export,
+  `PUT /api/v0/labs/<lab>/nodes/<node>/extract_configuration` for each node
+  whose running configuration matters. On CML 2.10 the lab level form of
+  that call answers 404, and nodes that cannot extract (external
+  connectors, alpine, ubuntu) answer 400. The export of 2026-09-17,
+  `exports/20260917T214927Z`, has `sw1`'s configuration because of it.
+
+## A pipe into grep hid a failed teardown
+
+- Symptom: `scripts/40-down.sh ... | grep ...` reported exit code 0 while
+  the destroy inside it had failed. Seen 2026-09-17.
+- Cause: without `set -o pipefail` a pipeline's status is its last
+  command's, and grep was content.
+- Fix: run teardown and build scripts unpiped, or under `pipefail` with
+  `PIPESTATUS` printed, and check Azure afterwards:
+  `az vm list -g rg-cml-lab` should be empty.
