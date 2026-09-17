@@ -85,7 +85,7 @@ ISE 10.20.2.20 (Azure, apps subnet)
       |  UDR, lab-transit-in and -out, no NAT
 CML host, bridge1 10.100.0.1/24
       |
-      |  Gi1/0/24, VLAN 100, SVI 10.100.0.3: SNMP, and in Act 2 RADIUS and CoA
+      |  Gi1/0/24, VLAN 100, SVI 10.100.0.2: SNMP, and in Act 2 RADIUS and CoA
     sw1  cat9000v-uadp: access switch, VLAN 10 gateway 10.100.10.1, DHCP server
       |  Gi1/0/1  emp-pc   ubuntu   Act 2: 802.1X   SGT 10 Employees
       |  Gi1/0/2  iot-dev  alpine   Act 2: MAB      SGT 20 IoT
@@ -139,10 +139,15 @@ Three choices worth stating:
   runs. `asav-9-24-1` is on the base refplat ISO and joins
   `config/refplat.txt` the way the Catalyst 9000v images did.
 - **No C8000v edge.** Phase 1 needed it as the RADIUS client. Here the
-  switch sits on `bridge1` itself, as proven today, and ISE talks to the
-  switch, never to the endpoints. The host's route for the rest of
-  10.100.0.0/16 via 10.100.0.2 stays in place and unused. The edge comes
-  back when a second site or an SXP peer needs it.
+  switch sits on `bridge1` itself, as proven today, and takes over the
+  edge's job and its address. The host routes the rest of 10.100.0.0/16 to
+  10.100.0.2, so whatever routes the lab must hold that address, and with
+  endpoints on 10.100.10.0/24 behind it that is `sw1`. The first draft left
+  `sw1` at 10.100.0.3, where the probe lab had it. RADIUS would still have
+  worked, since it comes from the switch's own transit address, but a reply
+  to an endpoint, a DNS answer from the domain controller for one, would
+  have been sent to an address nobody held. The edge comes back when a
+  second site or an SXP peer needs it.
 - **ISE and the firewall never meet in v1.** Either firewall learns the tag
   from the frame, not from ISE. That keeps cdFMC-to-ISE pxGrid, which has to cross
   the internet to reach a cloud manager, off the critical path. It is the
@@ -152,8 +157,8 @@ Three choices worth stating:
 
 | Segment | Prefix | Members |
 |---|---|---|
-| Transit, `bridge1` | 10.100.0.0/24 | host .1, `sw1` Vlan100 .3 |
-| Endpoints, VLAN 10 | 10.100.10.0/24 | `sw1` Vlan10 .1, DHCP pool .100 to .199 |
+| Transit, `bridge1` | 10.100.0.0/24 | host .1, `sw1` Vlan100 .2, the lab edge address |
+| Endpoints, VLAN 10 | 10.100.10.0/24 | `sw1` Vlan10 .1, DHCP pool .100 to .199, handing out the domain controller as DNS server when the directory is up |
 | Switch to firewall, VLAN 11 | 10.100.11.0/29 | `sw1` Vlan11 .1, the running firewall's inside .2 |
 | Servers | 10.100.20.0/24 | the running firewall's servers .1, `srv` .10 |
 | FTD management | 192.168.255.0/24 | NAT connector .1, `ftd1` .81 |
@@ -166,7 +171,7 @@ The slide's five steps, and what each is in this lab.
 |---|---|
 | 1. Define the switches | `sw1` as an ISE network device with SNMP settings only: version, community, polling interval, link and MAC trap queries on. No RADIUS shared secret in Act 1; that absence is the point |
 | 2. Group the estate | A network device group, `Location#All Locations#Lab` and a device type for access switches, with `sw1` in it, so policy and reports scope to exactly these switches |
-| 3. Poll: SNMP Query | ISE's SNMPQUERY probe to 10.100.0.3 on UDP 161: system, interface state, VLANs, CDP and LLDP neighbors, ARP. The existing `lab-transit-in` rule already allows it |
+| 3. Poll: SNMP Query | ISE's SNMPQUERY probe to 10.100.0.2 on UDP 161: system, interface state, VLANs, CDP and LLDP neighbors, ARP. The existing `lab-transit-in` rule already allows it |
 | 4. Listen: SNMP Trap | ISE's SNMPTRAP probe. On `sw1`: link up and down traps, MAC notification on the three endpoint ports, `snmp-server host` pointing at ISE. Needs one new rule on `ise-nsg`, UDP 162 from 10.100.0.0/16 |
 | 5. Read and publish | Context Visibility as the live inventory; the ERS endpoint API read by a script as the "feed it onward" proof. Syslog and pxGrid are named as options, not built |
 

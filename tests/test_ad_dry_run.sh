@@ -23,6 +23,7 @@ assert_contains "owner and expires from the persistent tfvars" "-var-file=${REPO
 assert_contains "resource group from the persistent output" "-var=resource_group_name=rg-cml-lab" "${out}"
 assert_contains "subnet passed" "-var=apps_subnet_id=" "${out}"
 assert_contains "auto-approve only because ASSUME_YES=1" "-auto-approve" "${out}"
+assert_contains "failed run commands cleared before the apply" "+ delete any Failed run command on dc1" "${out}"
 assert_contains "env file step planned" "mode 0600 from terraform output (values never printed)" "${out}"
 assert_contains "directory check planned" "(Get-ADDomain).DNSRoot" "${out}"
 assert_contains "DNS check planned" "Resolve-DnsName login.microsoftonline.com" "${out}"
@@ -90,6 +91,39 @@ if command -v pwsh >/dev/null 2>&1; then
   done
 else
   echo "[WARN]  pwsh not installed, PowerShell syntax not checked"
+fi
+
+# 5b. What terraform delivers for the CA and identity steps is the wrapper
+#     with the inner script substituted for its marker line. Compose it
+#     the same way and check the result still parses, and that the marker
+#     sits inside a single-quoted here-string the inner scripts cannot end.
+wrapper="${REPO_ROOT}/scripts/ad/run-as-admin.ps1"
+assert_eq "wrapper has exactly one marker" "1" "$(grep -c '^__INNER_SCRIPT__$' "${wrapper}")"
+for inner in 20-install-ca 30-create-identities; do
+  if grep -q "^'@" "${REPO_ROOT}/scripts/ad/${inner}.ps1"; then
+    echo "[FAIL]  ${inner}.ps1 has a line starting with '@, which would end the wrapper's here-string"; failures=$((failures + 1))
+  else
+    echo "[OK]    ${inner}.ps1 cannot end the wrapper's here-string"
+  fi
+  python3 - "${wrapper}" "${REPO_ROOT}/scripts/ad/${inner}.ps1" "${TMP}/${inner}.composed.ps1" <<'PY'
+import sys
+w, i, o = sys.argv[1:4]
+open(o, "w").write(open(w).read().replace("__INNER_SCRIPT__", open(i).read()))
+PY
+  if command -v pwsh >/dev/null 2>&1; then
+    if pwsh -NoProfile -NonInteractive -Command "\$e=\$null; [void][System.Management.Automation.Language.Parser]::ParseFile('${TMP}/${inner}.composed.ps1',[ref]\$null,[ref]\$e); exit \$e.Count" >/dev/null 2>&1; then
+      echo "[OK]    wrapper composed with ${inner}.ps1 parses"
+    else
+      echo "[FAIL]  wrapper composed with ${inner}.ps1 has syntax errors"; failures=$((failures + 1))
+    fi
+  fi
+done
+assert_contains "wrapper waits for the directory as SYSTEM" "function Wait-Directory" "$(cat "${wrapper}")"
+assert_contains "wrapper removes the arguments file" "Remove-Item -Path \$argsFile" "$(cat "${wrapper}")"
+if grep -q "run_as_user" "${REPO_ROOT}/terraform/ad/main.tf"; then
+  echo "[FAIL]  terraform/ad uses run_as_user, which cannot log a domain account on to a DC"; failures=$((failures + 1))
+else
+  echo "[OK]    terraform/ad does not use run_as_user"
 fi
 
 # 6. The identities file the third script consumes.

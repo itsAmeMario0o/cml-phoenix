@@ -14,8 +14,13 @@ locals {
 
   # After promotion the local administrator is the domain's Administrator,
   # a member of Enterprise Admins, which installing an Enterprise CA needs.
-  # SYSTEM on a DC is only the machine account and is refused.
-  domain_admin = "${var.netbios_name}\\${var.admin_username}"
+  # SYSTEM on a DC is only the machine account and is refused, and the run
+  # command's own run-as cannot log a domain account on to a DC, so
+  # run-as-admin.ps1 carries the CA and identity scripts into a scheduled
+  # task as this user.
+  domain_admin  = "${var.netbios_name}\\${var.admin_username}"
+  admin_wrapper = file("${local.scripts_dir}/run-as-admin.ps1")
+  inner_marker  = "__INNER_SCRIPT__"
 }
 
 resource "random_password" "admin" {
@@ -181,22 +186,33 @@ resource "azurerm_virtual_machine_run_command" "ca" {
   name               = "20-install-ca"
   location           = var.location
   virtual_machine_id = azurerm_windows_virtual_machine.dc.id
-  run_as_user        = local.domain_admin
-  run_as_password    = random_password.admin.result
   tags               = local.common_tags
 
   source {
-    script = file("${local.scripts_dir}/20-install-ca.ps1")
+    script = replace(local.admin_wrapper, local.inner_marker, file("${local.scripts_dir}/20-install-ca.ps1"))
   }
 
   parameter {
-    name  = "CaCommonName"
-    value = var.ca_common_name
+    name  = "Name"
+    value = "20-install-ca"
   }
 
   parameter {
-    name  = "NetbiosName"
-    value = var.netbios_name
+    name  = "AdminUser"
+    value = local.domain_admin
+  }
+
+  protected_parameter {
+    name  = "AdminPassword"
+    value = random_password.admin.result
+  }
+
+  protected_parameter {
+    name = "ArgumentsBase64"
+    value = base64encode(jsonencode({
+      CaCommonName = var.ca_common_name
+      NetbiosName  = var.netbios_name
+    }))
   }
 
   depends_on = [azurerm_virtual_machine_run_command.promote]
@@ -206,48 +222,40 @@ resource "azurerm_virtual_machine_run_command" "identities" {
   name               = "30-create-identities"
   location           = var.location
   virtual_machine_id = azurerm_windows_virtual_machine.dc.id
-  run_as_user        = local.domain_admin
-  run_as_password    = random_password.admin.result
   tags               = local.common_tags
 
   source {
-    script = file("${local.scripts_dir}/30-create-identities.ps1")
-  }
-
-  # Base64 so a multi-line CSV survives as one parameter value.
-  parameter {
-    name  = "CsvBase64"
-    value = base64encode(file("${path.module}/${var.identities_csv_file}"))
+    script = replace(local.admin_wrapper, local.inner_marker, file("${local.scripts_dir}/30-create-identities.ps1"))
   }
 
   parameter {
-    name  = "DomainName"
-    value = var.domain_name
+    name  = "Name"
+    value = "30-create-identities"
   }
 
   parameter {
-    name  = "NetbiosName"
-    value = var.netbios_name
-  }
-
-  parameter {
-    name  = "IseHostName"
-    value = var.ise_hostname
-  }
-
-  parameter {
-    name  = "IseIp"
-    value = var.ise_ip
+    name  = "AdminUser"
+    value = local.domain_admin
   }
 
   protected_parameter {
-    name  = "LabUserPassword"
-    value = random_password.lab_user.result
+    name  = "AdminPassword"
+    value = random_password.admin.result
   }
 
+  # Base64 twice over: the CSV so its line breaks survive inside JSON, and
+  # the JSON so its quotes survive as a run command parameter.
   protected_parameter {
-    name  = "SvcIsePassword"
-    value = random_password.svc_ise.result
+    name = "ArgumentsBase64"
+    value = base64encode(jsonencode({
+      CsvBase64       = base64encode(file("${path.module}/${var.identities_csv_file}"))
+      DomainName      = var.domain_name
+      NetbiosName     = var.netbios_name
+      IseHostName     = var.ise_hostname
+      IseIp           = var.ise_ip
+      LabUserPassword = random_password.lab_user.result
+      SvcIsePassword  = random_password.svc_ise.result
+    }))
   }
 
   depends_on = [azurerm_virtual_machine_run_command.ca]

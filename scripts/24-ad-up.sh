@@ -36,6 +36,25 @@ ad_tf_args() {
   echo "-var=cml_private_ip=$(out_or_placeholder cml_private_ip)"
 }
 
+# clear_failed_run_commands: a run command that failed exists in Azure but
+# not in Terraform's state, so the next apply stops at "already exists".
+# Deleting it first is what makes rerunning this script a real recovery
+# (learned 2026-09-17). Quiet when the VM does not exist yet.
+clear_failed_run_commands() {
+  local rg name
+  rg="$(out_or_placeholder resource_group_name)"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "+ delete any Failed run command on ${DC_NAME} (az vm run-command list, then delete)"
+    return 0
+  fi
+  while IFS= read -r name; do
+    [[ -z "${name}" ]] && continue
+    warn "removing failed run command ${name} so terraform can send it again"
+    az vm run-command delete -g "${rg}" --vm-name "${DC_NAME}" --run-command-name "${name}" --yes >/dev/null
+  done < <(az vm run-command list -g "${rg}" --vm-name "${DC_NAME}" \
+    --query "[?provisioningState=='Failed'].name" -o tsv 2>/dev/null || true)
+}
+
 apply_root() {
   local args=() line
   while IFS= read -r line; do args+=("${line}"); done < <(ad_tf_args)
@@ -124,6 +143,7 @@ main() {
     [[ -f "${PERSISTENT_TFVARS}" ]] || die "missing ${PERSISTENT_TFVARS}; the persistent root supplies owner and expires"
   fi
   confirm "Build the domain controller (terraform/ad, one Windows VM, about 20 minutes)?" || die "declined"
+  clear_failed_run_commands
   apply_root
   write_ad_env
   verify_dc
