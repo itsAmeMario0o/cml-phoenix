@@ -112,4 +112,18 @@ else
   echo "[OK]    45-ise-down.sh touches only role=ise resources"
 fi
 
+# The readiness check must not read curl's doubled "no response" code as an
+# answer: a refused connection yields 000 from curl plus 000 from the
+# fallback, and "000000" once declared ISE ready at 0 seconds.
+# shellcheck source=scripts/25-ise-up.sh
+source "${REPO_ROOT}/scripts/25-ise-up.sh"
+for code in 000 000000 "" 2000; do
+  if is_http_status "${code}"; then verdict=answered; else verdict=waiting; fi
+  assert_eq "readiness treats '${code}' as no answer" "waiting" "${verdict}"
+done
+for code in 200 401 503; do
+  if is_http_status "${code}"; then verdict=answered; else verdict=waiting; fi
+  assert_eq "readiness treats ${code} as an answer" "answered" "${verdict}"
+done
+
 finish "test_ise_dry_run"
