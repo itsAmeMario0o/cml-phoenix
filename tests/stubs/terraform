@@ -5,6 +5,11 @@ if [[ "${TF_STUB_FAIL:-0}" == "1" ]]; then
   echo "stub: no state" >&2; exit 1
 fi
 case "$*" in
+  # terraform/ad outputs, for scripts/24-ad-up.sh's write_ad_env. The
+  # password values are markers the test greps for in stdout: they must
+  # reach the env file and nowhere else. Listed first so the generic
+  # "output -json" case below does not answer for this root.
+  *"terraform/ad"*"output -json"*) echo '{"domain_name":{"value":"corp.example"},"netbios_name":{"value":"CORP"},"dc_private_ip":{"value":"10.20.2.10"},"admin_username":{"value":"CORP\\labadmin"},"admin_password":{"value":"StubAdminPw1"},"svc_ise_password":{"value":"StubSvc!Pw#2"},"lab_user_password":{"value":"StubLab*Pw=3"}}' ;;
   *"output -raw public_ip_address"*) echo "203.0.113.5" ;;
   *"output -raw storage_account_name"*) echo "stfake" ;;
   *"output -raw resource_group_name"*) echo "rg-cml-lab" ;;

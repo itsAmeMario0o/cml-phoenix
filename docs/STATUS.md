@@ -6,6 +6,157 @@ at the start of a new session.
 Entries before 2026-09-10 moved to `docs/STATUS-ARCHIVE.md` to keep this
 file to what is still current.
 
+## 2026-09-17, end of day: everything torn down, nothing running
+
+The operator called a stop. No VM is left in `rg-cml-lab`: the directory
+went with `scripts/46-ad-down.sh` (13 resources), CML with
+`scripts/40-down.sh`, and the operator deleted the ISE VM by hand. Left from
+ISE when this was written: `ise1osdisk`, `ise1nic`, `ise-nsg`, and `ise1-ip`,
+all tagged `role=ise`. The disk and the public address bill until
+`scripts/45-ise-down.sh` removes them. The persistent resources are
+untouched.
+
+The CML teardown needed a hand. The export (`exports/20260917T214927Z`,
+also in blob) and the license release passed, then the destroy failed
+because the rendered `config/cml.yml` still named `06-transit-bridge.sh`;
+the line was corrected and the destroy step rerun, 13 resources destroyed
+(LESSONS-LEARNED). Before the export, `sw1`'s running configuration was
+extracted into the "cat9kv probe" lab, so its working AAA, RADIUS, 802.1X,
+and MAB lines are in that export. That lab was a hand-built test lab and is
+not the TrustSec lab. The TrustSec lab is the Phase 2 design, which has a
+spec, no implementation plan, and no topology; the export is an input to it.
+
+New today: `docs/BUILD-FROM-SCRATCH.md`, the whole build in order for
+someone starting from a clone and an empty subscription, linking to the
+detailed documents. Writing it turned up things no document said before: on
+another subscription `terraform/persistent/backend.tf` needs the bootstrap
+root's storage account name, the image upload has to follow the persistent
+apply, and `config/refplat.txt` mixes images from two ISOs. It also
+questions this file's 2026-09-17 early entry: the admin and sysadmin
+`random_password` resources live in `terraform/persistent`, so a CML
+teardown probably does not rotate them. Not checked yet.
+
+Code that has not yet run in a clean build, all of it expected to work: the
+fork's `06-transit.sh` from cloud-init and its `lab-transit-out` rule, the
+SAM policy in `10-promote-forest.ps1`, the second `svc-ise` grant, and an
+ISE deployed with the DC's address in the portal form. The next build is
+the test of all five. Order: `20-up.sh`, `24-ad-up.sh`, the ISE portal
+deploy with the two values it prints, `25-ise-up.sh --post-deploy`, then
+`docs/ISE-AD-BUILD.md` Part 3 by hand.
+
+Still by hand on every new ISE until `ise_config.py` learns it: the join
+point, the join, the two groups, `cat9kv-sw1`, and its authorization rule.
+After that comes an ISE certificate from `corp-rooez-CA`, then the Phase 2
+implementation plan. PR #18 is open. `CLAUDE.md` does not yet list
+`terraform/ad`, `scripts/ad/`, or the two AD scripts; that edit waits for
+the operator's word.
+
+## 2026-09-17, late night: ISE joined to the domain, mario authenticates against AD
+
+ISE is joined to `corp.rooez.com` as `svc-ise`, and a directory user
+authenticates from a lab switch. On `sw1` (NAD 10.100.0.3, RADIUS group
+`ISE-GROUP`), `test aaa group radius mario <password> new-code` gave "User
+successfully authenticated" with the password in `AD_LAB_USER_PASSWORD` and
+"User rejected" with a wrong one. The DC's Security log shows AD gave both
+answers: event 4776, `mario@corp.rooez.com`, Source Workstation `\\ISE1`,
+error code `0x0` and then `0xC000006A`. No ISE policy change was needed; the
+Default policy set's `All_User_ID_Stores` includes `All_AD_Join_Points` as
+ISE ships.
+
+The join had been blocked by Cisco Field Notice FN74321, and that is now
+proven, on an ISE version the notice does not list (3.5.0.527). With the
+logging-only value `AuditLegacyPasswordRpcMethods` = 1 on the DC, SAM logged
+event 16985 twice during a join, from 10.20.2.20 as `ISE1$`:
+`SamrSetInformationUser`, then `SamrUnicodeChangePasswordUser2`, which
+Server 2025 blocks. Summary event 16984 had been in the System log at the
+time of each failed join all along (19:58:34 and 21:13:54 UTC). The operator
+approved Cisco's workaround, `SamrChangeUserPasswordApiPolicy` = 3. Set on
+the running DC it changed nothing. After `az vm restart` of `dc1` (boot
+21:22 UTC) the same join call returned 204, so the value is read at startup,
+which neither the notice nor the policy text says. The build is getting the
+value in `scripts/ad/10-promote-forest.ps1`, before the promotion reboot, so
+a new DC comes up with it in effect. The verbose audit value goes back to 0.
+The risk and its bounds are ADR 0010's new amendment: weaker password change
+methods accepted again, on a DC with no public address that ends with the
+session, until Cisco fixes 3.5. For the customer story, a Server 2025 domain
+needs this setting or a fixed ISE patch.
+
+The session's permission classifier refused to let the assistant set the
+SAM value even after the operator said to apply it, because it lowers a DC
+security default, so the operator ran the one `az` command. A future session
+that tries it by hand will meet the same refusal; with the value in the
+build script it stops mattering.
+
+After the join, over ERS: `getGroupsByDomain` returned 53 groups,
+`addGroups` selected `Mushroom-Kingdom` and `Koopa-Troop` (a plain PUT to
+the join point is a 405), and `getUserGroups` put `mario` in
+`Mushroom-Kingdom` and `bowser` in `Koopa-Troop`. The `ise` tunnel had
+dropped during ISE's restarts and needed `scripts/50-tunnels.sh up`. All of
+it is in `docs/ISE-AD-BUILD.md`, Part 3, and LESSONS-LEARNED.
+
+None of the ISE side is code. It lives on the running ISE and has to be
+redone on the next one until `ise_config.py` learns it.
+
+PEAP followed the same hour. `emp-pc`'s supplicant was switched from the
+internal user to `mario` with his directory password: EAP-MSCHAPv2
+succeeded, `sw1` shows Gi1/0/2 authorized by dot1x as `mario`, and the DC
+logged event 4776 for him from `ISE1` in the same second. `emp-pc` now logs
+in as `mario`, not `trustsec-verify`.
+
+Next: an ISE certificate signed by `corp-rooez-CA`. Authorization by group, the two groups to SGTs, is Phase 2.
+
+Running in Azure: CML, ISE, and the DC. PR #18 is open.
+
+## 2026-09-17, night: ISE repointed at the DC, join point made, join blocked
+
+> Superseded on the join by the entry above: the cause was FN74321, the
+> workaround plus a DC restart fixed it, and ISE is joined. The repoint and
+> the delegation finding below still hold.
+
+ISE now uses the directory for DNS. The ISE deployed that morning had
+8.8.8.8 and the domain `rooez.com`, and it was repointed from its CLI:
+`ip name-server 10.20.2.10`, `no ip name-server 8.8.8.8` (the first command
+appends, so the public resolver stayed in front until removed), and
+`ip domain-name corp.rooez.com`. Each asks to restart ISE's services and
+has to be answered `yes`; `no` cancels the change itself. Three restarts,
+30 to 40 minutes. Verified on ISE: the running config has the one name
+server and the new domain name, `ping dc1` resolves to
+`dc1.corp.rooez.com (10.20.2.10)` and gets replies, and `show ntp` shows ISE
+synchronized with the DC's clock within seconds of it. ISE is
+`ise1.corp.rooez.com` now, with a new self-signed certificate. ISE's own
+`nslookup` fails on this image while resolution works, so `ping` is the
+check (LESSONS-LEARNED).
+
+The Active Directory join point `corp.rooez.com` exists, created over ERS
+through the `ise` tunnel as `iseadmin`. The join as `svc-ise` fails. The API
+only says HTTP 500, "nodes not able to join/remove"; the reason is in ISE's
+`ise-psc.log` and nowhere else. The first reading of that log blamed the
+delegation: `svc-ise` could create its computer object but was denied
+`operatingSystem`, `operatingSystemVersion`, and
+`msDS-SupportedEncryptionTypes`. Write property on computer objects under
+`CN=Computers` was granted live on the DC, and the same `dsacls` line is
+being added to `scripts/ad/30-create-identities.ps1`. After it every
+attribute is written and `ISE1` on the DC shows its OS and version. The join
+still ends on the same line, "Access is denied", error code 5, so those
+denials were never fatal.
+
+The suspected cause is Cisco Field Notice FN74321 with regression bug
+CSCwr77017: a Windows Server 2025 DC refuses the legacy SAM RPC password
+change methods that ISE uses in a join. The notice lists ISE 3.1 through
+3.4 P1 and does not mention 3.5; ours is 3.5.0.527, so it is not proven
+here. Cisco's workaround is a DC policy ("Configure SAM change password RPC
+methods policy", allow all; registry `SamrChangeUserPasswordApiPolicy` = 3).
+It has not been applied. It lowers a security default on a domain
+controller and is the operator's decision. Until then nothing after the
+join (groups, identity source sequence, `test aaa` from `sw1`, PEAP from
+`emp-pc` as `mario`, a CA-signed ISE certificate) can start.
+
+New: `docs/ISE-AD-BUILD.md`, the step by step runbook for the Windows
+server, ISE's DNS, and the join, with `docs/AD.md` kept as the conceptual
+document. Ten lessons added to LESSONS-LEARNED from this work.
+
+Running in Azure: CML, ISE, and the DC, all three. PR #18 is open.
+
 ## 2026-09-17, evening: 802.1X proven, Phase 2 spec drafted, direction recorded
 
 802.1X works in this lab. An IOSvL2 node added to the probe lab as a
@@ -180,9 +331,10 @@ and Kali added are in the Phase 2 note,
 Two things to carry forward. The rendered `config/cml.yml` secrets,
 sysadmin's sudo password among them, appeared unmasked in this
 session's tool output and an editor selection; rotate at the next
-build. And a ping from the lab range to ISE can never succeed
-(`ise-nsg` has no ICMP rule), so RADIUS is the only valid test of that
-path; two hours went into learning that.
+build. (This entry first also said a ping from the lab range to ISE can
+never succeed for want of an ICMP rule on `ise-nsg`. Wrong, and corrected
+on 2026-09-17 evening: the pings failed for the same reason RADIUS did,
+and work now. LESSONS-LEARNED has it.)
 
 Torn down at 02:51 UTC after both PRs merged: all three labs exported
 to blob under `exports/20260917T025148Z` (the cat9kv probe lab among

@@ -33,6 +33,12 @@ path proven. Six things it assumed are now known to be otherwise:
   routed path works (ADR 0003 and its 09-17 amendment), so a lab endpoint
   can reach the DC. The draft said nothing in the lab would talk to it;
   a domain-joined Windows endpoint in CML now could, and should be able to.
+- **The CA does not need the subject alternative name flag.** The draft had
+  the CA script set `EDITF_ATTRIBSUBJECTALTNAME2`, on the belief that a
+  Windows CA strips SANs from a request. It does not strip SANs that are
+  inside the CSR when the template takes its subject from the request, as
+  `WebServer` does, and that is how ISE sends them. The flag is an
+  escalation path and Server 2025's `certutil` rejects its name. Dropped.
 - **802.1X is proven with ISE's internal users** (PEAP from a Linux
   supplicant, MAB, CoA). AD replaces the identity store behind a working
   path; it is no longer a prerequisite for proving the path.
@@ -383,9 +389,10 @@ The lifetime, domain name, deploy method, identity scope, and script source
 were each decided with the operator on 2026-09-13. Two are open after the
 2026-09-17 revision:
 
-- Whether to repoint the running ISE at the DC from its CLI, or to let the
-  next portal deploy pick it up. The second costs nothing but waits for a
-  rebuild.
+- Settled 2026-09-17: ISE's domain is `corp.rooez.com` and its name server
+  the DC, and the DC is a prerequisite for any ISE deploy. What remains
+  open is only the ISE already running that day: repoint it from its CLI
+  now, or let the next deploy start right.
 - Whether a Windows endpoint inside CML is wanted as the domain-joined
   client. CML 2.10's node definitions support UEFI with Secure Boot
   firmware, an emulated TPM 2.0, and a VNC console, so Windows 11 runs

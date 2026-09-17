@@ -142,6 +142,28 @@ moved to the Done section at the bottom.
     which fits item 21, or the `cisco.ise` Ansible collection of item 18.
     Decide that in the spec; the two should not both grow.
 
+23. Containers as lab endpoints. Operator direction, 2026-09-17: wanted,
+    no action yet. CML 2.10 runs Docker containers as nodes and this
+    host already has the docker shim running, but the 2.10 reference ISO
+    carries only `xrd`; Cisco moved the rest to GitHub releases
+    (`CiscoLearning/cml-docker-containers`, releases labelled CML 2.10.0,
+    three small ISOs: services, browser, splunk). The operator's picks,
+    in order of interest: a custom `debian-slim` image with
+    `wpasupplicant`, `lldpd`, and a DHCP client, as an 802.1X, MAB, and
+    LLDP endpoint in about 70 MB against a 2 GB Ubuntu VM, which is what
+    makes a diversity of endpoints affordable; Cisco's `splunk` node, for
+    ISE syslog analytics; then the services set (`radius`, `tacplus`,
+    `dnsmasq`, `syslog`, `nginx`, `frr`, `net-tools`, `snort`), the
+    browsers for guest portal demos, a Kali image with its tools baked in
+    (the official image ships bare and lab nodes have no internet), and
+    Juice Shop as a maintained vulnerable target. Accepted limits:
+    containers cannot send 802.1Q tagged frames, and the node count
+    against the license is not a concern for now. To test before relying
+    on any of it, the way VM endpoints were tested on 09-17: whether
+    EAPOL and LLDP reach a container's interface, which no document
+    says, and whether Cisco's ISO import works on Azure, where there is
+    no CD drive to attach. Needs a short spec first.
+
 ## Images and scenarios
 
 8. Moved to Done.

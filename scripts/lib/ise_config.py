@@ -11,7 +11,7 @@ a rerun once they exist.
         python3 scripts/lib/ise_config.py
 
 Every input comes from the environment, never argv: ISE_PRIVATE_IP, the
-optional ISE_ADMIN_USERNAME (default "admin"), ISE_ADMIN_PASSWORD, and
+optional ISE_ADMIN_USERNAME (default "iseadmin"), ISE_ADMIN_PASSWORD, and
 RADIUS_SECRET. A secret on a command line shows up in a process listing
 and in shell history; ADR 0004 already keeps secrets out of tracked
 files and off the command line for the same reason, and this module

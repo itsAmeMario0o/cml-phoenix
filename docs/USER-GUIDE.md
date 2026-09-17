@@ -62,4 +62,5 @@ non-admin user, and prints the list of emails for the Cloudflare access
 policy. Add those emails to the policy in the Cloudflare Zero Trust
 dashboard before anyone attempts to log in. The connector and the policy
 are documented in `docs/ACCESS.md`, and the user script is covered by
-ADR 0007.
+ADR 0007. Building the environment itself, in order, is
+`docs/BUILD-FROM-SCRATCH.md`.

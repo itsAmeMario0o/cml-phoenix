@@ -47,7 +47,9 @@ destroy the first two roots. That guarantee is enforced with
 
 Begin with `docs/PREREQUISITES.md`, which lists what only you can provide,
 chiefly a license and two Cisco downloads, and `docs/STATUS.md`, which
-records where the build stands today. For how the project is meant to be
+records where the build stands today. `docs/BUILD-FROM-SCRATCH.md` is the
+whole build in order, from an empty subscription to CML, the directory, and
+ISE joined to it. For how the project is meant to be
 worked in, `CLAUDE.md` holds the working rules, `docs/superpowers/specs/`
 holds the design, and `docs/decisions/` explains the reasoning behind each
 choice. Two further guides are optional depending on your goal:

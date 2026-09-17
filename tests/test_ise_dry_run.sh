@@ -112,6 +112,11 @@ else
   echo "[OK]    45-ise-down.sh touches only role=ise resources"
 fi
 
+# The directory is a prerequisite for ISE (ADR 0010). After a portal deploy
+# the script can only warn, and it must.
+missing_out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x ASSUME_YES=1 AD_ENV="${REPO_ROOT}/tests/.no-such-ad.env" bash "${REPO_ROOT}/scripts/25-ise-up.sh" --post-deploy --dry-run 2>&1 || true)"
+assert_contains "warns when ISE was deployed without the directory" "ISE was deployed without the domain controller" "${missing_out}"
+
 # The readiness check must not read curl's doubled "no response" code as an
 # answer: a refused connection yields 000 from curl plus 000 from the
 # fallback, and "000000" once declared ISE ready at 0 seconds.

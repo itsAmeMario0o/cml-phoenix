@@ -2,18 +2,22 @@
 
 A Cisco Modeling Labs server in Azure that is built and destroyed per
 session. Whatever must survive a rebuild lives in a separate Terraform root
-that is never destroyed. Claude Code runs on the Mac and drives CML through
+that is never destroyed. An Active Directory domain controller and ISE sit
+beside it, each built and destroyed per session too. Claude Code runs on the Mac and drives CML through
 the cml-mcp server and SSH.
 
 Spec: `docs/superpowers/specs/2026-09-02-cml-azure-lab-design.md`.
 Prerequisites you must provide: `docs/PREREQUISITES.md`.
+The whole build in order: `docs/BUILD-FROM-SCRATCH.md`.
 
 ## Scope
 
 In scope: the repo skeleton, the bootstrap and persistent Terraform roots,
 the cloud-cml fork patches, the operator scripts, the cml-mcp wiring, the
-lab topology YAML under `labs/`, ISE and FTD VMs, the lab edge router and
-the host's local bridge, and the pyATS verification layer under `verify/`.
+lab topology YAML under `labs/`, ISE and FTD VMs, the session Active
+Directory domain controller with its DNS and certificate authority (ADR
+0010), the lab edge router and the host's local bridge, and the pyATS
+verification layer under `verify/`.
 
 Out of scope until their own specs exist: Key Vault, managed identity, CI,
 Bastion, CML clusters.
@@ -26,15 +30,17 @@ Do not add out-of-scope components. If a task seems to need one, stop and ask.
 |---|---|
 | `terraform/bootstrap/` | Local state. Creates the state storage account. Never destroyed. |
 | `terraform/persistent/` | Blob state. Everything under `rg-cml-lab` that survives a rebuild. Never destroyed. |
+| `terraform/ad/` | Local state. The session domain controller `dc1` (ADR 0010). Built and destroyed per session. |
 | `vendor/cloud-cml/` | Git submodule, our fork on branch `azure-lab`. The disposable CML VM. Local state. |
 | `config/` | Templates and examples. Rendered `cml.yml` and `mcp-env/` are gitignored. |
-| `scripts/` | Numbered bash, `00-` through `90-`. Shared helpers in `scripts/lib/`. |
+| `scripts/` | Numbered bash, `00-` through `90-`. Shared helpers in `scripts/lib/`. PowerShell that runs on the DC in `scripts/ad/`. |
 | `tests/` | `tests/run.sh` runs every check. Python unittest, bash dry-run tests, shared helpers in `tests/lib/`. |
 | `verify/` | pyATS lab verification (ADR 0009). Own venv at `verify/.venv`, gitignored; shared helpers in `verify/lib/`. |
 | `software/` | Cisco downloads. Gitignored except its README. |
 | `labs/` | One YAML topology per scenario. |
 | `docs/decisions/` | ADRs. One file per decision. |
 | `docs/superpowers/` | Specs and plans this repo's work was built from. |
+| `docs/AD.md`, `docs/ISE-AD-BUILD.md` | How the directory and ISE are built and joined: the concepts, then the step by step runbook. |
 | `docs/STATUS.md` | Dated handoff. Read it first in a new session. |
 | `docs/LESSONS-LEARNED.md` | Symptom, cause, fix. Add to it when something bites. |
 | `deep-dive/` | AntiVibe deep dives: what the AI-written code does and why. Tracked. |
@@ -44,10 +50,12 @@ Do not add out-of-scope components. If a task seems to need one, stop and ask.
     scripts/00-preflight.sh                 # read-only readiness check
     scripts/10-upload-images.sh --dry-run   # what would be uploaded
     scripts/20-up.sh                        # bootstrap, persistent, CML
+    scripts/24-ad-up.sh                     # the domain controller, before ISE
     scripts/25-ise-up.sh --post-deploy      # ISE NSG, tagging, readiness, policy
     scripts/30-export-labs.sh               # every lab to YAML, to blob
     scripts/40-down.sh                      # export, deregister, destroy CML only
     scripts/45-ise-down.sh                  # delete everything tagged role=ise
+    scripts/46-ad-down.sh                   # destroy the domain controller, after ISE
     scripts/50-tunnels.sh up|down|status    # SSH forwards through the CML host
     scripts/60-import-lab.sh labs/<x>.yaml  # render and import a topology
     scripts/70-users.sh                     # create CML users, grant every lab
@@ -63,7 +71,7 @@ Do not add out-of-scope components. If a task seems to need one, stop and ask.
 Do not proceed on inference.
 
 - `terraform apply`, `terraform destroy`, any `terraform state` or `terraform import` subcommand, in any root
-- `scripts/20-up.sh` and `scripts/40-down.sh` without `--dry-run`
+- `scripts/20-up.sh`, `scripts/24-ad-up.sh`, `scripts/40-down.sh`, and `scripts/46-ad-down.sh` without `--dry-run`
 - Anything under `vendor/`: edits, commits, submodule pointer bumps, upstream merges
 - Editing `CLAUDE.md`, `.claude/`, `.gitignore`, `.pre-commit-config.yaml`, `.gitleaks.toml`
 - Installing or upgrading a tool, provider, or Python package
@@ -104,7 +112,7 @@ Load the matching skill before writing. Name it in the response.
 ## Testing
 
 - `tests/run.sh` must pass before any commit. It runs shellcheck, `bash -n`, Python unittest, and the bash dry-run tests.
-- `terraform fmt -check` and `terraform validate` on all three roots.
+- `terraform fmt -check` and `terraform validate` on all four roots.
 - `pre-commit run --all-files`.
 - After a real build, `scripts/90-smoke-test.sh` and `terraform -chdir=terraform/persistent plan` showing no changes.
 

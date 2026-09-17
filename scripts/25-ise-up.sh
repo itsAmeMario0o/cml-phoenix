@@ -219,6 +219,18 @@ cleanup_on_exit() {
   close_ise_forward
 }
 
+# check_directory_first: ISE's DNS server and domain are the directory's
+# (ADR 0010), so the DC is built before the portal deploy. This runs after
+# the deploy, too late to stop it, so it can only say so loudly.
+AD_ENV="${AD_ENV:-${REPO_ROOT}/config/mcp-env/ad.env}"
+check_directory_first() {
+  if [[ -f "${AD_ENV}" ]]; then
+    pass "directory was built first (${AD_ENV} present)"
+  else
+    warn "no ${AD_ENV}: ISE was deployed without the domain controller. Its DNS and domain will not be the directory's; see docs/AD.md to repoint it"
+  fi
+}
+
 main() {
   local post_deploy=0 arg
   for arg in "$@"; do
@@ -233,6 +245,7 @@ main() {
   require_cmd az terraform jq python3 ssh
   load_ise_env
   resolve_network
+  check_directory_first
   trap cleanup_on_exit EXIT
   confirm "Apply post-deploy config to ISE ${ISE_HOSTNAME} (${ISE_PRIVATE_IP}) in ${RESOURCE_GROUP}?" || die "declined"
   attach_nsg
