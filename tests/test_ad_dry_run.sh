@@ -49,6 +49,8 @@ source "${UP}"
 AD_ENV="${TMP}/ad.env"
 DRY_RUN=0
 out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" write_ad_env 2>&1)"
+# ls, not stat: the two platforms' stat flags differ and the path is ours.
+# shellcheck disable=SC2012
 mode="$(ls -l "${AD_ENV}" | cut -c1-10)"
 assert_eq "ad.env is mode 0600" "-rw-------" "${mode}"
 body="$(cat "${AD_ENV}")"
