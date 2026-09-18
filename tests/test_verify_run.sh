@@ -17,7 +17,12 @@ SCENARIO_DIR="${REPO_ROOT}/verify/${SCENARIO}"
 JOBFILE="${SCENARIO_DIR}/jobfile.py"
 TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
 FAKE_PASSWORD="Sup3rSecretTestOnly-DoNotLeak"
-printf 'CML_URL=https://198.51.100.9\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${FAKE_PASSWORD}" > "${TMP}/cml.env"
+# load_cml_env insists the cml forward listens (ADR 0012); a fake API on
+# 18015 plays it. CML_URL is the public address and must never be dialled.
+PORT=18015
+python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT}" &
+API_PID=$!
+printf 'CML_URL=https://198.51.100.9\nCML_API_BASE=http://127.0.0.1:%s\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${PORT}" "${FAKE_PASSWORD}" > "${TMP}/cml.env"
 export CML_ENV_FILE="${TMP}/cml.env" LAB_ENV_FILE="${TMP}/no-such-labs.env"
 # shellcheck source=tests/lib/asserts.sh
 source "${REPO_ROOT}/tests/lib/asserts.sh"
@@ -38,6 +43,7 @@ if [[ -e "${SCENARIO_DIR}" ]]; then
 fi
 
 cleanup() {
+  kill "${API_PID}" 2>/dev/null || true
   rm -rf "${VENV_DIR}" "${SCENARIO_DIR}" "${REPO_ROOT}/verify/.testbed" "${TMP}"
   if [[ "${VENV_SAVED}" == "1" ]]; then
     mv "${VENV_DIR}.saved-test" "${VENV_DIR}"
@@ -47,6 +53,8 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+sleep 1
 
 # A fake venv is just a directory (the script only checks it exists) and
 # a fake jobfile is a placeholder (easypy is never actually invoked; run()

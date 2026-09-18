@@ -5,8 +5,8 @@
 #
 # Provides: REPO_ROOT, pass/warn/miss counters, summary_and_exit, die,
 # require_cmd, require_env, tf_out, cml_ip, cml_ssh, cml_remote, cml_scp,
-# cml_api_ready, confirm, load_cml_env, run, out_or_placeholder,
-# parse_dry_run_only, azcopy_env_init, render_config.
+# cml_api_ready, port_listening, confirm, load_cml_env, run,
+# out_or_placeholder, parse_dry_run_only, azcopy_env_init, render_config.
 #
 # Must stay bash 3.2 compatible: this runs on macOS.
 
@@ -210,9 +210,18 @@ cml_scp() {
   scp -P 1122 -i "${key}" "${CML_SSH_OPTS[@]}" "$@"
 }
 
-# cml_api_ready IP: true if the CML controller's own API reports ready.
+# cml_api_ready: true if the CML controller's own API reports ready. Asked
+# on the host itself, over the pinned SSH jump, so the self-signed leg that
+# curl -k accepts is the host's own loopback and nothing reaches the public
+# address unverified (ADR 0012).
 cml_api_ready() {
-  [[ "$(curl -sk -m 10 "https://$1/api/v0/system_information" | jq -r .ready 2>/dev/null)" == "true" ]]
+  [[ "$(cml_ssh "curl -sk -m 10 https://127.0.0.1/api/v0/system_information" 2>/dev/null | jq -r .ready 2>/dev/null)" == "true" ]]
+}
+
+# port_listening PORT: something on this Mac listens on TCP PORT. Shared by
+# 50-tunnels.sh and load_cml_env so both judge "forward up" the same way.
+port_listening() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
 }
 
 # azcopy_env_init: point azcopy's logs and job plans at .azcopy/ inside
@@ -230,9 +239,16 @@ azcopy_env_init() {
 # every key so a caller's python3 or curl subprocess inherits them
 # without either ever crossing a command line (ADR 0004). A caller may
 # override CML_ENV_FILE/LAB_ENV_FILE before calling. Validates only the
-# four keys every caller needs (CML_URL, CML_USERNAME, CML_PASSWORD,
-# CML_VERIFY_SSL); a script-specific key like LAB_PASSWORD is the
-# caller's own check, made right after calling this.
+# keys every caller needs (CML_API_BASE, CML_USERNAME, CML_PASSWORD); a
+# script-specific key like LAB_PASSWORD is the caller's own check, made
+# right after calling this.
+#
+# CML_API_BASE is where every script and the MCP server send the admin
+# password: a loopback URL that the "cml" forward from 50-tunnels.sh
+# carries to the controller's own 443 inside the pinned SSH session
+# (ADR 0012). CML_URL, the public address, stays in the file for humans
+# and the browser and is never dialled from here. The forward has to be
+# up before this returns; there is no fallback to the public address.
 load_cml_env() {
   local require_labs=0
   case "${1:-}" in --require-labs) require_labs=1 ;; esac
@@ -250,7 +266,25 @@ load_cml_env() {
     die "${LAB_ENV_FILE} missing. Start from config/labs.env.example"
   fi
   set +a
-  : "${CML_URL:?CML_URL missing in ${CML_ENV_FILE}}"
   : "${CML_USERNAME:?CML_USERNAME missing in ${CML_ENV_FILE}}"
   : "${CML_PASSWORD:?CML_PASSWORD missing in ${CML_ENV_FILE}}"
+  require_cml_forward
 }
+
+# require_cml_forward: CML_API_BASE must be a loopback URL and its port
+# must be listening, otherwise die naming the remedy. The loopback rule is
+# the whole point of ADR 0012: a public address here would send the admin
+# password across the internet with certificate checks off again.
+require_cml_forward() {
+  local port
+  [[ -n "${CML_API_BASE:-}" ]] || die "CML_API_BASE missing in ${CML_ENV_FILE}. Rerun scripts/20-up.sh, or add CML_API_BASE=https://127.0.0.1:${CML_FORWARD_LOCAL_PORT} (ADR 0012)"
+  [[ "${CML_API_BASE}" =~ ^https?://127\.0\.0\.1:[0-9]+$ ]] ||
+    die "CML_API_BASE must be a loopback URL like https://127.0.0.1:${CML_FORWARD_LOCAL_PORT}, got ${CML_API_BASE} (ADR 0012)"
+  port="${CML_API_BASE##*:}"
+  port_listening "${port}" || die "CML API forward not up on 127.0.0.1:${port}. Run: scripts/50-tunnels.sh up"
+}
+
+# The local port the "cml" forward listens on. 20-up.sh writes it into
+# cml.env and config/tunnels.conf.example carries the matching line; the
+# two must agree, and require_cml_forward is what notices when they do not.
+CML_FORWARD_LOCAL_PORT="${CML_FORWARD_LOCAL_PORT:-9443}"

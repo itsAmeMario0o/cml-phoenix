@@ -60,7 +60,7 @@ main() {
   require_cmd terraform ssh scp azcopy curl jq
   ip="$(cml_ip)" || die "persistent output public_ip_address unavailable; is the persistent root applied?"
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  if [[ "${DRY_RUN}" != "1" ]] && ! cml_api_ready "${ip}"; then
+  if [[ "${DRY_RUN}" != "1" ]] && ! cml_api_ready; then
     die "CML API at https://${ip} is not ready. Nothing exported."
   fi
   export_on_host "${stamp}"

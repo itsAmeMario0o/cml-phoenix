@@ -2,7 +2,7 @@
 # Post-build checks, read-only. Run after scripts/20-up.sh.
 #
 #   1. persistent output public_ip_address readable
-#   2. CML API answers and reports ready
+#   2. CML API reports ready, asked on the host over SSH (ADR 0012)
 #   3. cloud-cml output address equals the persistent public IP
 #   4. License registered
 #   5. /data mounted on the host
@@ -11,7 +11,9 @@
 #   8. Transit bridge bridge1 up at 10.100.0.1 with ip_forward enabled
 #      (ADR 0003: routed connectivity, no NAT)
 #   9. Data disk attached at LUN 0 (az)
-#  10. cml-mcp on the Mac lists labs through scripts/mcp-cml.sh
+#  10. config/mcp-env/cml.env loads and the cml SSH forward listens
+#      (scripts/50-tunnels.sh up first, ADR 0012)
+#  11. cml-mcp on the Mac lists labs through scripts/mcp-cml.sh
 #
 # Exit 1 on any FAIL. Overrides: none needed; CML_SSH_KEY for the key path.
 set -euo pipefail
@@ -29,13 +31,15 @@ check_outputs() {
   pass "public IP ${IP}"
 }
 
+# check_api: asked on the host over the pinned SSH jump, not on the public
+# address with certificate checks off (ADR 0012). That the public 443
+# answers at all was already seen by the fork's readiness module during
+# the apply, so nothing is lost by not asking again from here.
 check_api() {
-  local ready
-  ready="$(curl -sk -m 10 "https://${IP}/api/v0/system_information" | jq -r .ready 2>/dev/null || true)"
-  if [[ "${ready}" == "true" ]]; then
-    pass "CML API ready at https://${IP}"
+  if cml_api_ready; then
+    pass "CML API reports ready (asked on the host over SSH)"
   else
-    miss "CML API at https://${IP} not ready (got '${ready:-no answer}')"
+    miss "CML API on the host does not report ready"
   fi
 }
 
@@ -127,6 +131,18 @@ check_lun0() {
   fi
 }
 
+# check_forward: the "cml" SSH forward from 50-tunnels.sh must listen
+# before check_mcp can reach the controller (ADR 0012). load_cml_env runs
+# in a subshell so its die becomes a [FAIL] line here, not an exit.
+check_forward() {
+  local out
+  if out="$(load_cml_env 2>&1)"; then
+    pass "cml.env loads and the cml forward listens"
+  else
+    miss "${out#*]  }"
+  fi
+}
+
 check_mcp() {
   local out
   if out="$(python3 "${REPO_ROOT}/scripts/lib/mcp_call.py" --cmd "bash ${REPO_ROOT}/scripts/mcp-cml.sh" --tool get_cml_labs 2>&1)"; then
@@ -137,7 +153,7 @@ check_mcp() {
 }
 
 main() {
-  require_cmd terraform az curl jq ssh python3 uvx
+  require_cmd terraform az jq ssh lsof python3 uvx
   check_outputs
   check_api
   check_ip_matches
@@ -146,8 +162,11 @@ main() {
   check_exports_writable
   check_transit_bridge
   check_lun0
+  check_forward
   check_mcp
   summary_and_exit
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

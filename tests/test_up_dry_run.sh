@@ -26,6 +26,8 @@ assert_contains "render planned" "+ python3 ${REPO_ROOT}/scripts/lib/render_cml_
 assert_contains "old host key forgotten before the build" "+ ssh-keygen -R [203.0.113.5]:1122 -f ${REPO_ROOT}/keys/known_hosts" "${out}"
 assert_contains "cml apply planned" "+ terraform -chdir=${REPO_ROOT}/vendor/cloud-cml apply" "${out}"
 assert_contains "env file planned" "+ write ${REPO_ROOT}/config/mcp-env/cml.env" "${out}"
+assert_contains "env file carries the public URL and the forwarded base" "(CML_URL=https://203.0.113.5, CML_API_BASE=https://127.0.0.1:9443)" "${out}"
+assert_contains "next step is the tunnels" "Next:         scripts/50-tunnels.sh up, then scripts/90-smoke-test.sh" "${out}"
 
 b="$(line_of "terraform/bootstrap apply" "${out}")"; p="$(line_of "terraform/persistent apply" "${out}")"
 r="$(line_of "render_cml_config.py" "${out}")"; c="$(line_of "vendor/cloud-cml apply" "${out}")"

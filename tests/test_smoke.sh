@@ -20,4 +20,23 @@ assert_contains "check_transit_bridge called from main" "  check_transit_bridge"
 assert_contains "checks bridge1 address exactly" "10.100.0.1/24" "${src}"
 assert_contains "checks ip_forward" "net.ipv4.ip_forward" "${src}"
 
+# check_forward (ADR 0012): with a cml.env whose CML_API_BASE port is
+# closed, the check is one [FAIL] naming 50-tunnels.sh up, and the script
+# carries on to the next check instead of exiting. 18017 is left closed.
+TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+trap 'rm -rf "${TMP}"' EXIT
+printf 'CML_URL=https://203.0.113.5\nCML_API_BASE=http://127.0.0.1:18017\nCML_USERNAME=admin\nCML_PASSWORD=secret\n' > "${TMP}/cml.env"
+out="$(CML_ENV_FILE="${TMP}/cml.env" LAB_ENV_FILE="${TMP}/no-labs.env" bash -c "
+  source '${SCRIPT}'
+  check_forward
+  echo still-running
+" 2>&1)"
+assert_contains "forward down is a [FAIL]" "[FAIL]  CML API forward not up on 127.0.0.1:18017. Run: scripts/50-tunnels.sh up" "${out}"
+assert_contains "forward down does not stop the smoke test" "still-running" "${out}"
+assert_not_contains "no public address in the forward check" "203.0.113.5" "${out}"
+
+# check_api asks the host over cml_ssh, never the public address with -k.
+assert_not_contains "no local curl -k against the public IP" 'curl -sk -m 10 "https://${IP}' "${src}"
+assert_contains "check_api uses cml_api_ready" "if cml_api_ready; then" "${src}"
+
 finish "test_smoke"

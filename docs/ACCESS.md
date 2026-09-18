@@ -8,11 +8,14 @@ on the controller dials out to the provider, the provider terminates TLS
 with a real certificate and verifies who you are, and it then forwards the
 request to the local nginx.
 
-None of this is required by the repo itself. The scripts, cml-mcp, the
-smoke test, and Terraform's readiness check all reach the persistent public
-IP over port 443 with certificate checks disabled, and they continue to do
-so after this procedure. What the front door adds is a second,
-browser-friendly way in.
+None of this is required by the repo itself. The scripts and cml-mcp reach
+the controller through the `cml` SSH forward from `scripts/50-tunnels.sh`,
+`CML_API_BASE` in `config/mcp-env/cml.env`, so the only leg with
+certificate checks off is loopback on the Mac; the SSH host key pinned in
+`keys/known_hosts` covers the internet (ADR 0012). The fork's Terraform
+readiness check still reaches the public IP on 443 with checks off during
+a build. Neither changes after this procedure. What the front door adds is
+a second, browser-friendly way in.
 
 ## When you want it
 
@@ -165,9 +168,10 @@ repeat step 4 with the same token. Nothing in Cloudflare changes.
 - The free plan caps a request at 100 MB, and a reference platform image
   is several times that. Upload images over the IP or with SCP. The name
   is for driving the lab, not for feeding it.
-- Keep `config/mcp-env/cml.env` pointing at the IP. Access would block
-  cml-mcp at the name unless it carried a service token, and there is no
-  reason to route it that way.
+- Keep `CML_URL` in `config/mcp-env/cml.env` pointing at the IP, and
+  leave `CML_API_BASE` on the forward. Access would block cml-mcp at the
+  name unless it carried a service token, and there is no reason to route
+  it that way.
 - SSH on 1122 and Cockpit on 9090 stay on the IP behind the NSG. Cockpit
   can be published as a second hostname later if you want it behind
   Access too.
