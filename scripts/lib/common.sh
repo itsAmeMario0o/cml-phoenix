@@ -144,7 +144,7 @@ out_or_placeholder() {
 # is what set -e stops on (architecture review, 2026-09-17).
 CML_TFVARS="${CML_TFVARS:-${REPO_ROOT}/config/cml.tfvars}"
 REFPLAT_FILE="${REFPLAT_FILE:-${REPO_ROOT}/config/refplat.txt}"
-CML_YML="${REPO_ROOT}/config/cml.yml"
+CML_YML="${CML_YML:-${REPO_ROOT}/config/cml.yml}"
 render_config() {
   local app_pw sys_pw rg sa container vnet subnet ip pip disk apps_cidr lab_cidr key_name
   app_pw="$(out_or_placeholder app_admin_password)"

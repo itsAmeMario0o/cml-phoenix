@@ -28,7 +28,10 @@ DRY_RUN=0
 # without a word while it goes on billing (LESSONS-LEARNED, 2026-09-17).
 find_ise_resources() {
   local rg
-  rg="$(out_or_placeholder resource_group_name)"
+  # This function runs inside "$(...)", where errexit is off, so a die from
+  # out_or_placeholder would only print. Return the failure by hand
+  # (LESSONS-LEARNED, "A die inside a command substitution").
+  rg="$(out_or_placeholder resource_group_name)" || return 1
   az resource list --resource-group "${rg}" --query "[?tags.role=='ise'].{id:id,type:type,name:name}" -o tsv
 }
 
@@ -68,7 +71,9 @@ delete_all() {
     while IFS=$'\t' read -r id type name || [[ -n "${id}" ]]; do
       [[ -z "${id}" ]] && continue
       [[ "$(delete_rank "${type}")" == "${rank}" ]] || continue
-      delete_by_type "${id}" "${type}" "${name}"
+      # Keep going after one failed delete so confirm_gone can list what is
+      # left, instead of errexit ending the script with only az's text.
+      delete_by_type "${id}" "${type}" "${name}" || miss "delete of ${name} failed"
     done <<< "${rows}"
   done
 }
@@ -85,6 +90,10 @@ confirm_gone() {
   if [[ -n "${left}" ]]; then
     echo "${left}"
     miss "ISE resources still tagged role=ise after the deletes. Delete them by hand and rerun."
+  elif [[ "${fail}" -gt 0 ]]; then
+    # A delete failed above; the re-list is empty only as far as the tag
+    # query can see. Let the summary line carry the failure, not an [OK].
+    return 0
   else
     pass "ISE resources deleted. Persistent resources and the CML VM untouched."
   fi

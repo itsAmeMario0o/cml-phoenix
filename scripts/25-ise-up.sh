@@ -138,6 +138,10 @@ wait_for_ise_ready() {
     echo "+ poll https://${ip}/admin/API/mnt/Version through ${jump}:1122 (up to $((READY_TIMEOUT_S / 60))m)"
     return 0
   fi
+  # The loop below reads any ssh failure as "not ready", so a dead jump
+  # would look like 45 minutes of ISE booting (architecture review,
+  # 2026-09-17). Prove the jump answers once before waiting on ISE.
+  cml_ssh true || die "CML host jump ${jump} does not answer on port 1122; ISE is only reachable through it (ADR 0003)"
   echo "waiting for ISE at https://${ip}/admin/API/mnt/Version through the CML host jump..."
   while (( elapsed < READY_TIMEOUT_S )); do
     code="$(ssh -p 1122 -i "${key}" "${CML_SSH_OPTS[@]}" -o ConnectTimeout=10 "sysadmin@${jump}" \

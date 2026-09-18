@@ -17,7 +17,7 @@ set -euo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-LOCAL_EXPORTS="${REPO_ROOT}/exports"
+LOCAL_EXPORTS="${LOCAL_EXPORTS:-${REPO_ROOT}/exports}"
 DRY_RUN=0
 
 export_on_host() {

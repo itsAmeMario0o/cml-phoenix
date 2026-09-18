@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Runs every local check. This is the gate before any commit.
 #
-#   1. bash -n on every script (including the extensionless az/terraform
-#      stubs, which a plain *.sh glob would miss)
-#   2. shellcheck on the same set (warning severity, external sources)
+#   1. bash -n on every script (including the extensionless stubs under
+#      tests/stubs, which a plain *.sh glob would miss)
+#   2. shellcheck on the same set (style severity, so SC2086 enforces
+#      "quote every variable"; external sources). CLAUDE.md says this
+#      gate runs shellcheck, so a missing shellcheck is a failure, not a
+#      skipped step that still prints "all passed".
 #   3. python3 -m py_compile on scripts/lib/*.py and every verify/*.py,
 #      the only syntax check the pyATS-only verification scripts get
 #      (they import pyats/genie, so unittest cannot import them)
@@ -17,7 +20,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 failed=0
 
-bash_files=(scripts/*.sh scripts/lib/*.sh tests/*.sh tests/lib/*.sh tests/stubs/az tests/stubs/terraform)
+bash_files=(scripts/*.sh scripts/lib/*.sh tests/*.sh tests/lib/*.sh tests/stubs/*)
 
 echo "== bash -n"
 for f in "${bash_files[@]}"; do
@@ -33,11 +36,11 @@ if command -v shellcheck >/dev/null 2>&1; then
   for f in "${bash_files[@]}"; do
     [[ -f "${f}" ]] && existing+=("${f}")
   done
-  if [[ "${#existing[@]}" -gt 0 ]] && ! shellcheck --severity=warning --external-sources "${existing[@]}"; then
+  if [[ "${#existing[@]}" -gt 0 ]] && ! shellcheck --severity=style --external-sources "${existing[@]}"; then
     failed=1
   fi
 else
-  echo "[WARN]  shellcheck not installed, skipping"
+  echo "[FAIL]  shellcheck not installed. See docs/PREREQUISITES.md"; failed=1
 fi
 
 echo "== python syntax (py_compile)"

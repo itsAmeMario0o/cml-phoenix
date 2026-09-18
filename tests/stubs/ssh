@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Stand-in for ssh in tests: the CML host jump as cml_ssh, cml_remote
+# (scripts/lib/common.sh) and 25-ise-up.sh dial it. Answers only the
+# remote commands those scripts send, and fails loudly on anything else.
+#
+# Every invocation is appended to STUB_LOG when it is set. Knobs:
+#   SSH_STUB_EXIT=255             every call exits with that status and
+#                                 prints nothing: a dead jump host
+#   SSH_STUB_LICENSE=REGISTERED   what cml-remote.sh license-status prints
+#   SSH_STUB_DEREGISTER=UNKNOWN   what cml-remote.sh deregister prints
+#   SSH_STUB_LABS=$'a\tA\tSTOPPED\n'  rows for cml-remote.sh list-labs
+#   SSH_STUB_HTTP_SEQ="000 502 200"   the remote curl's %{http_code} per
+#                                 call, in order; the last value repeats.
+#                                 000 is printed without a newline and
+#                                 exits 7, exactly as curl does when the
+#                                 connection is refused.
+# Whatever arrives on stdin (cml-remote.sh, for bash -s) is ignored.
+if [[ -n "${STUB_LOG:-}" ]]; then
+  printf '%s\n' "ssh $*" >> "${STUB_LOG}"
+fi
+if [[ "${SSH_STUB_EXIT:-0}" != "0" ]]; then
+  echo "ssh: connect to host port 1122: Connection refused" >&2
+  exit "${SSH_STUB_EXIT}"
+fi
+
+# http_code: the nth value of SSH_STUB_HTTP_SEQ, where n is how many
+# remote curl calls STUB_LOG holds so far, this one included.
+http_code() {
+  local n=1 code="" v
+  if [[ -n "${STUB_LOG:-}" ]]; then
+    n="$(grep -c -- 'http_code' "${STUB_LOG}" 2>/dev/null || true)"
+    n="${n:-1}"
+  fi
+  for v in ${SSH_STUB_HTTP_SEQ:-200}; do
+    code="${v}"
+    n=$((n - 1))
+    [[ "${n}" -le 0 ]] && break
+  done
+  if [[ "${code}" == "000" ]]; then
+    printf '000'
+    exit 7
+  fi
+  printf '%s' "${code}"
+}
+
+case "$*" in
+  *"bash -s -- license-status"*) echo "${SSH_STUB_LICENSE:-NOT_REGISTERED}" ;;
+  *"bash -s -- deregister"*) echo "${SSH_STUB_DEREGISTER:-NOT_REGISTERED}" ;;
+  *"bash -s -- list-labs"*) printf '%b' "${SSH_STUB_LABS:-}" ;;
+  *"bash -s -- export-labs"*) ;;
+  *"bash -s -- stop-labs"*) ;;
+  *"/provision/del.sh"*) ;;
+  *"http_code"*) http_code ;;
+  # cml_api_ready asks the controller on its own loopback over this ssh
+  # (ADR 0012). Same knob as the curl stub so the readiness cases in the
+  # run tests keep their meaning: 200 ready, 502 not JSON, 000 nothing.
+  *"/api/v0/system_information"*)
+    case "${CURL_STUB_HTTP:-200}" in
+      200) echo '{"ready":true,"version":"2.9.0"}' ;;
+      502) echo '<html>502 Bad Gateway</html>' ;;
+      *) exit 7 ;;
+    esac ;;
+  *" -N -L "*) ;;
+  *" true") ;;
+  *) echo "ssh stub: unhandled: $*" >&2; exit 1 ;;
+esac

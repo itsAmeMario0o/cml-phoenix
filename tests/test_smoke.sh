@@ -36,6 +36,8 @@ assert_contains "forward down does not stop the smoke test" "still-running" "${o
 assert_not_contains "no public address in the forward check" "203.0.113.5" "${out}"
 
 # check_api asks the host over cml_ssh, never the public address with -k.
+# The literal ${IP} is the source text being searched for, on purpose.
+# shellcheck disable=SC2016
 assert_not_contains "no local curl -k against the public IP" 'curl -sk -m 10 "https://${IP}' "${src}"
 assert_contains "check_api uses cml_api_ready" "if cml_api_ready; then" "${src}"
 

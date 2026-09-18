@@ -1,15 +1,29 @@
 #!/usr/bin/env bash
-# Stand-in for terraform in dry-run tests. tf_out (scripts/lib/common.sh)
-# uses "output -json"; a few direct callers still use "output -raw NAME".
-if [[ "${TF_STUB_FAIL:-0}" == "1" ]]; then
+# Stand-in for terraform in tests. tf_out (scripts/lib/common.sh) uses
+# "output -json"; a few direct callers still use "output -raw NAME".
+#
+# Every invocation is appended to STUB_LOG when it is set. Failure modes:
+#   TF_STUB_FAIL=1            every call fails ("stub: no state")
+#   TF_STUB_FAIL="apply"      any call containing that text exits 1 with a
+#                             Terraform-shaped error on stderr
+# init, apply and destroy succeed silently otherwise, so a script's
+# real branch can run to its end against this stub.
+if [[ -n "${STUB_LOG:-}" ]]; then
+  printf '%s\n' "terraform $*" >> "${STUB_LOG}"
+fi
+fail="${TF_STUB_FAIL:-0}"
+if [[ "${fail}" == "1" ]]; then
   echo "stub: no state" >&2; exit 1
+fi
+if [[ "${fail}" != "0" && "$*" == *"${fail}"* ]]; then
+  printf '\nError: terraform stub: %s failed\n\n' "${fail}" >&2; exit 1
 fi
 case "$*" in
   # terraform/ad outputs, for scripts/24-ad-up.sh's write_ad_env. The
   # password values are markers the test greps for in stdout: they must
   # reach the env file and nowhere else. Listed first so the generic
   # "output -json" case below does not answer for this root.
-  *"terraform/ad"*"output -json"*) echo '{"domain_name":{"value":"corp.example"},"netbios_name":{"value":"CORP"},"dc_private_ip":{"value":"10.20.2.10"},"admin_username":{"value":"CORP\\labadmin"},"admin_password":{"value":"StubAdminPw1"},"svc_ise_password":{"value":"StubSvc!Pw#2"},"lab_user_password":{"value":"StubLab*Pw=3"}}' ;;
+  *"terraform/ad"*"output -json"*) printf '%s\n' '{"domain_name":{"value":"corp.example"},"netbios_name":{"value":"CORP"},"dc_private_ip":{"value":"10.20.2.10"},"admin_username":{"value":"CORP\\labadmin"},"admin_password":{"value":"StubAdminPw1"},"svc_ise_password":{"value":"StubSvc!Pw#2"},"lab_user_password":{"value":"StubLab*Pw=3"}}' ;;
   *"output -raw public_ip_address"*) echo "203.0.113.5" ;;
   *"output -raw storage_account_name"*) echo "stfake" ;;
   *"output -raw resource_group_name"*) echo "rg-cml-lab" ;;
@@ -17,8 +31,11 @@ case "$*" in
   *"output -raw lab_summary_cidr"*) echo "10.100.0.0/16" ;;
   *"output -raw"*) echo "stub-value" ;;
   *"output -json cml2info"*) echo '{"address":"203.0.113.5","url":"https://203.0.113.5","version":"2.9.0"}' ;;
-  # location and lab_summary_cidr: scripts/25-ise-up.sh (ADR 0008) reads
-  # both, on top of the three outputs every other script here reads.
-  *"output -json"*) echo '{"public_ip_address":{"value":"203.0.113.5"},"storage_account_name":{"value":"stfake"},"resource_group_name":{"value":"rg-cml-lab"},"location":{"value":"eastus"},"lab_summary_cidr":{"value":"10.100.0.0/16"}}' ;;
+  # The persistent root: every output render_config (common.sh),
+  # ad_tf_args (24-ad-up.sh) and resolve_network (25-ise-up.sh) read.
+  *"output -json"*) echo '{"public_ip_address":{"value":"203.0.113.5"},"storage_account_name":{"value":"stfake"},"resource_group_name":{"value":"rg-cml-lab"},"location":{"value":"eastus"},"lab_summary_cidr":{"value":"10.100.0.0/16"},"app_admin_password":{"value":"StubAppPw"},"sys_admin_password":{"value":"StubSysPw"},"cml_container_name":{"value":"cml"},"vnet_name":{"value":"vnet-cml-lab"},"cml_subnet_name":{"value":"snet-cml"},"cml_private_ip":{"value":"10.20.1.10"},"public_ip_name":{"value":"pip-cml"},"data_disk_id":{"value":"/subscriptions/0/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/disks/cml-data"},"apps_subnet_cidr":{"value":"10.20.2.0/24"},"apps_subnet_id":{"value":"/subscriptions/0/resourceGroups/rg-cml-lab/providers/Microsoft.Network/virtualNetworks/vnet-cml-lab/subnets/snet-apps"},"ssh_key_name":{"value":"cml-lab"}}' ;;
+  *" init"*) ;;
+  *" apply"*) ;;
+  *" destroy"*) ;;
   *) echo "terraform stub: unhandled: $*" >&2; exit 1 ;;
 esac

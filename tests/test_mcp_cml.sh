@@ -22,6 +22,8 @@ sleep 1
 FAKE_PASSWORD="Sup3rSecretTestOnly-DoNotLeak"
 PUBLIC="https://203.0.113.5"
 mkdir -p "${TMP}/bin"
+# The $* and ${CML_PASSWORD} below are the fake uvx's own, on purpose.
+# shellcheck disable=SC2016
 printf '#!/usr/bin/env bash\necho "uvx $*"\necho "server sees password: ${CML_PASSWORD:-unset}"\necho "server sees url: ${CML_URL:-unset}"\n' > "${TMP}/bin/uvx"
 chmod +x "${TMP}/bin/uvx"
 printf 'CML_URL=%s\nCML_API_BASE=http://127.0.0.1:%s\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${PUBLIC}" "${PORT}" "${FAKE_PASSWORD}" > "${TMP}/cml.env"

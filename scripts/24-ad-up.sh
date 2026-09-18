@@ -19,7 +19,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 AD_ROOT="${REPO_ROOT}/terraform/ad"
-PERSISTENT_TFVARS="${REPO_ROOT}/terraform/persistent/terraform.tfvars"
+PERSISTENT_TFVARS="${PERSISTENT_TFVARS:-${REPO_ROOT}/terraform/persistent/terraform.tfvars}"
 AD_ENV="${AD_ENV:-${REPO_ROOT}/config/mcp-env/ad.env}"
 DC_NAME="dc1"
 DRY_RUN="${DRY_RUN:-0}"
