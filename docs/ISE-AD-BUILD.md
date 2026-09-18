@@ -255,13 +255,14 @@ User Details:
 
 | Field | Value |
 |---|---|
-| Password for `iseadmin` | a first-boot password, within ISE's rule |
+| Password for `iseadmin` | anything within ISE's rule. It is used once, at the first login, and then replaced |
 
 ISE's rule: 6 to 25 characters, at least one uppercase, one lowercase, and
 one digit, not containing `iseadmin` or `cisco`, special characters only
 from `@ ~ * ! , + = _ - .`. A password outside the rule stops first boot.
-`ISE_ADMIN_PASSWORD` in `ise.env` has to follow the same rule, because the
-first login below sets ISE's password to it.
+The value you type here does not matter beyond that rule. The password
+ISE keeps is the one set at the first login below, and that one must be
+`ISE_ADMIN_PASSWORD` from `ise.env`, so it has to follow the same rule.
 
 Review + submit. The portal may show provisioning warnings from the
 OS-provisioning handshake ADR 0008 describes; it does not fail, and ISE
