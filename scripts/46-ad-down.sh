@@ -28,7 +28,11 @@ main_down() {
   confirm "Destroy the domain controller (terraform/ad root only)?" || die "declined"
   destroy_root
   run rm -f -- "${AD_ENV}"
-  pass "domain controller destroyed. Persistent resources, ISE, and the CML VM untouched."
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    pass "dry run: would destroy the domain controller (terraform/ad root only) and remove ${AD_ENV}."
+  else
+    pass "domain controller destroyed. Persistent resources, ISE, and the CML VM untouched."
+  fi
   summary_and_exit
 }
 

@@ -10,6 +10,7 @@
 #   4. Persistent init and apply
 #   5. Refuse if the CML VM already exists
 #   6. Render config/cml.yml from persistent outputs, cml.tfvars, refplat.txt
+#      (render_config in scripts/lib/common.sh, shared with 40-down.sh)
 #   7. cloud-cml init and apply (its readiness module waits for the API)
 #   8. Write config/mcp-env/cml.env, print URL, IP, and the del.sh command
 #
@@ -21,10 +22,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 PREFLIGHT_MAX_AGE_MIN="${PREFLIGHT_MAX_AGE_MIN:-240}"
-CML_TFVARS="${CML_TFVARS:-${REPO_ROOT}/config/cml.tfvars}"
-REFPLAT_FILE="${REFPLAT_FILE:-${REPO_ROOT}/config/refplat.txt}"
 KEY_FILE="${REPO_ROOT}/keys/cml-lab"
-CML_YML="${REPO_ROOT}/config/cml.yml"
 ENV_FILE="${REPO_ROOT}/config/mcp-env/cml.env"
 BOOTSTRAP="${REPO_ROOT}/terraform/bootstrap"
 PERSISTENT="${REPO_ROOT}/terraform/persistent"
@@ -91,45 +89,6 @@ refuse_if_vm_exists() {
   else
     die "cannot query VM state: $(head -1 <<<"${stderr_output}")"
   fi
-}
-
-# render_config: every persistent output is resolved into a variable
-# before the command line is built. A die inside "$(...)" in argument
-# position only empties that argument and the render goes ahead with
-# blanks; a plain assignment is what set -e stops on (architecture
-# review, 2026-09-17).
-render_config() {
-  local app_pw sys_pw rg sa container vnet subnet ip pip disk apps_cidr lab_cidr key_name
-  app_pw="$(out_or_placeholder app_admin_password)"
-  sys_pw="$(out_or_placeholder sys_admin_password)"
-  rg="$(out_or_placeholder resource_group_name)"
-  sa="$(out_or_placeholder storage_account_name)"
-  container="$(out_or_placeholder cml_container_name)"
-  vnet="$(out_or_placeholder vnet_name)"
-  subnet="$(out_or_placeholder cml_subnet_name)"
-  ip="$(out_or_placeholder cml_private_ip)"
-  pip="$(out_or_placeholder public_ip_name)"
-  disk="$(out_or_placeholder data_disk_id)"
-  apps_cidr="$(out_or_placeholder apps_subnet_cidr)"
-  lab_cidr="$(out_or_placeholder lab_summary_cidr)"
-  key_name="$(out_or_placeholder ssh_key_name)"
-  # Passwords go through the environment, not --set, so they never appear
-  # in a process listing.
-  APP_PASSWORD="${app_pw}" SYS_PASSWORD="${sys_pw}" run python3 "${REPO_ROOT}/scripts/lib/render_cml_config.py" \
-    --template "${REPO_ROOT}/config/cml.yml.tftpl" \
-    --tfvars "${CML_TFVARS}" --refplat "${REFPLAT_FILE}" --out "${CML_YML}" \
-    --set "RESOURCE_GROUP=${rg}" \
-    --set "STORAGE_ACCOUNT=${sa}" \
-    --set "CONTAINER_NAME=${container}" \
-    --set "VNET_NAME=${vnet}" \
-    --set "SUBNET_NAME=${subnet}" \
-    --set "PRIVATE_IP=${ip}" \
-    --set "PUBLIC_IP_NAME=${pip}" \
-    --set "DATA_DISK_ID=${disk}" \
-    --set "OS_DISK_TYPE=${OS_DISK_TYPE:-Premium_LRS}" \
-    --set "APPS_SUBNET_CIDR=${apps_cidr}" \
-    --set "LAB_SUMMARY_CIDR=${lab_cidr}" \
-    --set "SSH_KEY_NAME=${key_name}"
 }
 
 # The VM being built will present a new host key. Drop the previous one

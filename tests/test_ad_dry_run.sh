@@ -63,6 +63,8 @@ out="$(stubbed bash "${DOWN}" --dry-run 2>&1)"
 assert_contains "destroy planned" "+ terraform -chdir=${REPO_ROOT}/terraform/ad destroy -auto-approve" "${out}"
 assert_contains "destroy gets the same variables" "-var=apps_subnet_id=" "${out}"
 assert_contains "env file removed" "+ rm -f -- ${REPO_ROOT}/config/mcp-env/ad.env" "${out}"
+assert_contains "dry run says what would happen" "dry run: would destroy the domain controller" "${out}"
+assert_not_contains "dry run never claims a destroy" "domain controller destroyed." "${out}"
 if grep -qE 'chdir="\$\{REPO_ROOT\}/terraform/(persistent|bootstrap)"|vendor/cloud-cml' "${DOWN}"; then
   echo "[FAIL]  46-ad-down.sh names a root other than terraform/ad"; failures=$((failures + 1))
 else
