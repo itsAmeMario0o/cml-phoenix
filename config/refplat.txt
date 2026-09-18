@@ -17,6 +17,9 @@ nxosv9000 nxosv9300-10-6-2-f
 # and is for the IOS-XE VXLAN EVPN lab. 18 GB and 12 GB RAM per node.
 cat9000v-uadp cat9000v-uadp-17-18-02
 cat9000v-q200 cat9000v-q200-17-18-02
+# ASAv enforces by Security Group Tag in TrustSec Phase 2, before FTDv
+# does the same; both sit on one VLAN and run one at a time (Phase 2 spec).
+asav asav-9-24-1
 # From the supplemental ISO. Upload these with REFPLAT_ISO pointing at it
 # and REFPLAT_FILE holding only these lines; the script checks names
 # against one mounted ISO at a time.
