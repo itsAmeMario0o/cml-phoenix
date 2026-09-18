@@ -1,6 +1,7 @@
 # 0002: Three Terraform roots split by lifetime
 
-Status: accepted, 2026-09-02
+Status: accepted, 2026-09-02. Amended by ADR 0010, which adds a fourth
+root, `terraform/ad`, with the lifetime of a session.
 
 ## Context
 
@@ -13,7 +14,8 @@ radius has to be structural, not a lifecycle flag.
 
 ## Decision
 
-Three roots, each with the lifetime of what it holds:
+Three roots, each with the lifetime of what it holds (ADR 0010 later added
+a fourth, `terraform/ad`, session lifetime, local state):
 
 | Root | State | Holds | Destroyed |
 |---|---|---|---|
@@ -29,8 +31,8 @@ in this repo runs destroy against the first two roots.
 
 - `scripts/40-down.sh` can only ever destroy the CML root.
 - The bootstrap root's local state file is the one precious local file. It
-  holds a random suffix and nothing secret; back it up by keeping the repo
-  folder intact.
+  holds a random suffix and nothing secret. Its off-machine copy is the
+  OneDrive sync of the repo folder, which ADR 0011 records.
 - Two applies run before the CML build on a clean subscription, which
   `scripts/20-up.sh` sequences.
 - The 512 GB Premium disk bills from creation regardless of the VM, about

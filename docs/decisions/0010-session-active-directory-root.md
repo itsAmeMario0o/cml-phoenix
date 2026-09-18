@@ -49,10 +49,11 @@ from the internet reaches the DC.
 - The domain, its users, and its CA are rebuilt from tracked data each
   session. Nothing about them is precious, and nothing bills between
   sessions.
-- Four passwords live in this root's local state file, protected only by
-  `.gitignore` and the Mac's disk. That is a narrower guarantee than the
-  persistent root's blob state (ADR 0004), accepted because the root and
-  everything it protects end with the session.
+- Four passwords live in this root's local state file, which `.gitignore`
+  keeps out of git and which sits in a folder OneDrive syncs (ADR 0011).
+  That is a narrower guarantee than the persistent root's blob state (ADR
+  0004), accepted because the root and everything it protects end with the
+  session.
 - Lab nodes can reach the DC at their own addresses. The `VirtualNetwork`
   tag on a NIC in `snet-apps` includes the lab summary, because that subnet
   carries the route for it (ADR 0003 amendment). A domain-joined endpoint
