@@ -51,6 +51,15 @@ case "$*" in
   *"bash -s -- stop-labs"*) ;;
   *"/provision/del.sh"*) ;;
   *"http_code"*) http_code ;;
+  # cml_api_ready asks the controller on its own loopback over this ssh
+  # (ADR 0012). Same knob as the curl stub so the readiness cases in the
+  # run tests keep their meaning: 200 ready, 502 not JSON, 000 nothing.
+  *"/api/v0/system_information"*)
+    case "${CURL_STUB_HTTP:-200}" in
+      200) echo '{"ready":true,"version":"2.9.0"}' ;;
+      502) echo '<html>502 Bad Gateway</html>' ;;
+      *) exit 7 ;;
+    esac ;;
   *" -N -L "*) ;;
   *" true") ;;
   *) echo "ssh stub: unhandled: $*" >&2; exit 1 ;;

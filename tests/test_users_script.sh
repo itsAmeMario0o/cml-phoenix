@@ -17,7 +17,9 @@ API_PID=$!
 trap 'kill "${API_PID}" 2>/dev/null || true; rm -rf "${TMP}"' EXIT
 sleep 1
 
-printf 'CML_URL=http://127.0.0.1:%s\nCML_USERNAME=admin\nCML_PASSWORD=secret\nCML_VERIFY_SSL=false\n' "${PORT}" > "${TMP}/cml.env"
+# CML_URL is the public address, which nothing may dial; CML_API_BASE is
+# the forward, played here by the fake API (ADR 0012).
+printf 'CML_URL=https://203.0.113.5\nCML_API_BASE=http://127.0.0.1:%s\nCML_USERNAME=admin\nCML_PASSWORD=secret\nCML_VERIFY_SSL=false\n' "${PORT}" > "${TMP}/cml.env"
 export CML_ENV_FILE="${TMP}/cml.env" USERS_CSV="${TMP}/users.csv" USERS_CREDENTIALS="${TMP}/creds.csv"
 # LAB_ENV_FILE points at a path that does not exist, so the wrapper does
 # not read the operator's real labs.env and the test controls its own env.
@@ -77,5 +79,12 @@ assert_contains "bad csv names the line" "line 2: 'notanemail' is not an email" 
 
 rc=0; bash "${SCRIPT}" --bogus >/dev/null 2>&1 || rc=$?
 assert_eq "bad flag exits 2" "2" "${rc}"
+
+# Forward not up (18010 is closed): the wrapper stops before users.py runs.
+printf 'CML_URL=https://203.0.113.5\nCML_API_BASE=http://127.0.0.1:18010\nCML_USERNAME=admin\nCML_PASSWORD=secret\n' > "${TMP}/down.env"
+rc=0; out="$(CML_ENV_FILE="${TMP}/down.env" bash "${SCRIPT}" --dry-run 2>&1)" || rc=$?
+assert_eq "forward down exits 1" "1" "${rc}"
+assert_contains "forward down names the remedy" "Run: scripts/50-tunnels.sh up" "${out}"
+assert_not_contains "forward down never plans a user" "would create" "${out}"
 
 finish "test_users_script"

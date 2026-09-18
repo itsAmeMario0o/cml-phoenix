@@ -12,7 +12,8 @@
 #   6. Render config/cml.yml from persistent outputs, cml.tfvars, refplat.txt
 #      (render_config in scripts/lib/common.sh, shared with 40-down.sh)
 #   7. cloud-cml init and apply (its readiness module waits for the API)
-#   8. Write config/mcp-env/cml.env, print URL, IP, and the del.sh command
+#   8. Write config/mcp-env/cml.env (public CML_URL for the browser, loopback
+#      CML_API_BASE for scripts, ADR 0012), print URL, IP, the del.sh command
 #
 # Every apply prompts unless ASSUME_YES=1. --dry-run prints what would run.
 # Never runs destroy. Never touches bootstrap or persistent with destroy.
@@ -113,15 +114,21 @@ apply_cml() {
   run terraform -chdir="${CLOUD_CML}" apply -input=false -auto-approve
 }
 
+# CML_URL is the public address, for the browser and for humans. Scripts
+# and the MCP server dial CML_API_BASE instead, the "cml" forward from
+# 50-tunnels.sh, so the admin password only ever crosses the internet
+# inside the pinned SSH session; CML_VERIFY_SSL=false then applies to that
+# loopback leg alone (ADR 0012).
 write_env_and_report() {
-  local ip pw
+  local ip pw api_base="https://127.0.0.1:${CML_FORWARD_LOCAL_PORT}"
   ip="$(out_or_placeholder public_ip_address)"
   pw="$(out_or_placeholder app_admin_password)"
   if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "+ write ${ENV_FILE}"
+    echo "+ write ${ENV_FILE} (CML_URL=https://${ip}, CML_API_BASE=${api_base})"
   else
     mkdir -p "$(dirname "${ENV_FILE}")"
-    ( umask 077; printf 'CML_URL=https://%s\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${ip}" "${pw}" > "${ENV_FILE}" )
+    ( umask 077; printf 'CML_URL=https://%s\nCML_API_BASE=%s\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' \
+      "${ip}" "${api_base}" "${pw}" > "${ENV_FILE}" )
     pass "wrote ${ENV_FILE}"
   fi
   echo
@@ -129,7 +136,7 @@ write_env_and_report() {
   echo "CML IP:       ${ip}"
   echo "SSH:          ssh -p 1122 -i ${KEY_FILE} sysadmin@${ip}"
   echo "Deregister:   ssh -p 1122 -i ${KEY_FILE} sysadmin@${ip} /provision/del.sh"
-  echo "Next:         scripts/90-smoke-test.sh"
+  echo "Next:         scripts/50-tunnels.sh up, then scripts/90-smoke-test.sh"
 }
 
 main() {

@@ -7,7 +7,7 @@ trap 'rm -rf "${TMP}"' EXIT
 # shellcheck source=tests/lib/asserts.sh
 source "${REPO_ROOT}/tests/lib/asserts.sh"
 
-printf 'cockpit 19090 127.0.0.1 9090\nise 18443 10.20.2.10 443\n' > "${TMP}/tunnels.conf"
+printf 'cml 19443 127.0.0.1 443\ncockpit 19090 127.0.0.1 9090\nise 18443 10.20.2.10 443\n' > "${TMP}/tunnels.conf"
 common="TUNNELS_CONF=${TMP}/tunnels.conf STATE_DIR=${TMP}/state"
 
 # shellcheck disable=SC2086
@@ -23,6 +23,16 @@ assert_eq "bad usage exits 1" "1" "${rc}"
 # shellcheck disable=SC2086
 out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" env ${common} bash "${SCRIPT}" up --dry-run 2>&1)"
 assert_contains "up plans the forward" "-o ExitOnForwardFailure=yes -N -L 18443:10.20.2.10:443 sysadmin@203.0.113.5" "${out}"
+assert_contains "up plans the cml forward to the controller's own 443" "-N -L 19443:127.0.0.1:443 sysadmin@203.0.113.5" "${out}"
+
+# A conf from before ADR 0012 has no cml line; "up" must say so rather
+# than come up without the forward every script depends on.
+printf 'cockpit 19090 127.0.0.1 9090\n' > "${TMP}/no-cml.conf"
+rc=0
+out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" env TUNNELS_CONF="${TMP}/no-cml.conf" STATE_DIR="${TMP}/state" bash "${SCRIPT}" up --dry-run 2>&1)" || rc=$?
+assert_eq "up without a cml line exits 1" "1" "${rc}"
+assert_contains "up without a cml line names the line to add" "Add: cml 9443 127.0.0.1 443" "${out}"
+assert_not_contains "up without a cml line starts nothing" "+ ssh" "${out}"
 
 rc=0; env TUNNELS_CONF="${TMP}/missing.conf" STATE_DIR="${TMP}/state" bash "${SCRIPT}" status >/dev/null 2>&1 || rc=$?
 assert_eq "missing conf exits 1" "1" "${rc}"

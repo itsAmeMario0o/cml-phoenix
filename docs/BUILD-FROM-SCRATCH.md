@@ -120,7 +120,7 @@ order to do it in.
 | `config/ise.env.example` | `config/mcp-env/ise.env` | `ISE_ADMIN_PASSWORD` within ISE's password policy, and `RADIUS_SECRET` |
 | `config/labs.env.example` | `config/mcp-env/labs.env` | `LAB_PASSWORD`, `ISE_IP` (10.20.2.20), the same `RADIUS_SECRET` as `ise.env`, and later `TRUSTSEC_TEST_*` |
 | `config/users.csv.example` | `config/mcp-env/users.csv` | One row per CML account |
-| `config/tunnels.conf.example` | `config/tunnels.conf` | Uncomment the `ise` and `dc` lines |
+| `config/tunnels.conf.example` | `config/tunnels.conf` | Keep the `cml` line; uncomment `ise` and `dc` |
 
 You do not make the SSH key. `20-up.sh` generates `keys/cml-lab` when it is
 missing, and everything under `keys/` is gitignored.
@@ -218,18 +218,22 @@ About 20 minutes on the first build. The first boot also copies every listed
 image from blob to the data disk, inside the `sas_validity` window (4h in
 the example tfvars). Later builds find the images already on the disk and
 copy only new ones. The script ends by printing the URL, the SSH command,
-and "Next: scripts/90-smoke-test.sh".
+and "Next: scripts/50-tunnels.sh up, then scripts/90-smoke-test.sh".
 
 Wait a minute before that next step. The host reboots once at the end of the
 install, after Terraform has already seen the API answer, and a smoke test
 that lands in the reboot fails five checks for no reason.
 
+    scripts/50-tunnels.sh up
     scripts/90-smoke-test.sh
     terraform -chdir=terraform/persistent plan
 
-The smoke test should be all `[OK]` (12 of 12 on 2026-09-17), including
-"bridge1 holds 10.100.0.1/24", "net.ipv4.ip_forward is 1", the data disk at
-LUN 0, and cml-mcp listing labs. The plan must say no changes.
+The `cml` forward comes first because every script that logs in to the
+controller, and cml-mcp, dial it rather than the public address (ADR
+0012). The smoke test should be all `[OK]` (13 checks), including "bridge1
+holds 10.100.0.1/24", "net.ipv4.ip_forward is 1", the data disk at LUN 0,
+"cml.env loads and the cml forward listens", and cml-mcp listing labs. The
+plan must say no changes.
 
 The routed lab path is what lets a lab node reach ISE and the DC at its own
 address. `vendor/cloud-cml/AZURE-LAB.md` describes its four pieces. Check
@@ -248,13 +252,14 @@ three things by hand:
 
        set -a; source config/mcp-env/cml.env; set +a
        TOKEN="$(printf '{"username":"%s","password":"%s"}' "$CML_USERNAME" "$CML_PASSWORD" |
-         curl -sk -H 'Content-Type: application/json' -d @- "$CML_URL/api/v0/authenticate" | jq -r .)"
-       curl -sk -X PUT -H "Authorization: Bearer $TOKEN" "$CML_URL/api/v0/system/external_connectors"
-       curl -sk -H "Authorization: Bearer $TOKEN" "$CML_URL/api/v0/system/external_connectors" | jq .
+         curl -sk -H 'Content-Type: application/json' -d @- "$CML_API_BASE/api/v0/authenticate" | jq -r .)"
+       curl -sk -X PUT -H "Authorization: Bearer $TOKEN" "$CML_API_BASE/api/v0/system/external_connectors"
+       curl -sk -H "Authorization: Bearer $TOKEN" "$CML_API_BASE/api/v0/system/external_connectors" | jq .
 
    The last call should list "Bridge 1" on device `bridge1`. The login call
    is the one `60-import-lab.sh` makes; the password travels on stdin and
-   not on a command line.
+   not on a command line, and to `CML_API_BASE`, the `cml` forward, not to
+   the public `CML_URL` (ADR 0012).
 
 Two of those pieces have worked only after a hand repair. On the 2026-09-17
 build the transit script was shipped under a name `postprocess` skips and
@@ -263,12 +268,11 @@ NSG by hand. Both fixes are in the fork now (`06-transit.sh`, and the rule
 in `azure/main.tf`). The next build is the first to get either from
 cloud-init and Terraform alone, so do check them.
 
-Then the accounts and the forwards:
+Then the accounts, with the forwards still up from the smoke test:
 
+    scripts/50-tunnels.sh status
     scripts/70-users.sh --dry-run
     scripts/70-users.sh
-    scripts/50-tunnels.sh up
-    scripts/50-tunnels.sh status
 
 `70-users.sh` creates the CML accounts from `config/mcp-env/users.csv`,
 grants every lab to the non-admin users, and writes generated passwords to

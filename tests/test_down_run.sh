@@ -59,7 +59,9 @@ assert_eq "API down exits 1" "1" "${rc}"
 assert_contains "API down names the export" "[FAIL]  CML API at https://203.0.113.5 is not ready. Nothing exported." "${out}"
 assert_contains "API down refuses the destroy" "[FAIL]  export failed, not destroying." "${out}"
 assert_not_contains "API down never destroys" " destroy " "${log}"
-assert_not_contains "API down never touches the host" "ssh " "${log}"
+assert_not_contains "API down never exports" "export-labs" "${log}"
+assert_not_contains "API down never runs del.sh" "/provision/del.sh" "${log}"
+assert_eq "API down: the only ssh is the readiness probe" "1" "$(grep -c '^ssh ' <<<"${log}")"
 assert_not_contains "API down never claims success" "[OK]" "${out}"
 
 # 3. The export comes up short: no upload, no destroy.

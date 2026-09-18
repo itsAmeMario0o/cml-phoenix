@@ -170,7 +170,7 @@ Treat cloud-cml as an upstream remote and patch lightly.
 ## 7. cml-mcp
 
 - Requires CML 2.9 or newer. Runs locally: `uvx cml-mcp[pyats]`.
-- Env: `CML_URL`, `CML_USERNAME`, `CML_PASSWORD`, `CML_VERIFY_SSL=false`.
+- Env: `CML_URL` (given `CML_API_BASE`, the `cml` SSH forward, by `scripts/mcp-cml.sh`, ADR 0012), `CML_USERNAME`, `CML_PASSWORD`, `CML_VERIFY_SSL=false`.
 - 51 tools across labs, nodes, links, annotations, packet capture, users, system.
 - Restrict `allowed_ipv4_subnets_cml2` in `config.yml` to your own address.
 - The static public IP keeps the MCP config stable across rebuilds.

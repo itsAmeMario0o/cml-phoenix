@@ -1,7 +1,14 @@
 # name  local_port  remote_host   remote_port
 # Copy to config/tunnels.conf (gitignored). One forward per line, through
-# the CML host on SSH 1122. Cockpit is reachable directly, this is an
-# example. The ISE and FTD spec adds their entries.
+# the CML host on SSH 1122.
+#
+# cml is required. Every script that logs in to the controller, and the
+# MCP server, dial CML_API_BASE from config/mcp-env/cml.env, which
+# 20-up.sh writes as https://127.0.0.1:9443. Change the port here and
+# there together, or nothing reaches the controller (ADR 0012).
+cml 9443 127.0.0.1 443
+# Cockpit is reachable directly, this is an example. The ISE and FTD spec
+# adds their entries.
 cockpit 9090 127.0.0.1 9090
 # ise 8443 10.20.2.20 443     ISE GUI, then https://localhost:8443
 # dc  3389 10.20.2.10 3389    domain controller RDP (docs/AD.md)

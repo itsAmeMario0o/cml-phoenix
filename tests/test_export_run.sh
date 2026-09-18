@@ -58,6 +58,7 @@ assert_not_contains "failed upload never claims the blob copy" "and blob contain
 run_export CURL_STUB_HTTP=502
 assert_eq "API 502 exits 1" "1" "${rc}"
 assert_contains "API 502 is a FAIL" "[FAIL]  CML API at https://203.0.113.5 is not ready. Nothing exported." "${out}"
-assert_not_contains "API 502 never touches the host" "ssh " "${log}"
+assert_not_contains "API 502 never exports" "export-labs" "${log}"
+assert_eq "API 502: the only ssh is the readiness probe" "1" "$(grep -c '^ssh ' <<<"${log}")"
 
 finish "test_export_run"

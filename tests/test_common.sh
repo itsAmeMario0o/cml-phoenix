@@ -105,16 +105,41 @@ assert_eq "azcopy_env_init stays inside the repo" "${REPO_ROOT}/.azcopy" "${out}
 
 # load_cml_env: cml.env is mandatory; labs.env is optional unless
 # --require-labs. Every key is exported for a python3/curl child to read.
+# CML_API_BASE must be a loopback URL whose port listens (ADR 0012): a
+# fake API on 18013 stands in for the cml forward, and 18014 is left
+# closed so the "forward not up" path is exercised for real.
 TMP2="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
-printf 'CML_URL=https://example\nCML_USERNAME=admin\nCML_PASSWORD=secret\n' > "${TMP2}/cml.env"
-out="$(CML_ENV_FILE="${TMP2}/cml.env" LAB_ENV_FILE="${TMP2}/no-labs.env" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; load_cml_env; echo \"\${CML_URL}\"")"
-assert_eq "load_cml_env exports CML_URL from cml.env" "https://example" "${out}"
+python3 "${REPO_ROOT}/tests/fake_cml_api.py" 18013 &
+API_PID=$!
+trap 'kill "${API_PID}" 2>/dev/null || true; rm -rf "${TMP}" "${TMP2}"' EXIT
+sleep 1
+load_with() {
+  CML_ENV_FILE="$1" LAB_ENV_FILE="${TMP2}/no-labs.env" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; load_cml_env ${2:-}; echo \"\${CML_API_BASE}\"" 2>&1
+}
+printf 'CML_URL=https://203.0.113.5\nCML_API_BASE=http://127.0.0.1:18013\nCML_USERNAME=admin\nCML_PASSWORD=secret\n' > "${TMP2}/cml.env"
+out="$(load_with "${TMP2}/cml.env")"
+assert_eq "load_cml_env exports CML_API_BASE when the forward listens" "http://127.0.0.1:18013" "${out}"
 rc=0
-CML_ENV_FILE="${TMP2}/cml.env" LAB_ENV_FILE="${TMP2}/no-labs.env" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; load_cml_env --require-labs" >/dev/null 2>&1 || rc=$?
+load_with "${TMP2}/cml.env" --require-labs >/dev/null 2>&1 || rc=$?
 assert_eq "load_cml_env --require-labs dies without labs.env" "1" "${rc}"
 rc=0
-CML_ENV_FILE="${TMP2}/missing.env" bash -c "source '${REPO_ROOT}/scripts/lib/common.sh'; load_cml_env" >/dev/null 2>&1 || rc=$?
+load_with "${TMP2}/missing.env" >/dev/null 2>&1 || rc=$?
 assert_eq "load_cml_env dies without cml.env" "1" "${rc}"
-rm -rf "${TMP2}"
+
+printf 'CML_URL=https://203.0.113.5\nCML_API_BASE=http://127.0.0.1:18014\nCML_USERNAME=admin\nCML_PASSWORD=secret\n' > "${TMP2}/down.env"
+rc=0; out="$(load_with "${TMP2}/down.env")" || rc=$?
+assert_eq "load_cml_env dies when the forward is not up" "1" "${rc}"
+assert_contains "forward down names the remedy" "Run: scripts/50-tunnels.sh up" "${out}"
+assert_contains "forward down is a [FAIL]" "[FAIL]" "${out}"
+
+printf 'CML_URL=https://203.0.113.5\nCML_USERNAME=admin\nCML_PASSWORD=secret\n' > "${TMP2}/old.env"
+rc=0; out="$(load_with "${TMP2}/old.env")" || rc=$?
+assert_eq "load_cml_env dies on a cml.env without CML_API_BASE" "1" "${rc}"
+assert_contains "missing CML_API_BASE names it" "CML_API_BASE missing" "${out}"
+
+printf 'CML_URL=https://203.0.113.5\nCML_API_BASE=https://203.0.113.5\nCML_USERNAME=admin\nCML_PASSWORD=secret\n' > "${TMP2}/public.env"
+rc=0; out="$(load_with "${TMP2}/public.env")" || rc=$?
+assert_eq "load_cml_env refuses a public CML_API_BASE" "1" "${rc}"
+assert_contains "public CML_API_BASE names the rule" "must be a loopback URL" "${out}"
 
 finish "test_common"
