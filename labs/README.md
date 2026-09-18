@@ -166,3 +166,45 @@ work.
 | Node | address | user |
 |---|---|---|
 | edge | 10.100.0.2/24 on the transit bridge | admin |
+
+## trustsec-phase2.yaml
+
+**asa1 and ftd1 must never run together.** Both hold 10.100.11.2 on the
+firewall VLAN and 10.100.20.1 toward the server. Swapping the enforcement
+point is stopping one and starting the other; nothing else changes.
+
+One Catalyst 9000v as a routed access switch on the transit bridge, in
+the address the Phase 1 edge held, three endpoints on one VLAN with DHCP
+from the switch, an ASAv and an FTDv that take turns as the firewall by
+tag, and an Ubuntu web server behind an unmanaged switch both firewalls
+reach. Told in two acts. Act 1 is the SNMP inventory job: ISE learns the
+endpoints from polling and traps, with RADIUS untouched on the ISE side.
+Act 2 adds sessions, Security Group Tags, an SGACL matrix on the switch,
+and a firewall rule set by source tag. Spec:
+`docs/specs/2026-09-17-trustsec-phase2-design.md`.
+
+Act 1 starts `bridge1`, `nat`, `nat-sw`, `sw1`, `emp-pc`, `iot-dev` and
+`kali`, about 25 GB. The firewalls, `sw2` and `srv` stay stopped. The
+switch boots with AAA, RADIUS, MAB and 802.1X already there, proven on
+the cat9kv probe, but the access ports run `authentication open`, so the
+endpoints get their leases whether or not ISE answers. There is no SNMP
+in the day-0 on purpose: Act 1 step 2 adds it by hand. The Act 2 lines,
+`cts role-based enforcement` and `cts manual` on the firewall ports, are
+in the file commented out.
+
+Needs `LAB_PASSWORD`, `FTD_ADMIN_PASSWORD`, `ISE_IP` and `RADIUS_SECRET`
+in `config/mcp-env/labs.env`, and the `kali-2026-2` image with its node
+definition. `emp-pc` carries a disabled `wired-peap` supplicant unit with
+the PEAP password left as `CHANGE_ME`; Act 2 step 5 sets it from
+`ad.env` on the node and enables the unit. `iot-dev` asks for DHCP as
+`hp-printer-01` with vendor class `Hewlett-Packard JetDirect`, so ISE
+has something to profile. `emp-pc`, `kali` and `srv` have a second
+interface on the NAT connector for packages; `ftd1` uses it for cdFMC.
+
+| Node | address | user |
+|---|---|---|
+| sw1 | 10.100.0.2 Vlan100, 10.100.10.1 Vlan10, 10.100.11.1 Vlan11 | admin |
+| emp-pc, iot-dev, kali | DHCP from 10.100.10.100 | cisco, cisco, kali / kali |
+| asa1 or ftd1 | 10.100.11.2 inside, 10.100.20.1 servers | admin; ftd1 admin with FTD_ADMIN_PASSWORD |
+| ftd1 | 192.168.255.81 Management0/0 | admin |
+| srv | 10.100.20.10 | cisco |
