@@ -120,7 +120,10 @@ assert_not_contains "ISE lookup never compares resourceGroup in the query" "[?re
 
 # The directory is a prerequisite for ISE (ADR 0010). After a portal deploy
 # the script can only warn, and it must.
-missing_out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x ASSUME_YES=1 AD_ENV="${REPO_ROOT}/tests/.no-such-ad.env" bash "${REPO_ROOT}/scripts/25-ise-up.sh" --post-deploy --dry-run 2>&1 || true)"
+# ISE_ENV_FILE points at the fixture: without it the script dies on the
+# operator's missing ise.env before it can warn, and the test only passed
+# on a checkout that had a real one.
+missing_out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x ASSUME_YES=1 ISE_ENV_FILE="${FIXTURE_DIR}/ise.env" AD_ENV="${REPO_ROOT}/tests/.no-such-ad.env" bash "${REPO_ROOT}/scripts/25-ise-up.sh" --post-deploy --dry-run 2>&1 || true)"
 assert_contains "warns when ISE was deployed without the directory" "ISE was deployed without the domain controller" "${missing_out}"
 
 # The readiness check must not read curl's doubled "no response" code as an
