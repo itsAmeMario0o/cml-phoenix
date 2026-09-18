@@ -25,14 +25,33 @@ $ErrorActionPreference = 'Stop'
 $null = New-Item -ItemType Directory -Force -Path 'C:\lab\log'
 $null = Start-Transcript -Path 'C:\lab\log\20-install-ca.txt' -Append
 
-function Set-CaRegistry {
-    # certutil is a native command: it fails by exit code, not by exception,
-    # and the first build lost a failure here by discarding the output.
-    param([string]$Name, [string]$Value)
-    $out = & certutil.exe -setreg $Name $Value 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "certutil -setreg $Name $Value failed ($LASTEXITCODE): $($out | Select-Object -Last 1)"
+function Invoke-Native {
+    # certutil and dsacls are native commands: they fail by exit code, not
+    # by exception, so 'Stop' above does nothing for them and a discarded
+    # exit code is a lost failure (the first build lost one that way). Every
+    # native call goes through here. The preference is relaxed around the
+    # call because Windows PowerShell turns redirected stderr into a
+    # terminating error under 'Stop', even when the command succeeds. This
+    # script runs as its own powershell.exe from a file, so it carries its
+    # own copy rather than sharing one with run-as-admin.ps1. ADR 0010.
+    param([Parameter(Position = 0)][string]$Command,
+          [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $Command @Arguments 2>&1
     }
+    finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Command $Arguments failed ($LASTEXITCODE): $(($out | Select-Object -Last 3) -join ' | ')"
+    }
+}
+
+function Set-CaRegistry {
+    param([string]$Name, [string]$Value)
+    Invoke-Native certutil.exe '-setreg' $Name $Value
 }
 
 function Wait-Directory {
@@ -81,10 +100,10 @@ try {
     Set-CaRegistry -Name 'CA\ValidityPeriod' -Value 'Years'
     Set-CaRegistry -Name 'CA\AuditFilter' -Value '127'
     Restart-Service -Name 'certsvc'
-    & certutil.exe -crl > $null
+    Invoke-Native certutil.exe '-crl'
 
     $template = "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$($domain.DistinguishedName)"
-    & dsacls.exe $template /G "$NetbiosName\Domain Controllers:CA;Enroll" > $null
+    Invoke-Native dsacls.exe $template /G "$NetbiosName\Domain Controllers:CA;Enroll"
     Write-Output "Enterprise Root CA $CaCommonName installed"
 }
 finally {
