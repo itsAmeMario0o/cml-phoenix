@@ -77,3 +77,23 @@ forced by the controller's connector scan, and libvirt is what gets the
 bridge past firewalld on the host. The fork's `AZURE-LAB.md` documents all
 four required pieces together; `docs/LESSONS-LEARNED.md` has the
 diagnosis of each failure.
+
+## Amendment, 2026-09-18: the transit network is open mode
+
+The transit network was a libvirt network in route mode. Route mode
+installs forward rules that admit only the bridge's own /24 and reject
+everything else with port-unreachable; the `<route>` element adds a kernel
+route for the lab summary but no forward rule. Every device the lab had
+placed on the transit sat inside that /24, so the rule never bit until the
+TrustSec Phase 2 lab put endpoints on 10.100.10.0/24 behind the switch:
+they could not reach the domain controller or ISE, while the switch could.
+
+The network is now open mode, under which libvirt adds no firewall rules,
+with the bridge pinned to the `libvirt-routed` firewalld zone by the
+`zone` attribute, since open mode does not place it there. Proven on the
+running host on 2026-09-18 before the fork changed: no `bridge1` rules,
+the bridge in the zone, an endpoint behind the switch pinging and
+resolving the DC and pinging ISE. Nothing else in this ADR changes: the
+UDR, the two NSG rules, IP forwarding, and the lab edge at 10.100.0.2 are
+as before. The full narrowing is in LESSONS-LEARNED under "An endpoint
+behind the switch cannot reach the VNet, though the switch can".
