@@ -15,6 +15,9 @@
 #      (scripts/50-tunnels.sh up first, ADR 0012)
 #  11. cml-mcp on the Mac lists labs through scripts/mcp-cml.sh
 #
+#  Checks 6 and 8 each print two [OK] lines, so a clean run ends with
+#  "summary: 13 OK, 0 WARN, 0 FAIL".
+#
 # Exit 1 on any FAIL. Overrides: none needed; CML_SSH_KEY for the key path.
 set -euo pipefail
 

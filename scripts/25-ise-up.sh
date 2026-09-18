@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Post-deploy config for ISE, run after the portal Marketplace deploy
-# (docs/ISE-MARKETPLACE-DEPLOY.md). The automated `az deployment group
+# (docs/ISE-AD-BUILD.md (Part 2)). The automated `az deployment group
 # create` path is retired: ISE terminally fails Azure's OS-provisioning
 # handshake on that path (ADR 0008 amendment, 2026-09-13), even though the
 # portal's Marketplace flow deploys the same image and lets it boot. This
@@ -87,7 +87,7 @@ resolve_network() {
 # 0003); admin and SSH from ISE_ADMIN_SOURCE_CIDR only, the CML host
 # address per ADR 0008; never 0.0.0.0/0. The portal wizard's NSG handling
 # is limited, so it deploys with none, and this is the first place these
-# rules actually take effect (docs/ISE-MARKETPLACE-DEPLOY.md).
+# rules actually take effect (docs/ISE-AD-BUILD.md (Part 2)).
 attach_nsg() {
   run az network nsg create -g "${RESOURCE_GROUP}" -n "${NSG_NAME}" -l "${LOCATION}" \
     --tags project=cml-azure-lab role=ise
@@ -231,7 +231,7 @@ check_directory_first() {
   if [[ -f "${AD_ENV}" ]]; then
     pass "directory was built first (${AD_ENV} present)"
   else
-    warn "no ${AD_ENV}: ISE was deployed without the domain controller. Its DNS and domain will not be the directory's; see docs/AD.md to repoint it"
+    warn "no ${AD_ENV}: ISE was deployed without the domain controller. Its DNS and domain will not be the directory's; see docs/ISE-AD-BUILD.md, Part 2, to repoint it"
   fi
 }
 

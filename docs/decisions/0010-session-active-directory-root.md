@@ -127,3 +127,22 @@ Exit condition: an ISE 3.5 release or patch that fixes CSCwr77017. When the
 lab's ISE runs it, remove the value from `10-promote-forest.ps1` and confirm
 a join on a fresh DC. A customer with a Server 2025 domain faces the same
 choice, this setting or a fixed ISE.
+
+## Amendment, 2026-09-18: the SAM policy proven from a clean build, and the DC kept between sessions
+
+The setting above is now proven as built, not only as patched. A DC built
+from nothing on 2026-09-18, with `10-promote-forest.ps1` setting
+`SamrChangeUserPasswordApiPolicy` = 3 before the promotion reboot, took
+ISE's join on the first call: `PUT .../join` returned 204, no restart of
+the DC, and both lab groups listed and selected afterward.
+
+The session lifetime in this ADR's title will change once the spec below
+lands. The operator decided on
+2026-09-18 to build the DC once and deallocate it between sessions instead
+of destroying it, so its forest, CA, identities, and ISE's join survive to
+the next session at about $2 a month for the 30 GB disk. The root is still
+applied by `scripts/24-ad-up.sh`, once; `scripts/46-ad-down.sh` will
+deallocate by default and destroy only with `--destroy`. The local state
+now lives across sessions, which ADR 0011 already covers. That is
+`docs/specs/2026-09-18-persistent-ise-dc-and-script-consolidation-design.md`,
+not yet built; until it lands the scripts destroy as before.

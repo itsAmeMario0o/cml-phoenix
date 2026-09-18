@@ -1,70 +1,52 @@
 # Reaching the lab by name, with a trusted certificate
 
-This guide explains how to put a hostname and a valid certificate in front
-of the CML web interface, without opening anything in Azure and at no cost.
-The worked example uses Cloudflare, since that is the DNS provider this lab
-relies on, but the pattern applies to any zero trust front door: an agent
-on the controller dials out to the provider, the provider terminates TLS
-with a real certificate and verifies who you are, and it then forwards the
-request to the local nginx.
+This guide puts a hostname and a valid certificate in front of the CML web
+interface, without opening anything in Azure and at no cost. The worked
+example is Cloudflare, the DNS provider this lab uses, but the pattern is
+any zero trust front door: an agent on the controller dials out to the
+provider, the provider terminates TLS with a real certificate and checks
+who you are, then forwards the request to the local nginx.
 
-None of this is required by the repo itself. The scripts and cml-mcp reach
-the controller through the `cml` SSH forward from `scripts/50-tunnels.sh`,
-`CML_API_BASE` in `config/mcp-env/cml.env`, so the only leg with
-certificate checks off is loopback on the Mac; the SSH host key pinned in
-`keys/known_hosts` covers the internet (ADR 0012). The fork's Terraform
-readiness check still reaches the public IP on 443 with checks off during
-a build. Neither changes after this procedure. What the front door adds is
-a second, browser-friendly way in.
+Nothing in the repo needs it. The scripts and cml-mcp reach the controller
+through the `cml` SSH forward (ADR 0012), and that does not change. The
+front door is a second, browser-only way in.
 
 ## When you want it
 
-- The browser warning bothers you. The controller serves a self-signed
-  certificate and CML regenerates it on a timer, so installing a real one
-  on the box is fiddly. Going through the provider means you never have
-  to.
-- You are on a VPN whose exit addresses change. The NSG allow-list is
-  still needed for SSH and for the scripts, but the browser path no
-  longer depends on it. See LESSONS-LEARNED, "SSH to the host times out".
+- The browser warning bothers you. The controller's certificate is
+  self-signed and CML regenerates it on a timer, so a real one on the box
+  is fiddly. Through the provider you never install one.
+- You are on a VPN whose exit addresses change. The NSG allow-list still
+  gates SSH and the scripts, but the browser path stops depending on it.
 - You want a login before the CML login, and the public IP out of DNS.
 
-If all you want is a name and none of the above, add a plain A record for
-the public IP at your provider, DNS only, no proxy, and stop here. The
-warning stays, and a proxied record does not work, because the NSG only
-admits your own addresses.
+If all you want is a name, add a plain A record for the public IP at your
+provider, DNS only, no proxy, and stop here. The warning stays. A proxied
+record does not work, because the NSG only admits your own addresses.
 
 ## What runs where
 
-The Cloudflare connector, `cloudflared`, runs on the controller as a
-systemd service from Cloudflare's Debian package. It only ever dials
-out, so nothing changes in the NSG or in firewalld. It does not run as a
-container, even though Cloudflare offers one and the host has Docker. CML
-2.10 installs that Docker for its own container-based lab nodes and
-manages the daemon through its docker shim, so a foreign container would
-be living inside CML's housekeeping. A systemd unit has nothing to do
-with any of that.
+The connector, `cloudflared`, runs on the controller as a systemd service
+from Cloudflare's Debian package. It only dials out, so the NSG and
+firewalld do not change. It is not run as a container: CML 2.10 manages
+the host's Docker for its own container nodes, and a foreign container
+would sit inside CML's housekeeping.
 
 The controller is rebuilt every session, so the connector is reinstalled
-after each build. The tunnel itself, its hostname, and the Access policy
-live in Cloudflare and survive. The reinstall is three commands and the
-same token. Automating it as a post-build step is on the roadmap.
+after every `scripts/20-up.sh`. The tunnel, its hostname, and the Access
+policy live in Cloudflare and survive.
 
-## Procedure, by hand
+## One-time setup in Cloudflare
 
 You need a Cloudflare zone for the name and a Zero Trust account on the
-free plan. Both are attached to the same Cloudflare login.
+free plan, on the same login.
 
 ### 1. Create the tunnel
 
-In the Zero Trust dashboard go to Networks, then Tunnels & Mesh, and
-create a tunnel of type cloudflared named, for example, `cml-lab`.
-Cloudflare renames these menus now and then; in September 2026 the
-tunnel page has tabs Overview, CIDR routes, Hostname routes, Published
-application routes, and Live logs. On the install
-page pick Debian, 64-bit. The command it shows ends in a long token after
-`service install`. Copy only the token.
-
-Store it on the Mac where nothing tracked can see it:
+Zero Trust dashboard, Networks, Tunnels & Mesh, create a tunnel of type
+cloudflared, named for example `cml-lab`. On the install page pick Debian,
+64-bit. The command it shows ends in a long token after `service install`.
+Copy only the token and store it where nothing tracked can see it:
 
     umask 077
     printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' '<token>' > config/mcp-env/cloudflare-tunnel.env
@@ -74,8 +56,8 @@ into a tracked file, a commit message, or a chat.
 
 ### 2. Point the tunnel at CML
 
-Still in the tunnel, open the Published application routes tab, which
-older layouts called Public Hostname, and add one:
+In the tunnel, open Published application routes (older layouts call it
+Public Hostname) and add one:
 
 | Field | Value |
 |---|---|
@@ -84,99 +66,75 @@ older layouts called Public Hostname, and add one:
 | Service type | HTTPS |
 | URL | `localhost:443` |
 
-Under Additional application settings, TLS, turn on No TLS Verify. The
-origin certificate is self-signed and this is the switch that accepts it.
-Save. Cloudflare creates the DNS record for you, proxied. If an A record
-with that name already exists, delete it first, or the save fails.
+Under Additional application settings, TLS, turn on No TLS Verify; that is
+the switch that accepts the self-signed origin. Save. Cloudflare creates
+the proxied DNS record. If an A record with that name already exists,
+delete it first, or the save fails.
 
 ### 3. Put a login in front
 
 Zero Trust, Access controls, Applications, Add an application,
-Self-hosted. Name
-it, set the domain to the same name, and add an Allow policy whose
-include rule is your email address. One-time PIN to that address is on by
-default and needs no identity provider. Save.
+Self-hosted. Name it, set the domain to the same name, and add an Allow
+policy whose include rule is the Emails selector with each person's exact
+address. One-time PIN to that address is on by default and needs no
+identity provider. Save.
 
-### 4. Install the connector on the controller
+## After every CML build: install the connector
 
-Open a shell on the host. When sudo asks for a password, it wants the
-sysadmin password from the persistent root. Print that one only at the
-prompt.
+Do this after `scripts/20-up.sh` and `scripts/50-tunnels.sh up`, every
+time. The sudo password on the host is the persistent root's
+`sys_admin_password` output and the token is in
+`config/mcp-env/cloudflare-tunnel.env`; both travel over stdin and neither
+appears on a command line or in shell history. Run from the repo root:
 
-    ssh -p 1122 -i keys/cml-lab sysadmin@<public ip>
+    IP="$(terraform -chdir=terraform/persistent output -raw public_ip_address)"
+    {
+      terraform -chdir=terraform/persistent output -raw sys_admin_password; echo
+      sed -n 's/^CLOUDFLARE_TUNNEL_TOKEN=//p' config/mcp-env/cloudflare-tunnel.env
+    } | ssh -p 1122 -i keys/cml-lab -o UserKnownHostsFile=keys/known_hosts sysadmin@"$IP" '
+      IFS= read -r PW; IFS= read -r TOKEN
+      curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+      printf "%s\n" "$PW" | sudo -S dpkg -i /tmp/cloudflared.deb
+      printf "%s\n" "$PW" | sudo -S cloudflared service install "$TOKEN"
+      sleep 10
+      printf "%s\n" "$PW" | sudo -S journalctl -u cloudflared --no-pager | grep "Registered tunnel connection"'
 
-On the host, read the token into the shell without echoing it, then
-install:
+It worked when the last command prints four "Registered tunnel connection"
+lines. The journal also shows two warnings about ping groups and an ICMP
+proxy; ignore them, the tunnel carries HTTPS. The service keeps the token
+in `/etc/cloudflared/token`, root only, on the disposable VM.
 
-    read -rs CLOUDFLARE_TUNNEL_TOKEN
-    curl -fsSL -o /tmp/cloudflared.deb \
-      https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-    sudo dpkg -i /tmp/cloudflared.deb
-    sudo cloudflared service install "${CLOUDFLARE_TUNNEL_TOKEN}"
-    systemctl is-active cloudflared
-
-The service keeps the token in `/etc/cloudflared/token`, root only. That
-is on the disposable VM, which is gone at teardown, so it is fine. The
-journal shows two warnings about ping groups and an ICMP proxy at
-start. Ignore them; the tunnel carries HTTPS, not ping. The line to
-look for is "Registered tunnel connection", four times.
-
-### 5. Verify
+Then check from the outside:
 
 - The tunnel Overview shows Healthy, and its Connectors list shows
-  `cml-controller` as Connected with the lab's public IP as origin. If the
-  journal says "No ingress rules were defined", step 2 was not saved.
+  `cml-controller` as Connected. If the journal says "No ingress rules
+  were defined", step 2 was not saved.
 - `dig +short lab.<zone>` returns Cloudflare addresses. If it returns the
   lab IP, the old A record is still there.
 - The browser gets the Access one-time PIN page, then the CML login, with
-  a valid padlock and no warning.
-- Open a node console once a lab is running. Consoles use websockets and
-  Cloudflare carries them.
+  a valid padlock. Node consoles use websockets, which Cloudflare carries.
 
-Walked once on 2026-09-05 for `lab.rooez.com`. The certificate Cloudflare
-serves is Let's Encrypt for the zone, renewed by Cloudflare, nothing to
-do. A policy that says "Emails ending in gmail.com" admits every Gmail
-user; use the Emails selector with exact addresses for shared domains.
+The certificate is Let's Encrypt for the zone, renewed by Cloudflare.
 
 ## Adding a person
 
-The walkthrough to hand a new person is `docs/USER-GUIDE.md`, also
-published as a page at https://itsamemario0o.github.io/cml-phoenix/
-(GitHub Pages from `docs/`, served plain by `docs/.nojekyll`).
-`scripts/70-users.sh` makes the CML accounts and prints the emails to
-add to the policy below.
-
-Two doors, and both must open. Their email goes into the Access policy,
-as an exact address under the Emails selector, so Cloudflare lets them
-through to the login page. Their CML account comes from
-`scripts/70-users.sh`, which reads `config/mcp-env/users.csv`, creates
-what is missing, writes the generated passwords to a private sheet, and
-prints the email list for this policy (ADR 0007). A person with a CML account and no
-policy entry gets Cloudflare's not-authorized page and never sees CML.
-A person with a policy entry and no CML account sees the CML login and
-gets nowhere. And they must use the name, never the IP; the NSG admits
-only the operator's own addresses. Access sessions last 24 hours by
-default, so a second visit shows no prompt.
-
-## After a rebuild
-
-The tunnel shows Down while the VM is gone. After `scripts/20-up.sh`,
-repeat step 4 with the same token. Nothing in Cloudflare changes.
+Two doors, and both must open. Their email goes into the Access policy of
+step 3, as an exact address under the Emails selector. Their CML account
+comes from `scripts/70-users.sh` (ADR 0007), which prints the email list
+for the policy. A person with a CML account and no policy entry gets
+Cloudflare's not-authorized page; one with a policy entry and no CML
+account gets nowhere past the CML login. They use the name, never the IP,
+because the NSG admits only the operator's addresses. The page to hand
+them is https://itsamemario0o.github.io/cml-phoenix/, published from
+`docs/index.html`; `docs/USER-GUIDE.md` is the same text.
 
 ## Limits and what stays on the IP
 
-- The free plan caps a request at 100 MB, and a reference platform image
-  is several times that. Upload images over the IP or with SCP. The name
-  is for driving the lab, not for feeding it.
-- Keep `CML_URL` in `config/mcp-env/cml.env` pointing at the IP, and
-  leave `CML_API_BASE` on the forward. Access would block cml-mcp at the
-  name unless it carried a service token, and there is no reason to route
-  it that way.
-- SSH on 1122 and Cockpit on 9090 stay on the IP behind the NSG. Cockpit
-  can be published as a second hostname later if you want it behind
-  Access too.
-- The NSG allow-list still gates SSH and the scripts. Only the browser
-  stops caring about it.
+- The free plan caps a request at 100 MB, so images go over the IP or
+  SCP, never through the name.
+- `CML_URL` in `config/mcp-env/cml.env` stays on the IP and `CML_API_BASE`
+  on the forward. Access would block cml-mcp at the name.
+- SSH on 1122 and Cockpit on 9090 stay on the IP behind the NSG.
 
 ## Undo
 

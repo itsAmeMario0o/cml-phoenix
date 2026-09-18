@@ -3,8 +3,7 @@
 The short list of things only you can do: buy the license, download the
 software, sign in, get the Azure quota approved, and accept the ISE
 Marketplace terms. `docs/BUILD-FROM-SCRATCH.md` phase 0 gives the order to
-do them in; this document gives the detail. Written 2026-09-02, rewritten
-2026-09-17 for any operator.
+do them in; this document gives the detail.
 
 ## 1. Cisco license and software
 
@@ -129,7 +128,7 @@ take a while, and ask for the family and the regional total together:
 | VM | Size | Family | vCPUs |
 |---|---|---|---|
 | CML host | `Standard_E16ds_v6` to start | Standard Edsv6 Family | 16, or 32 for `E32ds_v6` |
-| ISE | `Standard_D8s_v4` | Standard DSv4 Family | 8 |
+| ISE | `Standard_D8s_v4`, the smallest size ISE 3.5 supports | Standard DSv4 Family | 8 |
 | Domain controller | `Standard_B2ms` | Standard BS Family | 2 |
 
 Preflight checks the first (`az vm list-skus` gives it the family name, so
@@ -140,13 +139,15 @@ Request. On the author's subscription the automatic approver refused every
 v5 family outright, and refused Edsv6 once at 32 before 64 went through; a
 `B2as_v2` for the DC had no quota at all, which is why it is `B2ms` (ADR
 0010). Spot instances draw from the same family quota, so the request is
-needed either way.
+needed either way. ISE's disk needs no quota; the portal form takes Volume
+Size 300 and Disk Storage Type Standard SSD, Cisco's supported minimum and
+a third of the idle disk cost of the defaults.
 
 ### 2.2 Accept the ISE Marketplace terms
 
-ISE deploys by hand from the Azure Marketplace (ADR 0008 and its
-amendment, `docs/ISE-MARKETPLACE-DEPLOY.md`). The subscription has to
-accept the image's terms once. Preflight checks this after
+ISE deploys by hand from the Azure Marketplace (ADR 0008; the form is in
+`docs/ISE-AD-BUILD.md`, Part 2). The subscription has to accept the
+image's terms once. Preflight checks this after
 `config/mcp-env/ise.env` exists and prints the exact
 `az vm image terms accept` command when the answer is no.
 

@@ -4,73 +4,117 @@ A handoff. "Current state" is rewritten at the end of every session and
 says where the build stands now; "Log" below it is the dated record,
 newest first. Read the first section before doing anything else in a new
 session, and the log when you need the story behind a line in it.
-Entries older than 2026-09-16 are in `docs/STATUS-ARCHIVE.md`.
+Entries older than 2026-09-17 are in `docs/STATUS-ARCHIVE.md`.
 
-## Current state, 2026-09-17
+## Current state, 2026-09-18
 
-Nothing is running in Azure. `rg-cml-lab` holds the persistent set and
-nothing else: the data disk with every image on it, the SSH key,
-`pip-cml-lab`, `rt-apps`, the VNet, and the storage account. The
-persistent plan was clean at the last teardown. The latest lab export
-is in blob under `exports/20260917T214927Z`, the untracked "cat9kv
-probe" lab among them.
+Running in Azure: CML 2.10, built today from nothing; `dc1`; and `ise1`
+on a 600 GB Premium disk, to be redeployed once (step 1 below).
+`lab.rooez.com` is up. Three labs are imported and stopped: the cat9kv
+probe, the TrustSec Phase 1 proof, and the Cilium EVPN fabric. The
+persistent plan is clean.
 
-Proven on live builds: CML built and destroyed from nothing, repeatedly,
-with images surviving on the disk; the routed path of ADR 0003 (a lab
-switch seen by ISE at its own address, RADIUS both ways, CoA back to the
-switch); MAB, EAP-MD5 and PEAP sessions on a Catalyst 9000v against ISE;
-the domain controller built by `24-ad-up.sh`; ISE joined to
-`corp.rooez.com` with a directory user authenticating over PEAP; pyATS
-`cilium-evpn` passing every check and `trustsec-phase1` passing two of
-three (CoA cannot fire on an edge with no endpoint session, by design).
+Proven today on a clean build, the five items yesterday's state listed as
+never run plus ADR 0012's forward: `06-transit.sh` ran from cloud-init and
+`bridge1` is up; `lab-transit-in` and `lab-transit-out` came from the
+fork; the SAM policy was set before the promotion reboot; the second
+`svc-ise` grant is present; an ISE deployed with the DC's address in the
+portal form joined the domain on the first call; and the `cml` SSH
+forward works against the controller's loopback, with cml-mcp answering
+through it. What was proven before today (the routed path, MAB, EAP-MD5,
+PEAP, pyATS) is in the log.
 
-Never run in a clean build, all expected to work, all to be checked on
-the next one: the fork's `06-transit.sh` from cloud-init and its
-`lab-transit-out` NSG rule; the SAM policy set by `10-promote-forest.ps1`
-before the promotion reboot; the second `svc-ise` grant in
-`30-create-identities.ps1`; and an ISE deployed with the DC's address in
-the portal form rather than repointed afterwards.
-
-Landed since the review, all on 2026-09-17 (PRs #20 to #25): the failure
-modes the review ranked first are fixed (the export loop, the ISE delete
-order with a re-list, the non-fatal `die`, `--skip-export`, re-render
-before destroy, the DNS check, `cml-mcp` pinned to 0.31.2); the
-PowerShell on the DC checks every native exit code; the credentials sheet
-appends as it goes; pyATS writes under `verify/`; `tests/test_*_run.sh`
-run six scripts for real against stubs that can fail, and found two more
-bugs on the way; and every controller login now rides the `cml` SSH
-forward (ADR 0012), so `scripts/50-tunnels.sh up` comes before any script
-that talks to CML. Nothing in that batch has run against Azure yet.
+Done by hand this session: the connector rescan
+(`PUT /api/v0/system/external_connectors`), the cloudflared reinstall,
+the three lab imports, and the domain join with its two groups. Not done
+yet: `sw1`'s network device on the new ISE, `70-users.sh`, and no lab has
+been started.
 
 Next steps, in order:
 
-1. Rotate the two CML passwords, which leaked into a session on
-   2026-09-17 and were never rotated (the log's early 2026-09-17 entry
-   says why the first claim of rotation was wrong). Operator's apply:
+1. The spec approved today,
+   `docs/specs/2026-09-18-persistent-ise-dc-and-script-consolidation-design.md`.
+   ISE and the DC persist between sessions by deallocation, the ten hand
+   touches fold into `20-up.sh`, `24-ad-up.sh`, and `25-ise-up.sh`, no
+   orchestrator, no state file. Its order of work, one PR each: redeploy
+   ISE onto 300 GB Standard SSD (portal, once; deallocate the current one
+   first, delete it after the new one is joined); `45-ise-down.sh` and
+   `46-ad-down.sh` deallocate by default; the start branch in
+   `24-ad-up.sh` and `25-ise-up.sh`; `ise_config.py` learns the join, the
+   groups, and NADs from data; `20-up.sh` gains the rescan, cloudflared,
+   the reimport, users, and the ready wait; then the docs and the ADR
+   0008 amendment.
+2. Rotate the two CML passwords. Declined today ("skip for now"), owed
+   since the 2026-09-17 leak. Operator's apply:
    `terraform -chdir=terraform/persistent apply -replace=random_password.app_admin -replace=random_password.sys_admin`.
-2. Make the next build a proving run and nothing else: `20-up.sh`,
-   `50-tunnels.sh up`, `90-smoke-test.sh` (now 13 checks, the forward
-   among them), `24-ad-up.sh`, the ISE portal deploy with the two values
-   `24-ad-up.sh` prints, `25-ise-up.sh --post-deploy`, then
-   `docs/ISE-AD-BUILD.md` Part 3 by hand. PR #24's body lists what only a
-   live build can prove about the forward. Success is the smoke test and a domain join without
-   touching a host. Record the result here.
-3. Then the rest of `docs/ARCHITECTURE-REVIEW.md`, "What to do, in
-   order". Items 8, 16, and 21 (the ADR 0010 bound, the documentation
-   cleanup, the OneDrive decision as ADR 0011) were done on 2026-09-17.
+3. Open and smaller, for whoever picks them up: an ISE certificate from
+   `corp-rooez-CA`; the Phase 2 implementation plan (spec:
+   `docs/specs/2026-09-17-trustsec-phase2-design.md`); the Cloudflare
+   tunnel token rotation owed since 2026-09-11; the rest of
+   `docs/ARCHITECTURE-REVIEW.md`, "What to do, in order".
 
-Still by hand on every new ISE until `ise_config.py` learns it: the join
-point, the join, the two groups, `cat9kv-sw1` as a NAD, its authorization
-rule, and the `trustsec-verify` identity the pyATS run needs. Still by
-hand after every CML rebuild: `70-users.sh`, the cloudflared reinstall in
-`docs/ACCESS.md`, and reimporting the labs.
-
-Open and older: an ISE certificate from `corp-rooez-CA`; the Phase 2
-implementation plan (the spec is
-`docs/specs/2026-09-17-trustsec-phase2-design.md`); the
-Cloudflare tunnel token rotation owed since 2026-09-11.
+Runbooks: `docs/BUILD-FROM-SCRATCH.md` for the order,
+`docs/ISE-AD-BUILD.md` for the directory (Part 1), the ISE deploy (Part
+2), and the join (Part 3), `docs/ACCESS.md` for cloudflared. Today's
+failures and their fixes are in `docs/LESSONS-LEARNED.md`.
 
 ## Log
+
+### 2026-09-18, the proving run: five items proven, ISE joined first try
+
+`20-up.sh` built CML 2.10 from nothing, 14 resources in about 22 minutes.
+The first `50-tunnels.sh up` right after it lost two of three tunnels to
+`kex_exchange_identification: Connection reset`, sshd throttling the
+simultaneous connections, and the first `90-smoke-test.sh` failed two
+checks seconds after the build, API not ready and license UNREACHABLE. A
+retry a minute later passed 13 of 13 (LESSONS-LEARNED). On the clean
+build: `06-transit.sh` ran from cloud-init and `bridge1` is up, both
+`lab-transit-in` and `lab-transit-out` are on the NSG from the fork, the
+`cml` forward of ADR 0012 works against the controller's loopback and
+cml-mcp answers through it, and the persistent plan is clean. The
+connector rescan was still by hand,
+`PUT /api/v0/system/external_connectors`.
+
+`24-ad-up.sh` promoted the forest with SAM policy 3 set before the
+reboot, verified, then failed at the CA step: `certutil -crl` right after
+`Restart-Service certsvc` returned `RPC_S_SERVER_UNAVAILABLE`. The old
+script had discarded that exit code; PR #21's `Invoke-Native` surfaced it.
+PR #27 waits for `certutil -ping` first; with it merged, the rerun
+resumed at the CA step and passed its three checks. The second `svc-ise`
+grant is present (CREATE CHILD and WRITE PROPERTY), all six identities
+exist, the `ise1` A record resolves, and the CA answers.
+
+The operator deployed ISE through the portal with DNS domain
+`corp.rooez.com` and name server 10.20.2.10; the login page was up 33
+minutes after Create. `25-ise-up.sh --post-deploy` failed once with
+`ise_config: ... HTTP 401`, because the first GUI login had not yet set
+the password to `ISE_ADMIN_PASSWORD`; after the login it passed: NSG,
+tags, network device `c8000v-edge`, rule `trustsec-poc`. The domain join
+returned 204 on the first call, `getGroupsByDomain` listed the groups,
+`addGroups` returned 204, and `mario` is in `Mushroom-Kingdom` and
+`bowser` in `Koopa-Troop`. No DC restart. That is all five "never run in
+a clean build" items from yesterday's state, plus ADR 0012's forward.
+
+cloudflared was reinstalled by hand (sudo password from the persistent
+output, the token over stdin), 4 registrations, `lab.rooez.com` up. Three
+labs were re-imported by hand and left stopped: the cat9kv probe and the
+TrustSec Phase 1 proof from `exports/20260917T214927Z`, and the Cilium
+EVPN fabric from `exports/20260917T025148Z`, missed for two builds because
+nobody looked in the older export folder (LESSONS-LEARNED). `sw1`'s NAD is
+not on the new ISE yet, `70-users.sh` has not run, and no lab has started.
+
+Merged today: #26 (lessons, README order), #27 (the CA wait), #28 (the
+spec for a persistent ISE and DC, the hand steps folded into the
+scripts), and #29 (scaffolding: `docs/specs`, `docs/plans`,
+`docs/archive`; `config/ise/README.md` gone). The spec decides that ISE
+and the DC persist between sessions by deallocation, that the next ISE
+deploy uses 300 GB Standard SSD, that the ten hand touches fold into
+`20-up.sh`, `24-ad-up.sh`, and `25-ise-up.sh`, and that there is no
+orchestrator and no state file. The CML password rotation was declined
+today ("skip for now") and stays owed.
+
+Running in Azure: CML, `dc1`, and `ise1` on 600 GB Premium, to be
+redeployed once per the spec.
 
 ### 2026-09-17, end of day: everything torn down, nothing running
 
@@ -471,7 +515,7 @@ omitted steps):
    its only surviving copy is the blob export
    `exports/20260917T025148Z/cat9kv-probe-f13f801f-ab62-4436-a788-f04827ad6684.yaml`.
    Rerun `70-users.sh` after importing so the grants cover both labs.
-5. ISE: portal deploy per `docs/ISE-MARKETPLACE-DEPLOY.md`, then
+5. ISE: portal deploy per `docs/ISE-AD-BUILD.md` Part 2, then
    `scripts/25-ise-up.sh --post-deploy`, which now tags the NIC and
    public IP too. Note which SSH public key the deploy is given; the ISE
    CLI is key-only and step 6 needs it. Re-add `cat9kv-sw1` (10.100.0.3)
@@ -490,156 +534,3 @@ omitted steps):
    silent, the Live Log drop reason says why. Only after RADIUS answers:
    the first MAB session on `ep1`, then the Phase 2 spec with FTDv and
    Kali (`docs/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`).
-
-### 2026-09-16, TrustSec Phase 2 scoped: profiling, and why it needs a real switch
-
-Brainstormed folding ISE profiling into the TrustSec lab. The real goal
-behind it: the operator has to show Cisco, and a customer, that ISE
-profiling can approach ForeScout's current agentless NAC and inventory
-capability, ahead of migrating a real environment off ForeScout/Arista
-onto ISE/Cisco. A standalone Nexus/SNMP profiling proof was considered
-and scrapped in favor of building profiling into the TrustSec lab
-itself, since it belongs on the access layer either way.
-
-That raised a real question rather than an assumed one: can the Phase 1
-C8000v carry the access-layer story alone, or is a Catalyst 9000v
-switch required. Tested live against the `edge` node's
-GigabitEthernet2 instead of guessing: `switchport mode access` is
-flatly rejected (no switchport concept on a router), while `mab`,
-`dot1x pae authenticator`, and legacy `authentication port-control
-auto` are all syntactically accepted. Testing the newer
-`access-session port-control auto` (IBNS 2.0) tripped its own
-irreversible CPL-conversion prompt, which resolved to its default
-"yes" on its own from a stray keystroke in the test script before it
-could be declined; GigabitEthernet2 now carries a converted
-`access-session` config and an autogenerated `service-policy type
-control subscriber POLICY_Gi2` in running-config only, interface still
-down, nothing saved to startup, so a reload reverts it. Net finding:
-confirms the operator's own instinct, a real Catalyst switch is needed
-for genuine endpoint-facing NAC and profiling. The C8000v's role stays
-what Phase 1 proved, RADIUS and CoA transport, not the access edge.
-
-Checked what a Catalyst 9000v would actually cost before planning
-further. Both flavors, `cat9000v-uadp` and `cat9000v-q200`, are already
-on the downloaded `refplat-20260409-fcs.iso`, no new download needed.
-Read both real node definitions off the ISO: both are true switches
-with 24 physical switchports plus a management port, both run IOS-XE's
-`cat9k` pyATS series, both point at the same Catalyst 9300 series
-documentation. The only differences are RAM, 18 GB for UADP against 12
-for Q200, and the ASIC each simulates. Leaning UADP, the ASIC family
-behind real wiring-closet access switches, but that is not yet decided.
-
-Also traced how new images actually reach a running lab, so the
-teardown question has a real answer: uploading to blob
-(`config/refplat.txt` plus `scripts/10-upload-images.sh`) is safe
-against Azure storage alone and needs no CML VM running. A CML VM only
-learns a new node definition at its own boot-time provisioning, so the
-switch becomes available on the next ordinary teardown and rebuild,
-which this environment already does every session; no special or extra
-destroy is required.
-
-Full findings, the live test output, and the open questions (UADP or
-Q200, where the switch sits relative to the C8000v, what plays the
-endpoint, how much of the operator's five-step SNMP profiling procedure
-ISE can reproduce) are in
-`docs/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`.
-No lab YAML, refplat, or node-definition file changed yet; brainstorming
-is not done.
-
-Also merged PR #7 and PR #8, both left open from the ISE deploy session
-below, so `main` carries one clean line into the next session.
-
-### 2026-09-16, ISE deployed and TrustSec Phase 1 policy live
-
-ISE 3.5 deployed by hand through the Azure Marketplace portal, per
-`docs/ISE-MARKETPLACE-DEPLOY.md`, at `10.20.2.20` (`ise1`, East US 2,
-`Standard_D8s_v4`). `scripts/25-ise-up.sh --post-deploy` then completed
-clean end to end: `ise-nsg` created and attached (RADIUS from the lab
-summary, admin 443/22 from the CML host only), VM and disk tagged
-`role=ise`, readiness confirmed through the CML jump, and the TrustSec
-Phase 1 policy applied for real: `c8000v-edge` registered as a RADIUS
-network device over ERS, the `trustsec-poc` authorization rule created
-under the OpenAPI. `terraform -chdir=terraform/persistent plan` shows no
-changes; the deploy didn't disturb `rt-apps`.
-
-Getting there took two more real bugs in `scripts/lib/ise_config.py`,
-neither ever exercised against real ISE before this deploy:
-
-- `main()` defaulted the admin username to `"admin"`; the Marketplace
-  image's account is always `iseadmin`, fixed by the deploy wizard, not
-  customizable. Every ERS call 401'd with the correct password until
-  fixed.
-- The OpenAPI client assumed bare JSON arrays and flat rule objects.
-  Real ISE 3.5 wraps everything in a `{"version", "response"}` envelope,
-  and an authorization rule's own fields nest under a `"rule"` key
-  alongside `"profile"`. Verified all three real shapes (GET policy-set,
-  GET .../authorization, and an actual POST creating `trustsec-poc`)
-  directly against the live node before writing the fix.
-
-Also along the way: the repo's own `keys/known_hosts` had gone stale
-(a different host key than the live CML host presents), breaking
-`scripts/50-tunnels.sh`; fixed directly since that file lives inside the
-repo. Added an `ise` entry to `config/tunnels.conf` (gitignored, not
-previously created) forwarding local `8443` to ISE's admin GUI over
-443, since ISE's private IP has no route from the Mac and all admin
-access goes through the CML jump (ADR 0003): the NSG's admin rule only
-allows the CML host's own address, not the Mac's, even via ISE's public
-IP.
-
-Not fixed, not needed for this phase: ISE raises a `DNS Resolution
-Failure` alarm for its own FQDN (`ise1.rooez.com`, no public record
-ever created for it). Cosmetic for a standalone lab node; acknowledged
-and left as is.
-
-### 2026-09-16, Cilium EVPN fabric verified live, pyATS layer fixed end to end
-
-The operator finished pushing `BUILD-ORDER.md`'s seven layers onto all
-six switches, by hand from iTerm over the console-server SSH path.
-`scripts/80-verify-lab.sh cilium-evpn` then ran for real, for the first
-time ever against this fabric: `common_setup`, `BgpEvpnNeighborsEstablished`,
-and `VnisUp` all `PASSED`, 100% success rate. Genie-parsed, not raw text,
-so this is a real independent confirmation the fabric is correct, not
-just that the operator's own `show` commands looked right.
-
-Getting there took five bug fixes to the pyATS layer itself, all latent
-since ADR 0009 landed and never caught because nothing had run this
-layer live before now:
-
-- AEtest never discovers a `CommonSetup`/`CommonCleanup` subclass that
-  is merely imported, not defined, in the testscript's own module.
-  Both scenarios' shared-code pattern hit this; setup and cleanup
-  silently never ran. Fixed with a thin local re-declaration per
-  scenario.
-- `scripts/80-verify-lab.sh` invoked `easypy` by its full venv path,
-  which never puts the venv's `bin/` on `PATH`; `easypy`'s own pre-job
-  plugin shells out to the bare `pyats` command and aborted every run
-  before any testcase started. Fixed.
-- `gen_testbed.py` wrote out CML's `/pyats_testbed` export unmodified.
-  That export always leaves the `terminal_server` proxy device (the
-  console server every connection tunnels through) as a
-  `change_me`/`change_me` placeholder, and separately defaults every
-  real device's own credentials to a generic `cisco`/`cisco` guess,
-  wrong for the NX-OS switches (`admin`) and for `kind-host`
-  specifically (`kindops`, not `cisco`, per `labs/README.md`'s node
-  table). Fixed with two patch steps and `LAB_PASSWORD` wired in from
-  `labs.env` (already sourced, no script changes needed). The
-  `kind-host` case needed connecting to each device individually with
-  verbose output to catch, since the generic fix alone still failed.
-- `VnisUp` assumed every NX-OS device runs NVE. The spines
-  route-reflect EVPN but never terminate a VTEP, so `show nve vni`
-  does not exist there at all. Fixed by skipping a device where the
-  command itself is unsupported instead of erroring the whole check.
-
-All five fixes are on `main`, each with new unit tests. Along the way,
-corrected an earlier answer given in chat: the red/blue endpoint
-password is `LAB_PASSWORD` in `config/mcp-env/labs.env`, not
-`LAB_USER_PASSWORD` (the shared human CML-login password); the two were
-conflated when originally asked.
-
-Next: an ISE deploy, by hand through the Azure portal per
-`docs/ISE-MARKETPLACE-DEPLOY.md` (ADR 0008 amendment; the automated
-`az deployment group create` path stays retired). `config/mcp-env/ise.env`
-is already fully populated from earlier work; no ISE resources exist in
-Azure right now (`role=ise` tag search is empty). The Cilium-BGP-peering
-step from `BUILD-ORDER.md`'s closing section, and the Cloudflare tunnel
-token rotation from 2026-09-11, are still open and unrelated to this.

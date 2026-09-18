@@ -109,7 +109,7 @@ experience that ISE deploys by hand through the portal and fails through
 provisioning tools.
 
 So the deploy step moves to the portal. The reliable procedure, with our
-environment's exact fields, is `docs/ISE-MARKETPLACE-DEPLOY.md`. The
+environment's exact fields, is `docs/ISE-AD-BUILD.md`, Part 2. The
 `az deployment group create` path in `scripts/25-ise-up.sh` is retired for
 the create; the NSG, tagging, readiness, policy, and teardown tooling still
 apply after the portal deploy. The failed run left the persistent root
@@ -120,4 +120,33 @@ time, though the check stays a deploy-time gate.
 Two directions follow, both deferred and tracked on the roadmap: make the
 `cisco.ise` Ansible collection the default ISE configuration layer, and adopt
 the ISE Eternal Evaluation (ISEEE) patterns to make a per-session ISE
-practical without a fresh portal deploy every time.
+practical without a fresh portal deploy every time. (The second was
+superseded on 2026-09-18 by the decision to keep ISE between sessions; see
+the amendment below and roadmap item 24.)
+
+## Amendment, 2026-09-18: the form carries the DC's DNS, and ISE is kept between sessions
+
+The decision stands. Two things the portal deploy of 2026-09-18 settled.
+
+The form is enough to tie ISE to the directory. An ISE deployed with DNS
+domain name `corp.rooez.com` and Primary Name Server `10.20.2.10`, the
+two values `scripts/24-ad-up.sh` prints, came up as `ise1.corp.rooez.com`
+resolving through the DC, joined the domain on the first call, and needed
+no CLI repoint. The repoint is now the exception path for an ISE deployed
+before the DC (`docs/ISE-AD-BUILD.md`, Part 2).
+
+ISE will no longer be destroyed per session once the spec below lands.
+The operator decided on
+2026-09-18 to build it once and deallocate it between sessions, so the
+portal form is filled in once per evaluation instead of once per session.
+Deallocated compute is not billed; the disk is, by tier, so the next
+deploy takes Volume Size `300` on `Standard SSD` instead of 600 GB
+Premium. Cisco allows 300 to 2400 GB on Premium SSD, Standard SSD or HDD,
+and `Standard_D8s_v4` stays, as the smallest instance ISE 3.5 supports.
+Idle disk cost falls from about $123 to $38 a month, East US 2 list. A
+managed disk cannot shrink, so the current ISE is redeployed once. The
+exit is the 90 day evaluation: when it expires, ISE is destroyed and
+deployed again from the form. The scripts that start and deallocate, and
+the join folded into `25-ise-up.sh`, are
+`docs/specs/2026-09-18-persistent-ise-dc-and-script-consolidation-design.md`,
+not yet built.

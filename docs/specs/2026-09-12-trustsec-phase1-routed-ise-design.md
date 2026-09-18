@@ -4,7 +4,7 @@
 > since evolved twice: the `terraform/ise` root it describes was dropped for a
 > `az deployment group create` deploy (ADR 0008), which was then itself retired
 > when ISE terminally failed Azure OS provisioning. ISE is now deployed by hand
-> through the portal (ADR 0008 amendment; `docs/ISE-MARKETPLACE-DEPLOY.md`).
+> through the portal (ADR 0008 amendment; `docs/ISE-AD-BUILD.md (Part 2)`).
 > The routed-path design (the transit bridge, the C8000v edge, the no-NAT
 > requirement) still stands; only the ISE deploy mechanism changed.
 

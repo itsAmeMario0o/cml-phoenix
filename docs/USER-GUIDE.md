@@ -50,14 +50,12 @@ please ask the owner.
 
 ## When something is off
 
-- **"Not authorized" from Cloudflare.** Your email is not yet on the
-  access list. Ask the owner to add it.
-- **The code never arrives.** Check your spam folder, then confirm with
-  the owner that they used the correct address.
-- **CML rejects your login.** Your username is your full email address,
-  not just the portion before the @. If that is correct, the password may
-  be wrong, so check with the owner.
-- **No labs are listed.** The owner has not shared any with you yet.
+| What you see | What it means |
+|---|---|
+| "Not authorized" from Cloudflare | Your email is not on the access list yet. Ask the owner to add it. |
+| The code never arrives | Check your spam folder, then confirm with the owner that they used the right address. |
+| CML rejects your login | Your username is your full email address, including the part after the @. If that is right, the password may be wrong; check with the owner. |
+| No labs are listed | The owner has not shared any with you yet. |
 
 ## For the lab owner
 

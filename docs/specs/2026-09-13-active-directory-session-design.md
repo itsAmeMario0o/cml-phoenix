@@ -307,7 +307,7 @@ then the ISE internal user path still works and the env example says so.
    the ISE portal form needs: primary name server `10.20.2.10` and domain
    `corp.rooez.com`. About fifteen minutes end to end, most of it the
    Windows first boot and the reboot after promotion.
-2. The ISE portal deploy, per `docs/ISE-MARKETPLACE-DEPLOY.md`, with those
+2. The ISE portal deploy, per `docs/ISE-AD-BUILD.md (Part 2)`, with those
    two values entered.
 3. `scripts/25-ise-up.sh --post-deploy`, unchanged: the NSG, tagging,
    readiness, and policy steps. Then `scripts/50-tunnels.sh up` for the

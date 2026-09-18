@@ -3,14 +3,14 @@
 Two servers sit side by side on the apps subnet and between them answer the
 lab's identity questions. ISE decides who and what gets on the network.
 Active Directory is where the people are, and it also runs the two services
-ISE leans on: DNS and a certificate authority. This document explains how
-the directory is built, what runs on it, who is in it, and how ISE uses it.
-The commands themselves, in build order with what each prints, are in
-`docs/ISE-AD-BUILD.md`.
+ISE leans on: DNS and a certificate authority. This document says what the
+directory is, what runs on it, who is in it, and how ISE uses it. The
+commands, in build order with what each prints, are `docs/ISE-AD-BUILD.md`.
 
-Both are disposable. Neither holds anything that a script and a tracked file
-cannot rebuild, and neither bills between sessions. The decisions behind that
-are ADR 0008 for ISE and ADR 0010 for the directory.
+Today both are built and destroyed per session (ADR 0008, ADR 0010). The
+decision of 2026-09-18 is to build them once and deallocate them between
+sessions: `docs/specs/2026-09-18-persistent-ise-dc-and-script-consolidation-design.md`,
+not yet built.
 
     snet-apps 10.20.2.0/24
     +---------------------------+        +---------------------------+
@@ -35,93 +35,66 @@ are ADR 0008 for ISE and ADR 0010 for the directory.
 | Image | Windows Server 2025 Datacenter, `2025-datacenter-smalldisk-g2` |
 | Size | `Standard_B2ms`, 2 vCPU and 8 GB, burstable, because a lab DC idles |
 | Disk | The image's own 30 GB OS disk, Standard SSD. No data disk |
-| Patching | Off. It has no route to Windows Update and lives for one session |
+| Patching | Off. It has no route to Windows Update |
 | Built by | `terraform/ad`, a root of its own with local state (ADR 0010) |
 
-Windows stays in its activation grace period for the life of a session. That
-is accepted; nothing in a lab session outlasts it.
-
-The image is deliberately not an `azure-edition` one. Those are hotpatch
-images, which Azure only accepts with platform-managed patching, and the
-first build was refused for it.
+The image is not an `azure-edition` one on purpose: those are hotpatch
+images, which Azure accepts only with platform-managed patching. Windows
+stays in its activation grace period.
 
 ## How the directory is constructed
 
 `scripts/24-ad-up.sh` runs `terraform apply`. Terraform creates the VM and
-then hands it three PowerShell scripts, one after another, as Azure run
-commands. Each script checks its own state first, and `24-ad-up.sh` clears
-any run command that failed before it applies again, so running the whole
-thing after a failure only does what is left. The order matters, and the
-reasons are below.
+hands it three PowerShell scripts, one after another, as Azure run
+commands. Each script skips what already exists, and `24-ad-up.sh` clears
+any failed run command before it applies again, so a rerun after a failure
+does only what is left. The 2026-09-18 build proved that by resuming at
+the CA stage after a fix.
 
-**1. `scripts/ad/10-promote-forest.ps1`: a server becomes a forest.**
-It installs the AD DS and DNS roles and calls `Install-ADDSForest` for
-`corp.rooez.com`, NetBIOS name `CORP`, with a Directory Services Restore Mode
-password that Terraform generated and that is never written anywhere else.
-It also sets one SAM policy value that ISE's join depends on, ahead of the
-reboot that puts it into effect (the ISE section below has the reason).
-Promotion needs a reboot. The script schedules it fifteen seconds out instead
-of taking it at once, so the run command can report success before the
-machine goes down. If the server is already a domain controller, it says so
-and stops.
+1. `scripts/ad/10-promote-forest.ps1` installs AD DS and DNS and calls
+   `Install-ADDSForest` for `corp.rooez.com`, NetBIOS `CORP`, with a
+   restore mode password Terraform generated and stores nowhere else. It
+   also sets the SAM policy value ISE's join depends on, ahead of the
+   promotion reboot that puts it into effect (the ISE section has why).
+   The reboot is scheduled fifteen seconds out so the run command can
+   report success first.
+2. `scripts/ad/20-install-ca.ps1` sets the DNS forwarder, installs
+   certificate services, and creates the CA. It cannot run as SYSTEM: an
+   Enterprise CA writes into the forest's configuration partition, which
+   takes Enterprise Admins, and SYSTEM on a DC is only the machine account.
+3. `scripts/ad/30-create-identities.ps1` reads `config/ad-identities.csv`,
+   creates the groups and users, creates `svc-ise`, and adds ISE's DNS
+   records.
 
-**2. `scripts/ad/20-install-ca.ps1`: DNS forwarding, then the CA.**
-It points the DNS server's forwarder at Azure's resolver, installs the
-certificate services role, and creates the certification authority. This
-script cannot run as SYSTEM like the first one. An Enterprise CA writes into
-the forest's configuration partition, which takes membership of Enterprise
-Admins, and SYSTEM on a domain controller is only the machine account. It
-runs as `CORP\labadmin`, and getting it there takes a wrapper, described
-next.
+Stages 2 and 3 run as `CORP\labadmin` through
+`scripts/ad/run-as-admin.ps1`, because Azure's run-as option looks the
+user up as a local account and a domain controller has none. The wrapper
+runs as SYSTEM, waits up to twenty five minutes for `Get-ADDomain` to
+answer (a domain logon before that is how the first build died), then
+runs the inner script from `C:\lab\bin` as a one-shot scheduled task
+under `CORP\labadmin`, which gets the full logon token an Enterprise CA
+install needs. The inner script's arguments, passwords included, reach
+the task through a file only administrators can read, deleted afterward.
 
-**3. `scripts/ad/30-create-identities.ps1`: people, a service account, and
-ISE's name.** It reads `config/ad-identities.csv`, creates the groups and
-users, creates `svc-ise`, and adds ISE's DNS records. It also runs as
-`CORP\labadmin`, through the same wrapper.
-
-**The wrapper, `scripts/ad/run-as-admin.ps1`.** Azure's run command has a
-run-as option, and it does not work here: it looks the user up as a local
-account, and a domain controller has none. So steps 2 and 3 are delivered
-inside a small wrapper that runs as SYSTEM. It waits, up to twenty five
-minutes, for `Get-ADDomain` to answer, which is the signal that the reboot
-finished and the directory is up; a domain logon attempted before that
-fails, which is how the first build died. Then it writes the inner script to
-`C:\lab\bin`, registers a one-shot scheduled task as `CORP\labadmin` with
-that account's password, runs it, waits for it, prints the end of its
-transcript, and removes the task. A scheduled task gets a full logon token,
-which an Enterprise CA install needs and a remote session would not give.
-The inner script's arguments, passwords among them for step 3, travel as one
-protected parameter and reach the task through a file that only
-administrators can read and that is deleted afterward. Nothing sensitive
-appears on a command line.
-
-The forest call and the CA's values come from scripts the operator already
-trusted on AWS (the `cfn-ps-microsoft-activedirectory` and
-`cfn-ps-microsoft-pki` Quick Start forks), with the AWS wrapping taken off:
-no SSM parameters, no Secrets Manager, no CloudFormation signals, no S3.
-
-Every script writes a transcript on the server under `C:\lab\log`, named
-after itself. That is the first place to look when something went wrong.
+The forest call and the CA's values come from the operator's AWS Quick
+Start forks with the AWS wrapping taken off. Every script writes a
+transcript under `C:\lab\log`, named after itself. Look there first.
 
 ## What runs on it
 
 ### Active Directory Domain Services
 
 One forest, one domain, one domain controller. `dc1` holds all five
-operations master roles and is a global catalog, which is simply what the
-first controller of a new forest is. With AD DS come the protocols a
-directory speaks: Kerberos on 88, LDAP on 389 and 636, the global catalog on
-3268 and 3269, SMB on 445 for SYSVOL and NETLOGON, and RPC for replication
-and management. There are no organizational units beyond the defaults, no
-group policy of our own, and no second controller. Users live in the default
-`Users` container and joined machines land in `Computers`.
+operations master roles and is a global catalog, as the first controller
+of a new forest is. No organizational units beyond the defaults, no group
+policy of our own, no second controller. Users live in the default `Users`
+container and joined machines land in `Computers`.
 
 ### DNS
 
-`dc1` is the authoritative DNS server for `corp.rooez.com`, in an Active
-Directory integrated zone that promotion created. It holds the service
-records that let a client find the domain, which is what ISE follows when it
-joins.
+`dc1` is the authoritative DNS server for `corp.rooez.com`, in the zone
+promotion created. It holds the service records a client follows to find
+the domain, which is what ISE does when it joins.
 
 | Record | Value | Why |
 |---|---|---|
@@ -129,26 +102,21 @@ joins.
 | `ise1.corp.rooez.com` | 10.20.2.20 | Added by the identities script, with a PTR |
 | `2.20.10.in-addr.arpa` | reverse zone | So ISE's address resolves back to its name |
 
-Everything the server is not authoritative for goes to one forwarder,
-168.63.129.16. That is Azure's own resolver, reachable from any VM in a
-virtual network without an internet route, so the DC can answer public names
-(ISE needs a few, Security Cloud Control and Entra among them) while having
-no way out itself.
+Everything else goes to one forwarder, 168.63.129.16, Azure's resolver,
+reachable from any VM without an internet route. So the DC answers public
+names (ISE needs Security Cloud Control and Entra) with no way out itself.
 
-The domain is `corp.rooez.com` and not `rooez.com` on purpose.
-`lab.rooez.com` is the Cloudflare front door to CML and lives in the public
-zone. A child zone does not shadow it; the apex would.
-
-Nothing at the virtual network level points at this server. The VNet keeps
-Azure DNS, so the CML host and everything else resolve as they always have.
-A machine uses the DC for DNS only when it is told to: ISE through its
-deployment form, a domain-joined lab endpoint through its own settings.
+The domain is `corp.rooez.com` and not `rooez.com` on purpose:
+`lab.rooez.com`, the Cloudflare front door to CML, lives in the public
+zone, and a child zone does not shadow it where the apex would. Nothing
+at the virtual network level points at this server; the VNet keeps Azure
+DNS. A machine uses the DC for DNS only when told to: ISE through its
+deployment form, a lab endpoint through its own settings.
 
 ### Active Directory Certificate Services
 
-One tier: an Enterprise Root CA on the domain controller itself. A real PKI
-would keep the root offline and issue from a subordinate. A lab that is
-destroyed every night has nothing for that to protect.
+One tier: an Enterprise Root CA on the domain controller itself. A real
+PKI keeps the root offline; a lab has nothing for that to protect.
 
 | | |
 |---|---|
@@ -161,36 +129,27 @@ destroyed every night has nothing for that to protect.
 | CRL overlap | 12 hours (`CRLOverlapUnits`; the Quick Start's `CRLOverlapPeriodUnits` is a value nothing reads) |
 | Auditing | filter 127, every CA event |
 
-One setting exists for ISE's sake: domain controllers are granted the right
-to enroll from the built-in `WebServer` template, which is the template ISE's
-certificate is issued from. That is what lets a certificate request be signed
-by a command sent to the DC, without anyone logging in to it.
-
-One setting is absent on purpose. An ISE certificate needs its subject
-alternative names, and a common recipe for that is a CA flag,
-`EDITF_ATTRIBSUBJECTALTNAME2`, that lets whoever submits a request attach
-SANs to it. The lab does not set it. ISE writes its SANs inside the request
-itself, `WebServer` is a template that takes the subject from the request,
-and the CA copies them into the certificate as they are. The flag is a
-well-known way to escalate privileges through a CA, and Windows Server 2025's
-`certutil` no longer accepts its name.
-
-Because it is an Enterprise CA, its root certificate is published into the
-directory, and any machine that joins the domain trusts it automatically.
+One setting exists for ISE's sake: domain controllers may enroll from the
+built-in `WebServer` template, so ISE's certificate request can be signed
+by a command sent to the DC. One setting is absent on purpose. `EDITF_ATTRIBSUBJECTALTNAME2` lets
+whoever submits a request attach subject alternative names to it. ISE
+writes its SANs inside the request, `WebServer` takes the subject from the
+request, and the CA copies them as they are. The flag is a known way to
+escalate privileges through a CA, and Server 2025's `certutil` no longer
+accepts its name. As an Enterprise CA, its root certificate is published
+into the directory, and any machine that joins the domain trusts it.
 
 ### Time
 
-`dc1` holds the PDC emulator role, which makes it the domain's time source.
-It takes its own time from the Azure host it runs on (`w32tm` reports the
-`VM IC Time Synchronization Provider`), not from an internet server. ISE takes its time from
-`time.google.com`, set at deployment. Kerberos tolerates five minutes of
-difference, and both track real time closely enough that this has not
-needed attention.
+`dc1` holds the PDC emulator role, so it is the domain's time source; it
+takes its own from the Azure host (`w32tm` reports the `VM IC Time
+Synchronization Provider`). ISE uses `time.google.com`, set at deployment.
+Kerberos tolerates five minutes of difference; both are well inside it.
 
 ## Who is in the directory
 
-The people come from a tracked file, `config/ad-identities.csv`, so the
-directory is the same every time it is built.
+The people come from `config/ad-identities.csv`, tracked, so the directory
+is the same every time it is built.
 
 | Account | Display name | Group |
 |---|---|---|
@@ -200,28 +159,25 @@ directory is the same every time it is built.
 | `yoshi` | Yoshi | `Mushroom-Kingdom` |
 | `bowser` | Bowser Koopa | `Koopa-Troop` |
 
-`Mushroom-Kingdom` stands for employees and `Koopa-Troop` for contractors,
-one of each for when an ISE authorization rule needs to tell two kinds of
-people apart. Both are global security groups. Every user in the file shares
-one password, their passwords never expire, and their sign-in name is
-`name@corp.rooez.com`. To add someone, add a row and run
-`scripts/24-ad-up.sh` again; the script creates only what is missing.
+`Mushroom-Kingdom` stands for employees and `Koopa-Troop` for
+contractors, so an authorization rule can tell two kinds of people apart.
+Both are global security groups. Every user in the file shares one
+password, never expiring, and signs in as `name@corp.rooez.com`. To add
+someone, add a row and run `scripts/24-ad-up.sh` again.
 
 Two accounts are not in the file:
 
-- **`CORP\labadmin`** is the administrator. It begins as the VM's local
-  administrator, and promotion turns that account into the domain's built-in
-  Administrator, a member of Domain Admins and Enterprise Admins.
-- **`svc-ise`** is the account ISE joins the domain with. It is an ordinary
-  user with two delegations on the `Computers` container. It may create
-  computer objects there, because ISE creates its own when it joins. It may
-  also write the properties of the computer objects beneath it, because ISE
-  records its operating system, version, and encryption types on its object,
-  and an object's creator is not allowed to write those three. A join does
-  not depend on the second grant, but without it the join's log fills with
-  denied writes that look like a cause and are not (`docs/ISE-AD-BUILD.md`,
-  Part 3). ISE joined with it on 2026-09-17. The account is made by the
-  script and not the CSV so that no row in that file is secretly special.
+- `CORP\labadmin` begins as the VM's local administrator; promotion turns
+  it into the domain's built-in Administrator, in Domain Admins and
+  Enterprise Admins.
+- `svc-ise` is the account ISE joins with: an ordinary user with two
+  grants on the `Computers` container. Create computer objects, because
+  ISE creates its own when it joins. Write property on those objects,
+  because ISE records its operating system, version, and encryption types
+  there and an object's creator may not write those three; the join works
+  without this grant, but its log then fills with denied writes that look
+  like a cause and are not. The script makes the account, not the CSV, so
+  no row in that file is secretly special.
 
 ### Passwords
 
@@ -234,217 +190,110 @@ Terraform generates four and none of them is ever typed.
 | `svc-ise` | 24 with symbols | `AD_SVC_ISE_PASSWORD` in `ad.env` |
 | Directory Services Restore Mode | 24 with symbols | Nowhere. Nothing outside the VM needs it |
 
-`config/mcp-env/ad.env` is written at mode 0600 and is gitignored. The script
-that writes it never prints a value. The passwords also sit in this root's
-local Terraform state file, which is protected only by `.gitignore` and the
-Mac's disk. That is a weaker guarantee than the persistent root's blob state
-and it is accepted, because the state and everything it protects end with
-the session.
+`config/mcp-env/ad.env` is mode 0600, gitignored, and no value is ever
+printed. The passwords also sit in this root's local Terraform state,
+protected only by `.gitignore` and the Mac's disk (ADR 0011); accepted.
 
 ## ISE
 
-ISE 3.5 runs from Cisco's Azure Marketplace image as `ise1` at 10.20.2.20, on
-a 90 day evaluation that a fresh deploy renews. The deploy itself is done by
-hand in the portal, because deploying that image through Azure's API fails
-(`docs/ISE-MARKETPLACE-DEPLOY.md`, ADR 0008). Everything after the portal is
-`scripts/25-ise-up.sh --post-deploy`: its network security group, tags, a
-wait for ISE to answer, and its policy, applied as code by
-`scripts/lib/ise_config.py`.
-
-What ISE held before the join, all of it created through its APIs:
-
-| Object | Value |
-|---|---|
-| Network devices | `c8000v-edge` 10.100.0.2, `cat9kv-sw1` 10.100.0.3, RADIUS with a shared secret |
-| Authorization rules | `trustsec-poc` and `trustsec-poc-sw1`, permit access by the device's address |
-| Internal user | `trustsec-verify`, a throwaway identity the pyATS check authenticates as |
-
-Against that, the lab had proven RADIUS, MAB, CoA, and 802.1X with PEAP,
-all with ISE's own internal users, before the directory existed
-(`docs/STATUS.md`, 2026-09-17). The join point, the join, and the two
-selected groups were added by hand the same night and are not in
-`ise_config.py` yet; the state table below has where each item stands.
+ISE 3.5 runs from Cisco's Azure Marketplace image as `ise1` at 10.20.2.20,
+on a 90 day evaluation. The deploy is by hand in the portal, because that
+image fails through Azure's API (ADR 0008); the form is
+`docs/ISE-AD-BUILD.md`, Part 2. After the form and one first login,
+`scripts/25-ise-up.sh --post-deploy` attaches the network security group,
+tags the VM, OS disk, NIC and public IP, waits for ISE to answer, and
+creates the network device `c8000v-edge` with the rule `trustsec-poc`
+(`scripts/lib/ise_config.py`). `cat9kv-sw1` and its rule, the join, and
+the groups are still by hand; the spec moves them into the script.
 
 ### What the directory changes for ISE
 
-Before the directory, ISE authenticated people it kept itself. With the
-directory beside it, ISE does what it does in production:
+With the directory beside it, ISE does what it does in production:
 
-- **Find the domain.** ISE's name server becomes 10.20.2.10 and its domain
-  `corp.rooez.com`, which makes it `ise1.corp.rooez.com`, the name the DC
-  already holds a record for.
-- **Join it**, as `svc-ise`. ISE then appears as a computer object in
-  `Computers`.
-- **Authenticate against it.** A PEAP login for `mario` is checked against
-  Active Directory instead of ISE's internal store.
-- **Authorize by group.** `Mushroom-Kingdom` and `Koopa-Troop` become
-  conditions in authorization rules, which is how a person ends up with a
-  Security Group Tag in the TrustSec Phase 2 design.
-- **Carry a certificate the lab trusts.** ISE's EAP and admin certificates,
-  signed by `corp-rooez-CA`, replace the self-signed one that supplicants
-  are currently told not to check.
+| | What it means | State |
+|---|---|---|
+| Find the domain | ISE's name server is 10.20.2.10 and its domain `corp.rooez.com`, so it is `ise1.corp.rooez.com`, the name the DC holds a record for | Done. Proven from the portal form on 2026-09-18, no CLI repoint |
+| Join it | As `svc-ise`. ISE appears as a computer object in `Computers` | Done. Joined on the first call on a clean build, 2026-09-18 |
+| Authorize by group | `Mushroom-Kingdom` and `Koopa-Troop` become conditions in rules, which is how a person gets a Security Group Tag in TrustSec Phase 2 | Both groups selected on the join point, 2026-09-18. No rule uses them yet |
+| Authenticate against it | A PEAP login for `mario` is checked against the directory instead of ISE's internal store | Done 2026-09-17 on that day's ISE: `test aaa` from `sw1`, right and wrong password, the DC's event 4776 showing AD answered both; and PEAP with MSCHAPv2 from `emp-pc` |
+| Carry a certificate the lab trusts | ISE's EAP and admin certificates, signed by `corp-rooez-CA`, replace the self-signed one supplicants are told not to check | Not done |
 
-Where each stood at the end of 2026-09-17:
-
-| | State |
-|---|---|
-| Find the domain | Done. ISE was repointed from its CLI and checked |
-| Join it | Done. `ISE1` is joined as `svc-ise` |
-| Authenticate against it | Done for `test aaa` from `sw1` as `mario`, right and wrong password, with the DC's event 4776 showing AD gave both answers, and for PEAP with MSCHAPv2 from `emp-pc` as `mario` on `sw1` Gi1/0/2 |
-| Authorize by group | Both groups are selected on the join point. No rule uses them yet; that is Phase 2 |
-| Carry a certificate the lab trusts | Not done |
-
-Authentication needed no policy change. ISE's Default policy set looks users
-up in `All_User_ID_Stores`, which includes every Active Directory join point
-as ISE ships, so a joined domain is searched from the moment the join
-succeeds.
-
-### The join and Windows Server 2025
-
-The join did not work at first, and the reason applies to anyone putting
-ISE beside a Server 2025 domain. A Server 2025 domain controller refuses the
-older SAM RPC password change methods when they are called remotely. ISE
-uses one of them, `SamrUnicodeChangePasswordUser2`, while joining, and the
-join ends in "Access is denied", error code 5, after a log in which every
-step succeeded. Cisco describes this in Field Notice FN74321 (bug
-CSCwr77017). The notice lists ISE 3.1 through 3.4 P1 and not 3.5; the DC's
-own log showed that 3.5.0.527 does the same.
-
-Cisco's workaround is a policy on the DC, "Configure SAM change password RPC
-methods policy" set to allow all methods, which is the registry value
-`SamrChangeUserPasswordApiPolicy` = 3. The DC reads it when it starts, which
-neither the notice nor the policy text says: set on the running DC it
-changed nothing, and after a restart of `dc1` the same join call succeeded.
-`10-promote-forest.ps1` sets the value before the promotion reboot, so a DC
-built by this repo has it in effect from its first boot.
-
-This lowers a default. The DC again accepts the more weakly encrypted
-password change methods that Server 2022 and earlier accepted. It is
-accepted for a DC with no public address, reachable only from `snet-apps`
-and the lab range, holding generated passwords, and destroyed with the
-session, and it comes out when Cisco ships a fix for 3.5. The decision is
-ADR 0010's amendment; the diagnosis, with the events to look for, is in
-`docs/ISE-AD-BUILD.md`, Part 3.
+Authentication needs no policy change: ISE's Default policy set looks
+users up in `All_User_ID_Stores`, which includes every join point.
 
 ### The rule: the directory first, and one domain
 
 ISE depends on DNS, and the lab's names resolve in one place. So ISE's
-domain is the directory's, `corp.rooez.com`, its name server is the domain
-controller, and the domain controller is built and checked before ISE is
-deployed. That is the operator's decision of 2026-09-17, and it is why
+domain is the directory's, `corp.rooez.com`, its name server is the
+domain controller, and the domain controller is built and checked before
+ISE is deployed. That is the operator's decision of 2026-09-17: it is why
 `24-ad-up.sh` is numbered ahead of `25-ise-up.sh` and ends by printing the
-two values the ISE portal form takes. `25-ise-up.sh` warns when it finds no
-directory.
+two values the portal form takes, and why `25-ise-up.sh` warns when it
+finds no directory.
 
-The first ISE of that day predates the rule. It was deployed with a public
-resolver and the domain `rooez.com`, so it calls itself `ise1.rooez.com` and
-knows nothing of the lab's names. An ISE in that state is repointed from its
-command line, and on 2026-09-17 this one was. It takes three commands, not
-two: `ip name-server 10.20.2.10`, then `no ip name-server 8.8.8.8` because
-the first command appends to the list and leaves the public resolver in
-front, then `ip domain-name corp.rooez.com`. Each asks to restart ISE's
-services and has to be answered `yes`, since `no` cancels the change and not
-just the restart. The three restarts came to 30 to 40 minutes. A new domain
-name also means a new self-signed certificate, which the CA step replaces
-anyway. The prompts, the answers, and the checks are in
-`docs/ISE-AD-BUILD.md`, Part 2. Every deploy after this one starts right and
-skips all of it.
+An ISE deployed before the DC can be repointed from its command line:
+three commands, three restarts, 30 to 40 minutes, a new self-signed
+certificate (`docs/ISE-AD-BUILD.md`, Part 2, "The exception").
+
+### The join and Windows Server 2025
+
+A Server 2025 domain controller refuses the older SAM RPC password change
+methods when called remotely. ISE uses one of them,
+`SamrUnicodeChangePasswordUser2`, while joining, and the join ends in
+"Access is denied", error code 5, after a log in which every step
+succeeded. Cisco's Field Notice FN74321 (bug CSCwr77017) lists ISE 3.1
+through 3.4 P1; the DC's own log showed 3.5.0.527 does the same.
+
+Cisco's workaround is the DC policy "Configure SAM change password RPC
+methods policy" set to allow all methods, the registry value
+`SamrChangeUserPasswordApiPolicy` = 3. The DC reads it at startup, which
+neither the notice nor the policy text says: set on the running DC of
+2026-09-17 it did nothing until a restart. `10-promote-forest.ps1` sets it
+before the promotion reboot; on 2026-09-18 a DC built that way took the
+join on the first call.
+
+This lowers a default: the DC again accepts the more weakly encrypted
+methods Server 2022 accepted. It is accepted for a DC with no public
+address, reachable only from `snet-apps` and the lab range, holding
+generated passwords, until Cisco ships a fix for 3.5 (ADR 0010, amendment
+of 2026-09-17). The diagnosis for a DC built before the fix is in
+`docs/ISE-AD-BUILD.md`, Part 3, "When it goes wrong".
 
 ## Network
 
-There is no port policy between the two servers, by the operator's choice. A
-domain join, Kerberos, LDAP, RPC's dynamic ports, and certificate enrollment
-together make a list too long to be worth keeping in a lab.
+There is no port policy between the two servers, by the operator's choice:
+a join, Kerberos, LDAP, RPC's dynamic ports, and certificate enrollment
+make a list too long to be worth keeping in a lab.
 
 | Group | On | Admits |
 |---|---|---|
 | `dc-nsg` | `dc1` | The whole apps subnet on every port; RDP from the CML host |
 | `ise-nsg` | `ise1` | RADIUS from the lab range; 443 and 22 from the CML host |
 
-Azure's default rules already allow any traffic inside a virtual network, so
-`ise-nsg` lets the DC reach ISE on every port without saying so, and
-`dc-nsg`'s first rule states out loud what the defaults would have permitted
-anyway. It is there so that a deny added later cannot cut ISE off by
-accident. Neither server admits anything from the internet, and the DC has no
-public address at all.
+Azure's default rules already allow any traffic inside a virtual network,
+so `ise-nsg` lets the DC reach ISE on every port without saying so, and
+`dc-nsg`'s first rule states out loud what the defaults permit anyway, so
+that a deny added later cannot cut ISE off by accident. Neither server
+admits anything from the internet, and the DC has no public address.
 
-Lab nodes inside CML reach both servers at their own addresses, through the
-routed path and with no NAT (ADR 0003). On a NIC in `snet-apps` Azure counts
-the lab range as part of the virtual network, because that subnet carries
-the route for it, so the default rules cover lab nodes too. That is what lets
-a domain-joined Windows endpoint in a lab find its controller.
+Lab nodes inside CML reach both servers at their own addresses, routed,
+no NAT (ADR 0003). On a NIC in `snet-apps` Azure counts the lab range as
+part of the virtual network, because that subnet carries the route for it,
+so the default rules cover lab nodes too. That is what lets a
+domain-joined Windows endpoint in a lab find its controller.
 
-From the Mac, everything goes through the CML host, the same as every other
-lab VM. `config/tunnels.conf` holds the forwards and `scripts/50-tunnels.sh
-up` opens them:
+From the Mac, everything goes through the CML host. `config/tunnels.conf`
+holds the forwards and `scripts/50-tunnels.sh up` opens them:
 
     ise 8443 10.20.2.20 443      then https://localhost:8443
-    dc  3389 10.20.2.10 3389     then an RDP client at localhost:3389
+    dc  3389 10.20.2.10 3389     then an RDP client at localhost:3389, as CORP\labadmin
 
-Sign in to the DC as `CORP\labadmin`.
+## When the build itself is refused
 
-## Running it
+Everything else is in `docs/ISE-AD-BUILD.md`, Part 3, "When it goes wrong".
 
-    scripts/20-up.sh                       # CML
-    scripts/24-ad-up.sh                    # the directory, about 20 minutes
-    (ISE portal deploy)                    # with the two values 24-ad-up prints
-    scripts/25-ise-up.sh --post-deploy
-    ...work...
-    scripts/45-ise-down.sh                 # ISE first: it depends on the DC
-    scripts/46-ad-down.sh
-    scripts/40-down.sh
-
-The directory comes before ISE so that ISE can be deployed already pointing
-at it, and it goes after ISE for the same reason in reverse. The script
-numbers follow that order.
-
-`24-ad-up.sh` ends with three checks, each run on the DC itself:
-
-1. `Get-ADDomain` answers `corp.rooez.com`.
-2. DNS resolves `dc1.corp.rooez.com` and `login.microsoftonline.com`, which
-   proves the zone and the forwarder.
-3. `certutil -ping` finds the CA alive.
-
-Then it prints what ISE's portal form needs:
-
-    Primary Name Server: 10.20.2.10
-    DNS domain name:     corp.rooez.com
-
-### When it goes wrong
-
-| Symptom | Likely cause | What to do |
+| Symptom | Cause | What to do |
 |---|---|---|
-| The apply fails on a run command | Anything a script threw; its message is in the apply error | Fix it and run `scripts/24-ad-up.sh` again. It deletes the failed run command first, because one that failed exists in Azure but not in Terraform's state and would stop the next apply at "already exists". Finished steps are skipped |
 | The VM is refused with a `patch_mode` error | An `azure-edition` image SKU | Keep `image_sku` on a non-hotpatch SKU |
 | The VM is refused for quota | The size's family has none | `vm_size` in `terraform/ad/terraform.tfvars`. `Standard_B2ms` and `Standard_D2s_v4` had room on 2026-09-17 |
 | `System error thrown for RunAs user` | Someone set `run_as_user` on a run command; it cannot log a domain account on to a DC | Remove it. The wrapper is the way to run as `CORP\labadmin` |
-| The CA script fails with access denied | It ran as SYSTEM, outside the wrapper | Deliver it through `run-as-admin.ps1` |
-| A check fails but the apply succeeded | The directory was still starting | Rerun the script; the checks run again |
-| An ERS call to ISE returns 401 with the right password | The client signed in as `admin`. The Marketplace image's account, for ERS too, is `iseadmin` | Use `iseadmin` |
-| The ISE join fails with HTTP 500, "nodes not able to join/remove" | That message never carries the reason | `show logging application ise-psc.log \| include Fatal` on ISE's CLI holds the join's step log. The DC's Security log will not help: a denied LDAP write is not audited by default |
-| The join's step log shows `operatingSystem` and two other attributes with no success line | `svc-ise` lacks write property on computer objects. Not fatal to a join, but misleading | The second `dsacls` grant in `docs/ISE-AD-BUILD.md`, Part 1 |
-| The join's step log succeeds throughout and still ends in "Access is denied", error code 5; the DC's Security log has only Audit Success | Cisco Field Notice FN74321: a Windows Server 2025 DC refuses the legacy SAM RPC password change method ISE uses. Proven here on ISE 3.5.0.527, which the notice does not list. The DC's System log has event 16984 from SAM at the time of each failed join | `SamrChangeUserPasswordApiPolicy` = 3 on the DC, then restart the DC: the value is read at startup and does nothing before that. The build sets it before the promotion reboot, so this should only appear on a DC built before that change. `docs/ISE-AD-BUILD.md`, Part 3 |
-| Updating the join point over ERS returns 405 | A plain `PUT /ers/config/activedirectory/<id>` is not supported | `PUT .../<id>/addGroups` to select groups |
-| ISE's API on `localhost:8443` gives connection reset or refused after an ISE restart | The `ise` SSH tunnel dropped | `scripts/50-tunnels.sh up` |
-| Anything else | | The transcripts under `C:\lab\log` on the DC, over RDP |
-
-## Not built yet
-
-Done by hand on 2026-09-17, with the steps in `docs/ISE-AD-BUILD.md`: ISE
-pointed at the DC for DNS, the join point `corp.rooez.com` created and ISE
-joined as `svc-ise`, the groups `Mushroom-Kingdom` and `Koopa-Troop`
-selected, and `mario` authenticated against the directory from `sw1` and,
-over PEAP, from `emp-pc`. None
-of it is code yet, so a new ISE needs it again.
-
-Not done, in this order:
-
-1. Authorization rules that use the two groups. Mapping a group to a
-   Security Group Tag is TrustSec Phase 2.
-2. Import `corp-rooez-CA`'s root certificate into ISE's trusted store,
-   generate a certificate request for EAP and admin use, have the CA sign it
-   from the `WebServer` template, and bind the result.
-
-Also not built: a helper script to export the root certificate and sign a
-request from the Mac, a quota check for the DC in preflight, and any of the
-above as code. They wait for the ISE policy as code work (roadmap item 22).

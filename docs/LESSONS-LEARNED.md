@@ -980,3 +980,57 @@ in Azure, which is the cheapest place to learn them.
   line `cml 9443 127.0.0.1 443`, and an old `cml.env` needs
   `CML_API_BASE=https://127.0.0.1:9443` (the next `20-up.sh` writes it).
   The local port in both files must agree.
+
+## The CA step fails with `RPC_S_SERVER_UNAVAILABLE` right after the promotion
+
+- Symptom: `24-ad-up.sh` promoted the forest, then `certutil -crl` in the
+  CA step returned `RPC_S_SERVER_UNAVAILABLE` and the script stopped. Seen
+  2026-09-18, on the first clean build after PR #21.
+- Cause: the script ran `certutil -crl` straight after `Restart-Service
+  certsvc`, and the service answers RPC some seconds after it reports
+  running. The first build had the same race and hid it: the old script
+  discarded certutil's exit code, and PR #21's `Invoke-Native` was the
+  first thing to check it.
+- Fix: PR #27 waits for `certutil -ping` to succeed before publishing the
+  CRL. Rerunning `24-ad-up.sh` resumes at the CA step, so a failure there
+  costs a rerun, not a rebuild.
+
+## Tunnels and the smoke test fail in the minute after a build
+
+- Symptom: right after `20-up.sh` printed done, `50-tunnels.sh up` lost
+  two of three tunnels to `kex_exchange_identification: Connection reset`,
+  and `90-smoke-test.sh` failed two checks, API not ready and license
+  `UNREACHABLE`. Seen 2026-09-18.
+- Cause: two things at once. sshd throttles connections opened in the same
+  instant, and the controller's API and license agent were still coming
+  up when the checks ran.
+- Fix: wait a minute and run both once more. On 2026-09-18 the retry
+  passed 13 of 13. The 2026-09-18 spec has `20-up.sh` wait for
+  `system_information.ready` and start the tunnels itself.
+
+## `25-ise-up.sh` fails with HTTP 401 on a fresh ISE
+
+- Symptom: on a just-deployed ISE, `25-ise-up.sh --post-deploy` passed the
+  readiness wait and stopped with `ise_config: ... HTTP 401`, with the
+  right password in `ise.env`. Seen 2026-09-18.
+- Cause: the first GUI login on a Marketplace ISE sets the admin password,
+  and until that login has happened ERS refuses the password in
+  `ISE_ADMIN_PASSWORD`.
+- Fix: open the GUI through the `ise` tunnel, log in once, set the
+  password to `ISE_ADMIN_PASSWORD`, then rerun the script. The rerun
+  passed. The 2026-09-18 spec has the script say this in its `[FAIL]`
+  line.
+
+## A lab that was on the controller is missing after the rebuild
+
+- Symptom: after reimporting from the newest `exports/<stamp>/` folder,
+  the Cilium EVPN fabric was not there. It had been missing for two
+  builds. Seen 2026-09-18.
+- Cause: labs live in the export, not on the controller, and each export
+  holds only the labs that were on the controller at that teardown. The
+  fabric was last exported in `exports/20260917T025148Z`; the two later
+  builds reimported from `exports/20260917T214927Z` only, and nobody looked
+  in the older folder.
+- Fix: before reimporting, list every `exports/<stamp>/` folder, locally
+  and in blob, and take each lab from the newest export that has it. All
+  three labs are back on the 2026-09-18 build.

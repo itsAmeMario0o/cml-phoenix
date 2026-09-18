@@ -3,8 +3,7 @@
 This is the backlog of ideas that have been agreed on but do not yet have a
 spec. Nothing here is in scope until it does. Items are numbered in the
 order they were added, and a number is never reused or reassigned, because
-other documents, a code comment, and `config/ise/README.md` cite items by
-number. So the numbers run in order within a section but not across
+other documents and a code comment cite items by number. So the numbers run in order within a section but not across
 sections. Within each section the order reflects rough priority, and once
 an item has shipped it moves to the Done section at the bottom under its
 number.
@@ -105,17 +104,28 @@ number.
     supersedes or shrinks `ise_config.py`, and the per-session policy is
     reapplied as idempotent playbooks. `1homas/ISE_Ansible_Sandbox` is the
     reference for patterns built on this collection.
-19. Ephemeral ISE with the ISE Eternal Evaluation (ISEEE) approach. The
-    automated ARM deploy of ISE fails, so a fresh per-session deploy is
-    only reliable by hand through the portal (ADR 0008,
-    `docs/ISE-MARKETPLACE-DEPLOY.md`), which is too much friction to repeat
-    every session. ISEEE, from `1homas/ISE_Ansible_Sandbox`, is the closest
-    existing pattern for standing ISE up and down repeatably. The likely
-    shape is to deploy ISE once by hand, capture a specialized image or a
-    config backup, and rebuild each session from that rather than from the
-    Marketplace, restoring or reapplying config with the `cisco.ise`
-    collection (item 18). Needs its own spec, and study of what ISEEE
-    actually automates, before any code.
+19. Ephemeral ISE with the ISE Eternal Evaluation (ISEEE) approach.
+    Superseded 2026-09-18 by item 24. It was here because a per-session
+    portal deploy of ISE (ADR 0008, `docs/ISE-AD-BUILD.md` Part 2) was too
+    much friction to repeat every session; the answer is to stop
+    redeploying it and deallocate it between sessions instead. ISEEE
+    (`1homas/ISE_Ansible_Sandbox`) stays a reference for item 18.
+24. Persistent ISE and directory, three commands to start. In progress.
+    Spec: `docs/specs/2026-09-18-persistent-ise-dc-and-script-consolidation-design.md`,
+    approved 2026-09-18, not built. ISE and the DC will be built once and deallocated
+    between sessions; the ten hand touches of the 2026-09-18 start fold
+    into `20-up.sh`, `24-ad-up.sh`, and `25-ise-up.sh`; no orchestrator,
+    no state file. Order of work, one PR each:
+    1. Redeploy ISE onto 300 GB Standard SSD, by hand in the portal, once.
+    2. `45-ise-down.sh` and `46-ad-down.sh` deallocate by default.
+    3. `24-ad-up.sh` and `25-ise-up.sh` start a deallocated server.
+    4. `ise_config.py` does the join, the groups, and the NADs from data.
+    5. `20-up.sh` does the rescan, cloudflared, the reimport, users, and
+       the ready wait.
+    6. Docs: the deploy guide, the build guide, ADR 0008 amendment, STATUS.
+    Owed beside it, not in the spec: the rotation of the two CML
+    passwords, declined by the operator on 2026-09-18 and open since the
+    2026-09-17 leak (`docs/STATUS.md`, next steps).
 
 21. Python first, with proof. Tabled by the operator the same day it was
     raised: functional labs come first, and this waits until they work as
@@ -251,7 +261,8 @@ number.
   amendment) and FTDv runs inside CML from the persistent data disk
   (`labs/ips-ha.yaml`). Neither has a persistent disk of its own; the
   operator rejected a second monthly disk when the same question came up
-  for the domain controller (ADR 0010).
+  for the domain controller (ADR 0010). Item 24 reverses that for ISE and
+  the DC as of 2026-09-18.
 - 8, Nexus 9300v on the server, 2026-09-07. Two vCPU and 12 GB each by the
   node definition in this refplat. With
   it came the Catalyst SD-WAN Manager, Validator, Controller, and edge
