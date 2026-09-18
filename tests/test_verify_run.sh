@@ -64,6 +64,12 @@ assert_contains "gen_testbed.py writes to the scenario's testbed path" "${REPO_R
 
 assert_contains "easypy planned" "+ ${VENV_DIR}/bin/easypy" "${out}"
 assert_contains "easypy runs the scenario's jobfile" "${JOBFILE}" "${out}"
+# Without these two flags easypy writes under ~/.pyats, outside the repo,
+# and the archive can carry the test AAA password in clear text.
+assert_contains "easypy archive stays in the repo" "-archive_dir ${REPO_ROOT}/verify/.archive" "${out}"
+assert_contains "easypy runinfo stays in the repo" "-runinfo_dir ${REPO_ROOT}/verify/.runinfo" "${out}"
+assert_contains "archive and runinfo directories are private" "+ mkdir -p -m 0700 ${REPO_ROOT}/verify/.archive ${REPO_ROOT}/verify/.runinfo" "${out}"
+assert_contains "the run ends with the summary" "summary: " "${out}"
 
 # cml.env is genuinely loaded and exported now (the fix for the bug this
 # test exists to catch: 80-verify-lab.sh used to never load it at all).

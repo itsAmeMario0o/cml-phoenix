@@ -23,9 +23,11 @@
 #      owns the title).
 #   5. Generate verify/.testbed/<scenario>.yaml from the running lab
 #      (verify/lib/gen_testbed.py, Task 2).
-#   6. Run the scenario's jobfile with easypy in the pyATS venv. easypy
-#      prints its own report archive path to stdout; this script does not
-#      capture or suppress that output.
+#   6. Run the scenario's jobfile with easypy in the pyATS venv, with its
+#      archive and runinfo under verify/.archive and verify/.runinfo (both
+#      gitignored) rather than ~/.pyats. easypy prints its own report
+#      archive path to stdout; this script does not capture or suppress
+#      that output.
 #
 # A verification only checks a lab that is already built. It builds,
 # deploys, and tears down nothing.
@@ -35,6 +37,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 VENV_DIR="${REPO_ROOT}/verify/.venv"
+ARCHIVE_DIR="${REPO_ROOT}/verify/.archive"
+RUNINFO_DIR="${REPO_ROOT}/verify/.runinfo"
 RENDER="${REPO_ROOT}/scripts/lib/render_lab.py"
 DRY_RUN=0
 
@@ -87,7 +91,16 @@ run_jobfile() {
   # path does not put its own bin/ on PATH the way "source .../activate"
   # would. Without it the plugin errors "pyats: command not found" and
   # the job aborts before any testcase runs (caught live, Task 7).
-  PATH="${VENV_DIR}/bin:${PATH}" run "${VENV_DIR}/bin/easypy" "$1"
+  #
+  # Without -archive_dir and -runinfo_dir easypy writes under ~/.pyats/,
+  # outside the repo, and the archive holds the test AAA password in
+  # clear text (verify/trustsec-phase1/verify.py). Both live under
+  # verify/, gitignored, created 0700 so only the operator reads them.
+  # The option names are the ones the installed easypy registers with
+  # argparse: single dash, underscore. ADR 0009.
+  run mkdir -p -m 0700 "${ARCHIVE_DIR}" "${RUNINFO_DIR}"
+  PATH="${VENV_DIR}/bin:${PATH}" run "${VENV_DIR}/bin/easypy" "$1" \
+    -archive_dir "${ARCHIVE_DIR}" -runinfo_dir "${RUNINFO_DIR}"
 }
 
 main() {
@@ -112,6 +125,7 @@ main() {
   gen_testbed "${title}" "${testbed_out}"
   run_jobfile "${jobfile}"
   pass "verification run complete for '${scenario}'. See easypy's own output above for the report archive path."
+  summary_and_exit
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
