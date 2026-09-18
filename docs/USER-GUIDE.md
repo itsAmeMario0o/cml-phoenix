@@ -1,5 +1,8 @@
 # Using the lab
 
+> `docs/index.html`, the published copy of this page, was last synced from
+> it on 2026-09-11. This Markdown is the authoritative version.
+
 Welcome. You have been given an account on a Cisco Modeling Labs server
 that runs on demand. You reach it entirely through your browser, with no
 VPN to connect and nothing to install.

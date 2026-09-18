@@ -54,12 +54,16 @@ server to the host's management address; here that is 192.168.255.5.
 The fabric itself, as plain NX-OS for the six switches, is in
 `cilium-evpn-fabric/`, one file per device with the address plan in its
 README. Paste it, push it, or use it as the answer key.
+`cilium-evpn-fabric/BUILD-ORDER.md` is the same configuration split into
+seven layers by dependency, the order to push it by hand.
 
 Cilium Enterprise is what makes the EVPN and private-network pieces
 work, and it comes from Cisco's Artifactory devhub with a personal
 token. Open-source Cilium peers BGP to the leaves but does not do EVPN.
-The built edition of this lab, with the full fabric in day-0 config, is
-tabled until the blank one has been worked through by hand.
+The blank one was worked through by hand on 2026-09-16, following
+`BUILD-ORDER.md`, and `scripts/80-verify-lab.sh cilium-evpn` passed
+against it. The built edition, with the full fabric in day-0 config, is
+still to come (roadmap item 9).
 
 ## ftdv-cluster.yaml
 

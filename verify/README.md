@@ -2,9 +2,12 @@
 
 This directory holds the pyATS verification layer described in
 [ADR 0009](../docs/decisions/0009-pyats-lab-verification.md). It checks that
-a running lab actually works: BGP sessions up, VNIs up, FTDs registered,
-RADIUS reachable, an SGT assigned. What gets checked depends on the
-scenario. This is a separate tool from the rest of the kit. Nothing in
+a running lab actually works. Two scenarios exist: `cilium-evpn` checks
+that every eBGP EVPN neighbor is Established and every VNI is up, and
+`trustsec-phase1` checks that the C8000v edge sees ISE as a reachable
+RADIUS server, gets an Access-Accept from `test aaa`, and has received a
+CoA (the last one fails on an edge with no endpoint session, by design).
+What gets checked depends on the scenario. This is a separate tool from the rest of the kit. Nothing in
 `scripts/` or `scripts/lib/` imports pyATS, and the kit's own `unittest`
 suite runs without it installed.
 
@@ -39,10 +42,11 @@ rest of the kit uses.
 ## Adding a scenario
 
 Each scenario is a directory under `verify/`, and its name is load-bearing:
-it must match the `scripts/80-verify-lab.sh` scenario case and the `labs/`
-file stem, for example `verify/cilium-evpn/` (checks `labs/cilium-evpn-blank.yaml`)
-or `verify/trustsec-phase1/` (checks `labs/trustsec-phase1.yaml`). A scenario
-directory holds:
+it must match a case in `lab_yaml_for_scenario` in
+`scripts/80-verify-lab.sh`, which maps the scenario to the tracked `labs/`
+file it verifies. The name need not equal the file stem: `verify/cilium-evpn/`
+checks `labs/cilium-evpn-blank.yaml`, and `verify/trustsec-phase1/` checks
+`labs/trustsec-phase1.yaml`. A scenario directory holds:
 
 - `verify.py`: the AEtest testscript. Its `CommonSetup`, `CommonCleanup`,
   and device-filtering helper come from `verify/lib/scenario.py`
