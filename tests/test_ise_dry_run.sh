@@ -81,9 +81,10 @@ assert_not_contains "ISE_API_BASE never appears in the plan" "ISE_API_BASE" "${u
 
 # --- 45-ise-down.sh --dry-run ---
 
-# The az stub's role=ise listing returns one of each of the five resource
-# types 25-ise-up.sh's attach_nsg and tag_resources tag, plus what the
-# Marketplace wizard itself creates: VM, NIC, NSG, disk, public IP.
+# The az stub's role=ise listing returns one of each of the five resources
+# 25-ise-up.sh tags (VM, NIC, NSG, disk, public IP), with the NSG and the
+# public IP listed before the NIC so the script's own ordering is what
+# these assertions prove.
 rc=0
 down_out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" \
   ARM_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 \
@@ -97,13 +98,43 @@ assert_contains "nsg delete planned" "+ az network nsg delete --ids" "${down_out
 assert_contains "disk delete planned" "+ az disk delete --ids" "${down_out}"
 assert_contains "public ip delete planned" "+ az network public-ip delete --ids" "${down_out}"
 
-vm_line="$(grep -n '+ az vm delete' <<<"${down_out}" | head -1 | cut -d: -f1)"
-nic_line="$(grep -n '+ az network nic delete' <<<"${down_out}" | head -1 | cut -d: -f1)"
+assert_contains "deletes the wizard's nic name" "networkInterfaces/ise1nic" "${down_out}"
+assert_contains "deletes the wizard's public ip name" "publicIPAddresses/ise1-ip" "${down_out}"
+assert_contains "deletes the wizard's disk name" "disks/ise1osdisk" "${down_out}"
+vm_line="$(line_of '+ az vm delete' "${down_out}")"
+nic_line="$(line_of '+ az network nic delete' "${down_out}")"
+nsg_line="$(line_of '+ az network nsg delete' "${down_out}")"
+pip_line="$(line_of '+ az network public-ip delete' "${down_out}")"
 if [[ "${vm_line}" -lt "${nic_line}" ]]; then
   echo "[OK]    vm deleted before nic"
 else
   echo "[FAIL]  vm delete (${vm_line}) not before nic delete (${nic_line})"; failures=$((failures + 1))
 fi
+# Azure refuses to delete an NSG or a public IP a NIC still references,
+# and the stub lists both before the NIC.
+if [[ "${nic_line}" -lt "${nsg_line}" && "${nic_line}" -lt "${pip_line}" ]]; then
+  echo "[OK]    nic deleted before nsg and public ip"
+else
+  echo "[FAIL]  nic delete (${nic_line}) not before nsg (${nsg_line}) and public ip (${pip_line})"; failures=$((failures + 1))
+fi
+assert_contains "dry run says what would happen" "dry run: would delete every ISE resource" "${down_out}"
+assert_not_contains "dry run never claims a deletion" "ISE resources deleted." "${down_out}"
+
+# A real run lists by tag again; a leftover is a [FAIL] and exit 1, not
+# an unconditional [OK]. Sourced with run() and find_ise_resources
+# replaced, so nothing reaches az.
+rc=0
+left_out="$(bash -c "source '${DOWN_SCRIPT}'; DRY_RUN=0
+  find_ise_resources() { printf '/id/ise1osdisk\tMicrosoft.Compute/disks\tise1osdisk\n'; }
+  confirm_gone; summary_and_exit" 2>&1)" || rc=$?
+assert_eq "leftover resource exits 1" "1" "${rc}"
+assert_contains "leftover resource is a FAIL" "still tagged role=ise after the deletes" "${left_out}"
+rc=0
+gone_out="$(bash -c "source '${DOWN_SCRIPT}'; DRY_RUN=0
+  find_ise_resources() { :; }
+  confirm_gone; summary_and_exit" 2>&1)" || rc=$?
+assert_eq "empty re-list exits 0" "0" "${rc}"
+assert_contains "empty re-list is the success line" "ISE resources deleted." "${gone_out}"
 
 # Never touches bootstrap, persistent, or the CML VM.
 if grep -qiE 'cml-controller|terraform.*(bootstrap|persistent)' "${DOWN_SCRIPT}"; then

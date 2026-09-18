@@ -7,15 +7,19 @@ case "$*" in
   *"account show"*) echo "stub-user" ;;
   *"vm image terms show"*"--query accepted"*) echo "true" ;;
   # 45-ise-down.sh: find_ise_resources reads this directly, dry run
-  # included, so the plan can show exactly what would be deleted. Fixed
-  # ids for one of each resource type 25-ise-up.sh creates.
+  # included, so the plan can show exactly what would be deleted. One of
+  # each resource 25-ise-up.sh tags, named the way the wizard names them
+  # for host ise1. The NSG and the public IP come before the NIC on
+  # purpose: Azure will not delete either while the NIC references them,
+  # and the listing order is not something az promises, so the script
+  # must impose its own.
   *"resource list"*"tags.role=='ise'"*)
     printf '%s\n' \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/virtualMachines/ise	Microsoft.Compute/virtualMachines	ise" \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/networkInterfaces/iseVMNic	Microsoft.Network/networkInterfaces	iseVMNic" \
       "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/networkSecurityGroups/ise-nsg	Microsoft.Network/networkSecurityGroups	ise-nsg" \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/disks/ise_OsDisk	Microsoft.Compute/disks	ise_OsDisk" \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/publicIPAddresses/isePublicIP	Microsoft.Network/publicIPAddresses	isePublicIP"
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/publicIPAddresses/ise1-ip	Microsoft.Network/publicIPAddresses	ise1-ip" \
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/virtualMachines/ise1	Microsoft.Compute/virtualMachines	ise1" \
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-CML-LAB/providers/Microsoft.Compute/disks/ise1osdisk	Microsoft.Compute/disks	ise1osdisk" \
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/networkInterfaces/ise1nic	Microsoft.Network/networkInterfaces	ise1nic"
     ;;
   # 25-ise-up.sh mutating calls and 45-ise-down.sh deletes all go through
   # run(), which only echoes "+ ..." in a dry run and never reaches this
