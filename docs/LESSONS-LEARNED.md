@@ -830,10 +830,10 @@ in Azure, which is the cheapest place to learn them.
   `app.customize` in `config/cml.yml`. That file is rendered at build time
   and gitignored. It was rendered before the fork renamed the script to
   `06-transit.sh`, so it named a file that no longer existed.
-- Fix: correct the name in `config/cml.yml`, then run the destroy step of
-  `40-down.sh` again with its three `TF_VAR_` exports. When a customize
-  script is renamed or removed in the fork while a CML VM is up, fix the
-  rendered `config/cml.yml` in the same sitting.
+- Fix: `40-down.sh` now renders `config/cml.yml` again before the destroy,
+  so the file always matches the fork it is destroyed with. On the day it
+  was corrected by hand and the destroy step rerun with its three `TF_VAR_`
+  exports.
 
 ## A lab export does not contain what was typed on a running node
 
@@ -875,3 +875,108 @@ in Azure, which is the cheapest place to learn them.
   ignores case. Do not compare `resourceGroup` in a query anywhere. After a
   teardown, list the resource group and read it; an `[OK]` only says the
   script deleted what it found.
+
+## A die inside a command substitution does not stop the script
+
+- Symptom: `24-ad-up.sh` printed five `[FAIL] persistent output ...
+  unavailable` lines, then ran terraform with five empty `-var=` arguments
+  and exited 0. `45-ise-down.sh` did the same with an empty
+  `--resource-group` and deleted whatever that listed. Found by the
+  architecture review and the stub-driven run tests, 2026-09-17.
+- Cause: bash runs a `$(...)` subshell with errexit switched off, and bash
+  3.2 has no `inherit_errexit`. A `die` inside `"x=$(fn)"` in argument
+  position only empties that argument. Capturing the whole function with
+  `lines="$(fn)" || die` does not help either: the subshell keeps going
+  after the inner exit and returns the status of its last echo. A process
+  substitution `done < <(fn)` never reports a status at all.
+- Fix: resolve each value with a plain assignment in the calling shell,
+  `v="$(fn)"` on its own line, which `set -e` does stop on, and pass results
+  back through a variable or an array, never through a pipe or a
+  substitution. Inside a function that must run in `$(...)`, every
+  `x="$(out_or_placeholder x)"` needs its own `|| return 1`, as
+  `find_ise_resources` now has. The dry-run tests cannot see this class;
+  the real runs in `tests/test_*_run.sh` do.
+
+## A for loop over a command substitution hides the command's failure
+
+- Symptom: `cml-remote.sh export-labs` printed "exported 0 labs" and exited
+  0 while `GET /labs` was answering 500. `40-down.sh` took that as a good
+  export and would have destroyed the VM with the labs on it. Proven
+  against a fake API, 2026-09-17.
+- Cause: `for id in $(lab_ids)` discards the substitution's exit status; an
+  empty word list is a normal empty loop.
+- Fix: `ids="$(lab_ids)"` first, then `for id in ${ids}`, with `lab_ids`
+  returning its own failure. `30-export-labs.sh` also counts the exported
+  files against a fresh `list-labs` before the upload.
+
+## Azure refuses to delete an NSG or a public IP a NIC still references
+
+- Symptom: `45-ise-down.sh` would have stopped part way on any listing that
+  put `ise-nsg` or `ise1-ip` before the NIC. The 2026-09-17 teardown worked
+  because the order happened to be kind.
+- Cause: `az resource list` promises no order, and the NSG and public IP
+  stay bound to the NIC until the NIC is gone.
+- Fix: delete in passes by type, VM, then NICs, then everything else; carry
+  on past a failed delete with a `[FAIL]` line; list by tag again at the
+  end and treat any row as a failure. The `[OK]` line is withheld when a
+  delete failed, so the summary carries the result.
+
+## A dead jump host looked like ISE taking 45 minutes to boot
+
+- Symptom: `25-ise-up.sh --post-deploy` printed "still waiting" for the
+  whole readiness timeout while the CML host was down or its key rejected.
+- Cause: the poll turned every ssh failure into curl's `000`, so a dead jump
+  and a booting ISE were the same to it.
+- Fix: `cml_ssh true || die` once before the loop, so a jump that does not
+  answer fails at once and names itself. Tested with the ssh stub at exit
+  255.
+
+## A test that reads the operator's gitignored config passes only on that machine
+
+- Symptom: `tests/run.sh` failed in a fresh worktree on
+  `tests/test_ise_dry_run.sh` ("config/mcp-env/ise.env missing") while
+  passing in the main checkout. Seen 2026-09-17.
+- Cause: one case ran `25-ise-up.sh` without `ISE_ENV_FILE`, so it read the
+  real, gitignored file.
+- Fix: every case points the env file at a fixture. Run `tests/run.sh` in a
+  clean worktree before opening a PR; a worktree has none of the gitignored
+  files and is the honest test of the gate.
+
+## PowerShell binds a bare dash flag to the helper's own parameters
+
+- Symptom: `Invoke-Native sh -c '...'` ran the string after `-c` as the
+  command, and `Invoke-Native certutil -setreg ...` would bind `-setreg`
+  the same way if a parameter started with those letters. Seen while
+  testing the helper, 2026-09-17.
+- Cause: the parameter binder matches a dash token against the function's
+  own parameters by prefix before it reaches the remaining-arguments list.
+- Fix: quote every dash flag handed to a native command through such a
+  helper (`'-setreg'`, `'-crl'`); `tests/test_ad_powershell.sh` asserts no
+  unquoted flag follows an `Invoke-Native` call.
+
+## `easypy --help` crashes on Python 3.14
+
+- Symptom: `verify/.venv/bin/easypy --help` ends with `AttributeError:
+  'pyATS_HelpFormatter' object has no attribute '_format_actions_usage'`
+  and prints no options. Seen 2026-09-17.
+- Cause: pyATS's help formatter relies on a private argparse method that
+  Python 3.14 removed.
+- Fix: read the option names from the parser rather than the help text, for
+  example by wrapping `add_argument` in a spy before importing
+  `pyats.easypy.main`. easypy registers `-archive_dir` and `-runinfo_dir`,
+  single dash and underscore, which `80-verify-lab.sh` now passes so the
+  archive stays under `verify/`.
+
+## Every script fails with "CML API forward not up" after a build
+
+- Symptom: a script, or Claude Code's cml MCP server, stops at once with
+  `[FAIL] CML API forward not up on 127.0.0.1:9443. Run: scripts/50-tunnels.sh up`.
+  A `tunnels.conf` from before says "has no cml forward", and a `cml.env`
+  from before says "CML_API_BASE missing".
+- Cause: since ADR 0012 every controller login rides the `cml` SSH forward,
+  and nothing falls back to the public address on purpose.
+- Fix: `scripts/50-tunnels.sh up` first, then the script; reconnect the MCP
+  server after the forward is up. An old `config/tunnels.conf` needs the
+  line `cml 9443 127.0.0.1 443`, and an old `cml.env` needs
+  `CML_API_BASE=https://127.0.0.1:9443` (the next `20-up.sh` writes it).
+  The local port in both files must agree.

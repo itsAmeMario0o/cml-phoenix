@@ -31,6 +31,17 @@ before the promotion reboot; the second `svc-ise` grant in
 `30-create-identities.ps1`; and an ISE deployed with the DC's address in
 the portal form rather than repointed afterwards.
 
+Landed since the review, all on 2026-09-17 (PRs #20 to #25): the failure
+modes the review ranked first are fixed (the export loop, the ISE delete
+order with a re-list, the non-fatal `die`, `--skip-export`, re-render
+before destroy, the DNS check, `cml-mcp` pinned to 0.31.2); the
+PowerShell on the DC checks every native exit code; the credentials sheet
+appends as it goes; pyATS writes under `verify/`; `tests/test_*_run.sh`
+run six scripts for real against stubs that can fail, and found two more
+bugs on the way; and every controller login now rides the `cml` SSH
+forward (ADR 0012), so `scripts/50-tunnels.sh up` comes before any script
+that talks to CML. Nothing in that batch has run against Azure yet.
+
 Next steps, in order:
 
 1. Rotate the two CML passwords, which leaked into a session on
@@ -38,9 +49,11 @@ Next steps, in order:
    says why the first claim of rotation was wrong). Operator's apply:
    `terraform -chdir=terraform/persistent apply -replace=random_password.app_admin -replace=random_password.sys_admin`.
 2. Make the next build a proving run and nothing else: `20-up.sh`,
-   `24-ad-up.sh`, the ISE portal deploy with the two values `24-ad-up.sh`
-   prints, `25-ise-up.sh --post-deploy`, then `docs/ISE-AD-BUILD.md`
-   Part 3 by hand. Success is the smoke test and a domain join without
+   `50-tunnels.sh up`, `90-smoke-test.sh` (now 13 checks, the forward
+   among them), `24-ad-up.sh`, the ISE portal deploy with the two values
+   `24-ad-up.sh` prints, `25-ise-up.sh --post-deploy`, then
+   `docs/ISE-AD-BUILD.md` Part 3 by hand. PR #24's body lists what only a
+   live build can prove about the forward. Success is the smoke test and a domain join without
    touching a host. Record the result here.
 3. Then the rest of `docs/ARCHITECTURE-REVIEW.md`, "What to do, in
    order". Items 8, 16, and 21 (the ADR 0010 bound, the documentation
