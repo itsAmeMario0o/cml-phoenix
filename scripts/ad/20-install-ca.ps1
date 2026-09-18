@@ -100,6 +100,16 @@ try {
     Set-CaRegistry -Name 'CA\ValidityPeriod' -Value 'Years'
     Set-CaRegistry -Name 'CA\AuditFilter' -Value '127'
     Restart-Service -Name 'certsvc'
+    # Restart-Service returns before the CA's RPC interface accepts calls,
+    # and certutil -crl straight after it fails with RPC_S_SERVER_UNAVAILABLE.
+    # The first build hid that by discarding certutil's exit code; the
+    # 2026-09-18 build, checking it, stopped here. Wait for the CA to answer.
+    $deadline = (Get-Date).AddMinutes(3)
+    while ((Get-Date) -lt $deadline) {
+        $null = & certutil.exe -ping 2>&1
+        if ($LASTEXITCODE -eq 0) { break }
+        Start-Sleep -Seconds 5
+    }
     Invoke-Native certutil.exe '-crl'
 
     $template = "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$($domain.DistinguishedName)"
