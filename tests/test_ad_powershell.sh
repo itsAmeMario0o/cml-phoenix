@@ -51,7 +51,11 @@ for ps in 20-install-ca 30-create-identities run-as-admin; do
   # dash flag handed to a native command must be quoted.
   bare="$(grep -cE '^[[:space:]]+Invoke-Native [^ ]+ .*[[:space:]]-[A-Za-z]' "${file}" || true)"
   assert_eq "${ps}: dash flags to native commands are quoted" "0" "${bare}"
+# The $LASTEXITCODE and $Command below are PowerShell source text
+# being searched for, on purpose.
+# shellcheck disable=SC2016
   assert_contains "${ps}: helper checks the exit code" 'if ($LASTEXITCODE -ne 0)' "$(cat "${file}")"
+  # shellcheck disable=SC2016
   assert_contains "${ps}: helper invokes through the call operator" '& $Command @Arguments' "$(cat "${file}")"
 done
 
