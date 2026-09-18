@@ -99,11 +99,20 @@ after which the join succeeded.
 
 The risk accepted: the DC again accepts the older password change methods,
 whose encryption is weaker, as Server 2022 and earlier did by default. The
-bounds:
-`dc1` has no public address, its NSG admits only `snet-apps` and RDP from
-the CML host, the lab range reaches it through the routed path and nothing
-else does, every password in the domain is generated, and the DC is
-destroyed with the session.
+bounds: `dc1` has no public address, and nothing from the internet reaches
+it. What does reach it, on every port, is the whole VNet and every lab node
+in 10.100.0.0/16. Azure's `AllowVnetInBound` default admits the VNet, and
+because `snet-apps` carries the route for the lab summary (ADR 0003
+amendment), the lab range counts as VNet on that subnet. The two custom
+allow rules in `terraform/ad/main.tf` narrow nothing; they only state the
+intent, as `docs/LESSONS-LEARNED.md` explains under "An NSG's custom allow
+rules never narrow anything by themselves". Since CML has peer and student
+accounts, "lab nodes" includes other people's. The residual risk is
+accepted for a session-lifetime lab in which every password in the domain
+is generated and the DC is destroyed with the session. The 2026-09-17
+architecture review recommends one deny rule for 3389 from the VNet, with
+the CML host excepted, so that the RDP rule means something; that is not
+yet in the code.
 
 Alternatives rejected:
 
