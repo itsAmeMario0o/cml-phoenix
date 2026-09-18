@@ -32,7 +32,8 @@ in Azure, which is the cheapest place to learn them.
 
 - Symptom: unknown argument errors in the fork or a root after a fresh init.
 - Cause: upstream's `>= 3.82.0` bound. azurerm 5.0 shipped in 2026.
-- Fix: `~> 4.0` in all three roots (fork patch 0). Root lock files are committed.
+- Fix: `~> 4.0` in all four roots, `terraform/ad` included since ADR 0010
+  (fork patch 0 for the CML root). Root lock files are committed.
 
 ## First boot copies every image again even though /data has them
 
