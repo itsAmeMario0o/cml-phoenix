@@ -69,6 +69,21 @@ else
   echo "[OK]    46-ad-down.sh touches only terraform/ad"
 fi
 
+# 4b. Unreadable persistent outputs stop apply and destroy with a [FAIL]
+#     before terraform runs. `-var=x=$(out_or_placeholder x)` once produced
+#     five empty -var= lines and exit 0, and `done < <(ad_tf_args)` hid the
+#     status from both callers (architecture review, 2026-09-17). The stub
+#     prints "stub: no state" only when terraform itself is reached, since
+#     tf_out silences it.
+for fn in apply_root destroy_root; do
+  rc=0
+  out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" TF_STUB_FAIL=1 ARM_SUBSCRIPTION_ID=x ASSUME_YES=1 \
+    bash -c "source '${DOWN}'; DRY_RUN=0; ${fn}" 2>&1)" || rc=$?
+  assert_eq "${fn} with unreadable outputs exits 1" "1" "${rc}"
+  assert_contains "${fn} names the missing output" "[FAIL]  persistent output resource_group_name unavailable" "${out}"
+  assert_not_contains "${fn} never reaches terraform" "stub: no state" "${out}"
+done
+
 # 5. The PowerShell: strict mode, stop on error, a transcript, and a guard
 #    that makes a rerun safe. Parsed with pwsh when it is installed.
 for ps in 10-promote-forest 20-install-ca 30-create-identities; do

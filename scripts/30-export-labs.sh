@@ -49,7 +49,7 @@ verify_export_count() {
 
 push_to_blob() {
   local stamp="$1" sa
-  sa="$(tf_out persistent storage_account_name)"
+  sa="$(tf_out persistent storage_account_name)" || die "persistent output storage_account_name unavailable, export not uploaded"
   azcopy_env_init
   run azcopy copy "${LOCAL_EXPORTS}/${stamp}" "https://${sa}.blob.core.windows.net/exports/" --recursive
 }
@@ -58,7 +58,7 @@ main() {
   local ip stamp
   DRY_RUN="$(parse_dry_run_only "$@")"
   require_cmd terraform ssh scp azcopy curl jq
-  ip="$(cml_ip)"
+  ip="$(cml_ip)" || die "persistent output public_ip_address unavailable; is the persistent root applied?"
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   if [[ "${DRY_RUN}" != "1" ]] && ! cml_api_ready "${ip}"; then
     die "CML API at https://${ip} is not ready. Nothing exported."

@@ -15,9 +15,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/24-ad-up.sh"
 
 destroy_root() {
-  local args=() line
-  while IFS= read -r line; do args+=("${line}"); done < <(ad_tf_args)
-  run terraform -chdir="${AD_ROOT}" destroy -auto-approve "${args[@]}"
+  ad_tf_args
+  run terraform -chdir="${AD_ROOT}" destroy -auto-approve "${AD_TF_ARGS[@]}"
 }
 
 main_down() {

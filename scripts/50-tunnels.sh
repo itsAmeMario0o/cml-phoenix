@@ -109,7 +109,7 @@ main() {
   require_cmd ssh lsof nc
   case "${cmd}" in
     up)
-      CML_HOST_IP="$(cml_ip)"
+      CML_HOST_IP="$(cml_ip)" || die "persistent output public_ip_address unavailable; is the persistent root applied?"
       host_reachable "${CML_HOST_IP}" || die "CML host ${CML_HOST_IP} not reachable on 1122"
       each_tunnel start_one || die "one or more tunnels did not come up, see ${STATE_DIR}/*.log"
       ;;

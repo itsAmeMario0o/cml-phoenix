@@ -93,7 +93,7 @@ main() {
     summary_and_exit
   fi
   authenticate
-  lab_id="$(import_topology "${out}" "${title}")"
+  lab_id="$(import_topology "${out}" "${title}")" || die "import of '${title}' failed: POST ${CML_URL}/api/v0/import did not answer 2xx"
   [[ -n "${lab_id}" && "${lab_id}" != "null" ]] || die "import of '${title}' returned no lab id"
   pass "imported '${title}' as lab ${lab_id}, stopped. Rendered copy: ${out}"
   summary_and_exit

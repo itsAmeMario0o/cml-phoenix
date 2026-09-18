@@ -24,16 +24,29 @@ AD_ENV="${AD_ENV:-${REPO_ROOT}/config/mcp-env/ad.env}"
 DC_NAME="dc1"
 DRY_RUN="${DRY_RUN:-0}"
 
-# ad_tf_args: the -var arguments both apply and destroy need, one per
-# line. Owner and expires come from the persistent root's tfvars, the
-# network values from its outputs, so nothing is typed twice.
+# ad_tf_args: fill AD_TF_ARGS with the -var arguments both apply and
+# destroy need. Owner and expires come from the persistent root's tfvars,
+# the network values from its outputs, so nothing is typed twice. It sets
+# an array in the calling shell rather than printing lines: bash runs a
+# "$(...)" with errexit off, so `-var=x=$(out_or_placeholder x)` once gave
+# five empty -var= lines and exit 0, and `done < <(ad_tf_args)` hid the
+# status from both callers (architecture review, 2026-09-17). Each plain
+# assignment below is what set -e stops on.
 ad_tf_args() {
-  echo "-var-file=${PERSISTENT_TFVARS}"
-  echo "-var=resource_group_name=$(out_or_placeholder resource_group_name)"
-  echo "-var=location=$(out_or_placeholder location)"
-  echo "-var=apps_subnet_id=$(out_or_placeholder apps_subnet_id)"
-  echo "-var=apps_subnet_cidr=$(out_or_placeholder apps_subnet_cidr)"
-  echo "-var=cml_private_ip=$(out_or_placeholder cml_private_ip)"
+  local rg location subnet_id subnet_cidr cml_ip
+  rg="$(out_or_placeholder resource_group_name)"
+  location="$(out_or_placeholder location)"
+  subnet_id="$(out_or_placeholder apps_subnet_id)"
+  subnet_cidr="$(out_or_placeholder apps_subnet_cidr)"
+  cml_ip="$(out_or_placeholder cml_private_ip)"
+  AD_TF_ARGS=(
+    "-var-file=${PERSISTENT_TFVARS}"
+    "-var=resource_group_name=${rg}"
+    "-var=location=${location}"
+    "-var=apps_subnet_id=${subnet_id}"
+    "-var=apps_subnet_cidr=${subnet_cidr}"
+    "-var=cml_private_ip=${cml_ip}"
+  )
 }
 
 # clear_failed_run_commands: a run command that failed exists in Azure but
@@ -56,13 +69,12 @@ clear_failed_run_commands() {
 }
 
 apply_root() {
-  local args=() line
-  while IFS= read -r line; do args+=("${line}"); done < <(ad_tf_args)
+  ad_tf_args
   if [[ "${ASSUME_YES:-0}" == "1" ]]; then
-    args+=("-auto-approve")
+    AD_TF_ARGS+=("-auto-approve")
   fi
   run terraform -chdir="${AD_ROOT}" init -input=false
-  run terraform -chdir="${AD_ROOT}" apply "${args[@]}"
+  run terraform -chdir="${AD_ROOT}" apply "${AD_TF_ARGS[@]}"
 }
 
 # write_ad_env: the passwords go from terraform's JSON straight into the
