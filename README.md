@@ -41,9 +41,9 @@ In build order:
     scripts/20-up.sh                        # bootstrap, persistent, CML
     scripts/24-ad-up.sh                     # the domain controller, before ISE
     scripts/25-ise-up.sh --post-deploy      # ISE NSG, tagging, readiness, policy
+    scripts/50-tunnels.sh up|down|status    # SSH forwards through the CML host
     scripts/60-import-lab.sh labs/<x>.yaml  # render and import a topology
     scripts/70-users.sh                     # create CML users, grant every lab
-    scripts/50-tunnels.sh up|down|status    # SSH forwards through the CML host
     scripts/80-verify-lab.sh <scenario>     # pyATS verification of a running lab
     scripts/90-smoke-test.sh                # post-build checks
     ...work...
