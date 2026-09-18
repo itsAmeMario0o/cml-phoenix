@@ -1,6 +1,9 @@
 # Inline IPS with a Threat Defense HA pair
 
-Status: draft, 2026-09-11. Replaces the FTDv cluster lab of the day
+Status: shipped (2026-09-11, `labs/ips-ha.yaml` built with all eleven
+nodes up and both FTDv registered to cdFMC; the HA pair and inline set
+were the operator's cdFMC work and `docs/STATUS-ARCHIVE.md` never records
+them finished). Written 2026-09-11. Replaces the FTDv cluster lab of the day
 before, which stopped at a design limit: a Threat Defense Virtual
 cluster cannot run inline sets, and the operator wants an IPS lab.
 

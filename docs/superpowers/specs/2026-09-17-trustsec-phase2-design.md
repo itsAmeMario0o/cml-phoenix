@@ -1,7 +1,7 @@
 # TrustSec Phase 2: SNMP inventory first, then tags and enforcement
 
-Status: draft for operator review, 2026-09-17, second revision. Nothing
-here is built yet.
+Status: draft (2026-09-17, second revision, for operator review; nothing
+here is built yet).
 
 Phase 1 (`2026-09-12-trustsec-phase1-routed-ise-design.md`) promised a
 routed, no-NAT path to an external ISE with working CoA. That is now

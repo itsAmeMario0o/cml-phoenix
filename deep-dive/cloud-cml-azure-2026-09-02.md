@@ -1,5 +1,9 @@
 # Deep Dive: cloud-cml Azure deployment path
 
+> Describes upstream cloud-cml as of 2026-09-02, before the fork's patches.
+> Since then the fork gained `06-transit.sh` with the `bridge1` transit network
+> and the `lab-transit-in` and `lab-transit-out` NSG rules (ADR 0003), beside its earlier patches.
+
 **Generated**: 2026-09-02
 **Phase**: Design study before adapting cloud-cml into an on-demand Azure lab
 **Files**:

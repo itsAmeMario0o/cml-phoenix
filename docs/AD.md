@@ -251,7 +251,7 @@ hand in the portal, because deploying that image through Azure's API fails
 wait for ISE to answer, and its policy, applied as code by
 `scripts/lib/ise_config.py`.
 
-What ISE holds today, all of it created through its APIs:
+What ISE held before the join, all of it created through its APIs:
 
 | Object | Value |
 |---|---|
@@ -259,13 +259,16 @@ What ISE holds today, all of it created through its APIs:
 | Authorization rules | `trustsec-poc` and `trustsec-poc-sw1`, permit access by the device's address |
 | Internal user | `trustsec-verify`, a throwaway identity the pyATS check authenticates as |
 
-Against that, the lab has proven RADIUS, MAB, CoA, and 802.1X with PEAP, all
-with ISE's own internal users (`docs/STATUS.md`, 2026-09-17).
+Against that, the lab had proven RADIUS, MAB, CoA, and 802.1X with PEAP,
+all with ISE's own internal users, before the directory existed
+(`docs/STATUS.md`, 2026-09-17). The join point, the join, and the two
+selected groups were added by hand the same night and are not in
+`ise_config.py` yet; the state table below has where each item stands.
 
 ### What the directory changes for ISE
 
-Until now ISE has authenticated people it keeps itself. With the directory
-beside it, ISE can do what it does in production:
+Before the directory, ISE authenticated people it kept itself. With the
+directory beside it, ISE does what it does in production:
 
 - **Find the domain.** ISE's name server becomes 10.20.2.10 and its domain
   `corp.rooez.com`, which makes it `ise1.corp.rooez.com`, the name the DC

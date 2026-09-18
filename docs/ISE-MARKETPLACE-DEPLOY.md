@@ -21,12 +21,15 @@ where the rest of the kit expects it.
   to pass before opening this wizard; it ends by printing the two values
   the Network Settings tab needs. An ISE deployed without the directory
   gets a name outside the domain and a resolver that knows nothing about
-  the lab, and both take an application restart to correct afterward
-  (`docs/AD.md`, ADR 0010).
+  the lab, and correcting both afterward takes three CLI commands with a
+  restart of ISE's services each, 30 to 40 minutes in all (the DNS
+  section below, `docs/AD.md`, ADR 0010).
 - Sign in to the Azure portal as the same account the CLI uses, and make
   sure the active subscription is the lab subscription.
-- The Marketplace terms for the ISE 3.5 image are already accepted on the
-  subscription, so no terms step is needed.
+- The Marketplace terms for the ISE 3.5 image must be accepted on the
+  subscription once. They are on the author's; on any other, preflight
+  prints the `az vm image terms accept` command to run
+  (`docs/PREREQUISITES.md`, section 2.2).
 - Have the lab SSH public key handy. Print it with `cat keys/cml-lab.pub`.
   Using this key keeps ISE consistent with the CML host jump.
 - The CML host should be running if you want to verify ISE afterward, since
@@ -127,8 +130,9 @@ scripts/25-ise-up.sh --post-deploy
 
 It creates `ise-nsg` with the scoped rules the lab needs (RADIUS from the
 lab summary, admin 443/22 from the CML host, never `0.0.0.0/0`), attaches it
-to the NIC the wizard created, tags the VM and its OS disk `role=ise` so
-teardown by tag catches both, waits for ISE to answer through the CML jump
+to the NIC the wizard created, tags the VM, its OS disk, the NIC, and the
+public IP `role=ise` so teardown by tag catches all of them (the NSG is
+tagged when it is created), waits for ISE to answer through the CML jump
 (30-45 minutes), and applies the minimal TrustSec Phase 1 policy. Run
 `scripts/25-ise-up.sh --post-deploy --dry-run` first to see the plan; it
 reads its settings from `config/mcp-env/ise.env` (`config/ise.env.example`

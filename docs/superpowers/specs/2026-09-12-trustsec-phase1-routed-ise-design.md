@@ -8,7 +8,9 @@
 > The routed-path design (the transit bridge, the C8000v edge, the no-NAT
 > requirement) still stands; only the ISE deploy mechanism changed.
 
-Status: draft, 2026-09-12.
+Status: shipped (code merged 2026-09-13, the routed path proven live
+2026-09-17; see ADR 0003, ADR 0008 and its amendment, and
+`docs/STATUS.md`). Written 2026-09-12.
 
 This is the first of two specs for a Cisco TrustSec lab. Phase 1 builds
 the foundation: an external ISE that the CML switches can reach for RADIUS

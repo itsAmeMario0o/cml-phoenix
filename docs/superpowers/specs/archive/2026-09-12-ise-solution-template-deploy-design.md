@@ -8,7 +8,8 @@
 > the design record of the automated approach, which roadmap item 19 (ISEEE
 > ephemeral ISE) may revisit.
 
-Status: draft, 2026-09-12.
+Status: retired (2026-09-13, superseded by the ADR 0008 amendment and
+`docs/ISE-MARKETPLACE-DEPLOY.md`). Written 2026-09-12.
 
 This spec replaces the way TrustSec Phase 1 deploys ISE. Phase 1 built a raw
 VM-image deploy (`az vm create` with hand-rolled user-data). That path proved

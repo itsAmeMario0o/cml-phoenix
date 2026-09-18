@@ -32,7 +32,8 @@ in Azure, which is the cheapest place to learn them.
 
 - Symptom: unknown argument errors in the fork or a root after a fresh init.
 - Cause: upstream's `>= 3.82.0` bound. azurerm 5.0 shipped in 2026.
-- Fix: `~> 4.0` in all three roots (fork patch 0). Root lock files are committed.
+- Fix: `~> 4.0` in all four roots, `terraform/ad` included since ADR 0010
+  (fork patch 0 for the CML root). Root lock files are committed.
 
 ## First boot copies every image again even though /data has them
 
@@ -161,13 +162,13 @@ in Azure, which is the cheapest place to learn them.
   request. DNS goes through the Umbrella agent straight from the Mac and
   shows the home address, so `dig myip.opendns.com` measures nothing
   useful. Everything else, SSH included, rides the AnyConnect tunnel to a
-  headend in AWS and leaves from a pool of exit addresses inside
-  151.186.182.0/24 that changes per connection. Four different addresses
+  headend in AWS and leaves from a pool of exit addresses inside the
+  operator's VPN exit range that changes per connection. Four different addresses
   turned up in one afternoon. The allow-lists had only the web gateway
   address, so the browser got in and SSH did not. With the VPN off there
   is a single home address and none of this happens.
-- Fix: for VPN use, the allow-lists carry the whole exit block
-  `151.186.182.0/24` plus the home address as a /32. A single /32 from
+- Fix: for VPN use, the allow-lists carry the whole exit block, the
+  operator's VPN exit range, plus the home address as a /32. A single /32 from
   the pool breaks on the next connection. The only reliable way to see
   which address SSH arrives from is to let one connection through and
   read `$SSH_CONNECTION` on the host, or the sshd journal. Decide before
@@ -456,7 +457,7 @@ in Azure, which is the cheapest place to learn them.
   scripts are immune because they use `keys/known_hosts`, which
   `20-up.sh` clears before each build; the user's own file is not
   touched by anything in the kit.
-- Fix: `ssh-keygen -R 20.114.184.195` on the Mac, by hand, after every
+- Fix: `ssh-keygen -R <the static public IP>` on the Mac, by hand, after every
   rebuild that precedes console work. The kit does not edit files
   outside the repo, so this stays a manual step until cml-mcp can be
   pointed at its own known_hosts.

@@ -1,5 +1,9 @@
 # Deep Dive: the cml-azure-lab kit itself
 
+> Describes the kit as of 2026-09-13. Since then: `scripts/lib/ise_config.py`
+> has run against ISE 3.5, the 24/25/45/46 scripts and `terraform/ad` build
+> and remove the directory and ISE per session, and `bridge1` carries the routed path.
+
 **Generated**: 2026-09-13
 **Phase**: Design study of the tooling that sits above the cloud-cml fork
 **Files**:

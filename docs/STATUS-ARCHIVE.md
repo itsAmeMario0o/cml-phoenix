@@ -1,9 +1,385 @@
 # Status archive
 
-The older half of `docs/STATUS.md`, moved here 2026-09-13 to keep that
-file to its current entries. Same format, same order, newest first;
-this picks up right where `docs/STATUS.md` leaves off (2026-09-10
-backward to 2026-09-02, the first build).
+The older entries of `docs/STATUS.md`, moved here to keep that file to
+its current state and the last two sessions. Same format, same order,
+newest first; this picks up right where `docs/STATUS.md`'s log leaves
+off (2026-09-15 backward to 2026-09-02, the first build). Entries
+before 2026-09-10 moved on 2026-09-13, the rest on 2026-09-17.
+
+## 2026-09-15, fabric build in progress, console access confirmed by terminal
+
+`labs/cilium-evpn-fabric/BUILD-ORDER.md` merged after a rework: it now
+carries the actual per-device config for each of the seven layers,
+split out of the tracked `.cfg` files by dependency instead of by
+device, plus a section on where spine and leaf actually differ (almost
+nowhere among the four leaves; the one real divergence is the step 7
+access port, leaf1 red, leaf2 blue, leaf3/leaf4 neither).
+
+Confirmed CML's console server works from a plain terminal, no browser
+needed: `ssh admin@<ip>` on port 22 (not 1122) drops into a `consoles>`
+menu (`list`, `open`, `view`); passing the target straight on the SSH
+command line, `ssh -t admin@<ip> "open /<lab>/<node>/<line>"`, skips
+the menu and connects directly. That is now the documented path for
+working the fabric build from iTerm, one pane per node, `Session >
+Broadcast Input` sending identical config (steps 1, 4, and the whole
+of step 6) to every leaf pane at once.
+
+The operator is pushing the fabric config now, by hand, following
+`BUILD-ORDER.md` layer by layer. Not done as of this entry. Next: once
+all seven layers are in on all six switches, `scripts/80-verify-lab.sh
+cilium-evpn` for its first real live run.
+
+## 2026-09-15, full teardown/rebuild cycle, tooling gaps found and fixed
+
+Ran the full cycle for real: `scripts/40-down.sh` then `scripts/20-up.sh`,
+both clean. Teardown exported both labs to blob, deregistered the Smart
+License (`NOT_REGISTERED`), destroyed all 13 `vendor/cloud-cml` resources;
+persistent untouched. Rebuild found persistent unchanged (0 add/change/
+destroy) and cloud-cml added 13 resources back on the same static IP,
+the static public IP. License re-registered automatically (`COMPLETED` /
+`IN_COMPLIANCE`), confirmed against the live API afterward.
+
+Preflight itself needed fixing first. The Terraform provider caches under
+`.terraform/providers/` in `terraform/bootstrap`, `terraform/persistent`,
+and `vendor/cloud-cml` had gone stale as OneDrive cloud-only placeholders
+(`du` showed 0 blocks against a 229 MB provider binary), which
+`terraform validate` surfaced as a `stale NFS file handle` read error, not
+just slow hydration. Fix: `rm -rf` each `.terraform` and reinit. Unrelated
+to any repo code; worth checking first if a terraform command hangs or
+errors oddly on this Mac again (LESSONS-LEARNED).
+
+`cml-mcp` was not connected for this whole session. `scripts/mcp-cml.sh`
+refuses to start without `config/mcp-env/cml.env`, which `20-up.sh` only
+writes at the end of a build, so the MCP server had already failed at
+session startup, before that file existed. Lab import, node start, and
+user provisioning all went through the CML REST API directly instead.
+Reconnecting the MCP session after a rebuild, once `cml.env` exists again,
+should be routine from here.
+
+Reread the pyATS verification layer (ADR 0009) end to end rather than
+assume: it is verify-only, `device.parse()` calls only, nothing that
+configures a device, and it has never actually been run against a live
+lab anywhere in this repo's history (no report archives anywhere; the
+09-13 entry below already said as much). The 2026-09-11 entry below
+claiming the fabric was "verified" predates pyATS's existence by two
+days, so that was a manual check, not this tooling. Pushing the fabric's
+BGP/VXLAN/EVPN config onto the switches stays a manual, by-hand step by
+design. New: `labs/cilium-evpn-fabric/BUILD-ORDER.md`, the ground-up
+dependency chain behind the existing README's design and verification
+tables, meant as the reference for that push. PR #1, open, not yet
+merged.
+
+`labs/cilium-evpn-blank.yaml` reimported and all 11 nodes booted (spines,
+then leaves, then hosts, via direct API calls since cml-mcp was down). No
+fabric config pushed yet; the switches carry only day-0 hostname/admin/
+mgmt0.
+
+The Cloudflare tunnel broke on the rebuild exactly as `docs/ACCESS.md`
+warns it will: `cloudflared` lives on the disposable VM, and reinstalling
+it after every rebuild is still a manual step, not yet automated. Also
+hit the known stale-SSH-host-key issue from LESSONS-LEARNED, cleared by
+hand with `ssh-keygen -R "[<the static public IP>]:1122"`. Reinstalled
+`cloudflared` with the existing tunnel token; verified end to end, DNS
+resolves to Cloudflare and `lab.rooez.com` correctly redirects to the
+Access login page. Token rotation is still the open item from 2026-09-11,
+not done here, since the existing token still works.
+
+`scripts/70-users.sh` rerun; the same five accounts came back (all
+admin), matching the Cloudflare Access policy's email list.
+
+Still owed: push the fabric config from `BUILD-ORDER.md`, then
+`scripts/80-verify-lab.sh cilium-evpn` for its first real live run. Also
+open: merge PR #1, rotate the Cloudflare tunnel token.
+
+## 2026-09-13, pyATS lab-verification layer landed
+
+A pyATS lab-verification layer (ADR 0009) landed on the `pyats-and-ise-pivot`
+branch and merged to `main`. It is a `verify/` tree with its own pinned venv
+(`verify/requirements.txt`, `pyats[full]==26.8`, gitignored `verify/.venv`),
+so the core kit stays stdlib only. `verify/lib/gen_testbed.py` (stdlib) pulls
+a lab's pyATS testbed from CML at verify time; `scripts/80-verify-lab.sh
+<scenario>` generates the testbed and runs the scenario's easypy jobfile in
+the venv. Two verifications shipped: `verify/cilium-evpn/` (BGP EVPN sessions
+Established, all VNIs up) and `verify/trustsec-phase1/` (the C8000v edge:
+RADIUS reachable, `test aaa` Access-Accept, CoA received). Preflight warns,
+without failing, when the venv is absent.
+
+Not run yet, the human-gated step: bootstrap the venv
+(`python3 -m venv verify/.venv && verify/.venv/bin/pip install -r
+verify/requirements.txt`), then `scripts/80-verify-lab.sh cilium-evpn`
+against the running Cilium fabric. The TrustSec verification runs once that
+lab is deployed. Both AEtest scripts carry documented verify-at-live
+assumptions (Genie parser keys, the `os` testbed tags, the `show aaa
+servers` parse, `radius` vs `ISE-GROUP`, the CoA counter command), and the
+TrustSec run needs `TRUSTSEC_TEST_USERNAME` / `TRUSTSEC_TEST_PASSWORD`
+exported (a throwaway ISE test identity; see `config/labs.env.example`).
+
+The same branch also carried the ISE deploy pivot reconciliation, below.
+
+## 2026-09-13, ISE deploy: automated ARM fails, pivot to the portal
+
+The first real ISE deploy ran `scripts/25-ise-up.sh`. The NSG and the VM
+were created, but the VM reached a terminal `OSProvisioningTimedOut` state
+and ISE never served: TCP 443 never opened in about 50 minutes, and Azure
+marked the VM non-recoverable. The ISE appliance image does not complete
+Azure's OS-provisioning handshake, so `az deployment group create` fails
+even though the portal's Marketplace flow deploys the same image and lets
+ISE boot. This matches the operator's cross-project experience: ISE deploys
+by hand, not through provisioning tools.
+
+All ISE resources were deleted. The persistent root stayed clean: `rt-apps`
+is still associated with `snet-apps` and `terraform -chdir=terraform/
+persistent plan` shows no changes, so the failed deploy left nothing behind.
+
+The deploy step is now by hand through the portal, documented with our
+environment's fields in `docs/ISE-MARKETPLACE-DEPLOY.md`. The automated
+`az deployment group create` path in `25-ise-up.sh` is retired for the
+create (ADR 0008 amendment); the NSG, tagging, readiness, policy, and
+teardown tooling still apply after the portal deploy.
+
+Two directions were set, both deferred and on the roadmap (items 18 and 19):
+adopt the `cisco.ise` Ansible collection as the default ISE config layer,
+and use the ISE Eternal Evaluation (ISEEE) patterns to make a per-session
+ISE practical. Also in flight: a pyATS lab-verification layer (ADR 0009 and
+a spec) on the `pyats-and-ise-pivot` branch.
+
+## 2026-09-13, TrustSec Phase 1 and ISE by the Azure solution template
+
+> Superseded on the ISE deploy method by the newer 2026-09-13 entry above:
+> the `scripts/25-ise-up.sh` `az deployment group create` deploy described
+> here was retired (ISE terminally fails Azure OS provisioning). ISE is now
+> deployed by hand through the portal (ADR 0008 amendment;
+> `docs/ISE-MARKETPLACE-DEPLOY.md`). The rest of this entry still holds.
+
+The TrustSec Phase 1 foundation and a new ISE deploy method landed on the
+`trustsec-phase1` branch and merged to `main`. Nothing has been deployed to
+Azure yet; this is code and docs, ready to run.
+
+What is in the kit now:
+
+- ISE deploys from Cisco's Azure Marketplace solution template, not the raw
+  VM image (ADR 0008). The earlier VM-image path kept failing to boot; the
+  cause was a hand-rolled user-data file with the wrong NTP key and address
+  keys ISE on Azure does not accept. `scripts/25-ise-up.sh` now runs
+  `az deployment group create` against `config/ise/template.json`, ISE 3.5
+  (`cisco-ise_3_5`, `3.5.527`), with a scoped NSG, a static `10.20.2.20`, our
+  SSH key, and the admin password rendered into a `0600` parameters file.
+  `scripts/45-ise-down.sh` deletes every `role=ise` resource. ISE keeps a
+  Standard public IP for outbound to Security Cloud Control and Entra;
+  operator and policy access go through the CML host jump, so a changing
+  operator IP never matters.
+- ISE policy is code (`scripts/lib/ise_config.py`): the C8000v edge as one
+  network device over ERS, one authorization rule over the ISE OpenAPI.
+- The Phase 1 proof topology is `labs/trustsec-phase1.yaml` (a C8000v edge as
+  the RADIUS client), and the post-build smoke test now checks the host
+  transit bridge.
+
+Not yet done, the human-gated deploy lane:
+
+- The host transit bridge itself is not built. The fork customize script
+  `06-transit-bridge.sh` and its wiring under `vendor/` were left for the
+  gated deploy and never landed. Without it the lab-side RADIUS path from
+  `10.100.0.0/16` to ISE does not exist yet. This is the first real step.
+- No real ISE deploy has run. When it does, verify two things: that the
+  Cisco template's subnet write did not drop the `rt-apps` route-table
+  association (ADR 0003), by checking `terraform -chdir=terraform/persistent
+  plan` shows no changes, and that the ISE OpenAPI authorization-rule payload
+  shape matches the live 3.5 node. Both are recorded in ADR 0008 and the
+  `ise_config.py` comments.
+
+Also new: roadmap item 16, reclaiming cloud-manager licenses at teardown
+(near-term, cdFMC first), and item 17, an optional Azure Bastion.
+
+## 2026-09-11, current state
+
+Both labs are on the controller and reachable through the front door.
+
+- Cilium EVPN fabric: running. The six-switch eBGP EVPN fabric is
+  deployed and verified, every BGP session established and all four VNIs
+  up. The kind host and the Cilium install are the hands-on work left,
+  done inside the lab.
+- Attack Lab, inline IPS: all eleven nodes up, and both FTDv are
+  registered to cdFMC (Completed). The HA pair and the inline set are
+  not built yet; ftd1 still shows failover Disabled and no inline set,
+  so VLAN 10 and 20 stay separate and Kali has no DHCP. Building the
+  pair and the inline set in cdFMC is the one step left before the lab
+  is fully live.
+
+Access and users:
+
+- Five people created, all admin, each with the shared LAB_USER_PASSWORD.
+  The Cloudflare Access policy now lists all five emails, four colleagues
+  on the corporate domain and one personal address, so the front door is
+  open for them.
+- The Zero Trust team domain was renamed from money-honey to rooez, so
+  the login page now reads rooez.cloudflareaccess.com. The tunnel and the
+  server were untouched, and lab.rooez.com is unchanged.
+- The end-user guide is published as a GitHub Pages site at
+  https://itsamemario0o.github.io/cml-phoenix/, linked from the top of
+  the README. docs/USER-GUIDE.md is the source, docs/index.html the page.
+
+Still worth doing:
+
+- Finish the FTD HA pair and inline set in cdFMC.
+- Rotate the Cloudflare tunnel token, which passed through a chat session.
+
+## 2026-09-11, afternoon
+
+Rebuilt in the afternoon: preflight 55 OK, 13 resources, API ready
+about a minute after the build printed its URL, smoke test 10 OK on
+the first run this time, connector installed over SSH with four
+connections, front door answering. The persistence hook kept all
+twelve images, Kali and FTDv included, and both custom definitions
+were still registered. Both labs reimported with `60-import-lab.sh`
+and the IPS lab is starting, firewalls last.
+
+Registration solved by the operator: the cdFMC registration key is
+live only briefly after SCC generates it. Delete the manager on the
+console, generate the key, add the manager within a minute, and both
+firewalls registered (LESSONS-LEARNED). Both FTDv nodes are Completed
+in cdFMC. Next in cdFMC: HA pair on GigabitEthernet0/0, inline set
+from 0/1 and 0/2 on the pair, allow-all access control policy with an
+intrusion policy, deploy. Then Kali gets DHCP and the IPS lab is live.
+
+Evening check of everything but the firewalls: all eleven nodes
+BOOTED; the edge holds its three addresses and loopback and its DHCP
+pool has a lease at 10.10.0.100, which means a request crossed VLAN
+10 to VLAN 20 through an inline set, so the pair is forwarding. The
+Nexus and the four hosts could not be checked from the console this
+time: cml-mcp's proxy is blocked by the stale host key in the Mac's
+`~/.ssh/known_hosts` (LESSONS-LEARNED), an expect runner through the
+console server handled the IOS XE prompt but not the NX-OS and Linux
+ones, and the Mac ran out of memory mid-sweep. Their configuration is
+day-0 and was verified after the first import. The lab was renamed
+in the UI to "Attack Lab - Inline IPS, FTD HA pair"; the console
+server paths use that title.
+
+User provisioning revamped (ADR 0007, revised). The CSV is now keyed on
+email, since a person logs in to CML with the same address Cloudflare
+Access checks, so `email` is the CML username. Columns are email,
+fullname, role. `scripts/70-users.sh` creates each user, then puts every
+non-admin in one managed group (`lab-users`) that holds lab_exec on
+every lab on the controller, so one run gives everyone every lab and a
+rerun after importing a lab grants it too. Verified live: a probe user
+was created, logged in, and saw both labs under show_all (the UI's
+default). Passwords: set LAB_USER_PASSWORD in config/mcp-env/labs.env
+to give every user the same simple login, or leave it empty to generate
+one per user; either way they land in the private sheet. CML wants at
+least 8 characters and rejects common words (labpass1 works, 12345678
+does not). This is separate from LAB_PASSWORD, the device login, which
+is untouched. Verified live: a shared-password user logged in and saw
+both labs. On 2026-09-11 the five real users in users.csv were created,
+all role admin (four colleagues on the corporate domain plus one
+personal address), each with the shared password; the sheet is at
+config/mcp-env/users-credentials.csv. All admin, so the lab-users group
+is empty and the grant is moot; admins see every lab. Still owed: add
+those five emails to the Cloudflare Access policy, and the personal one
+needs an explicit entry since the policy admits the corporate domain as
+a whole. The end-user walkthrough is docs/USER-GUIDE.md, also published
+as a shareable page:
+https://claude.ai/code/artifact/4b7ad144-a9cd-4221-a689-0092146394eb .
+The MCP server's create_cml_user works too but passes the
+password as a chat argument, so the script stays the path for real
+people. `docs/USER-GUIDE.md` is the page to hand an end user: the
+Cloudflare email prompt, the one-time code, then the CML login with the
+same email. The show_all gotcha is a lesson.
+
+Full verification of every non-FTD node, all correct:
+
+- n9k1: VLAN 10 and 20 up, all seven access ports connected in the
+  right VLAN (ftd1/ftd2 inside on 1/1 and 1/3, outside on 1/2 and 1/4,
+  edge on 1/5, kali on 1/6, insrv on 1/7).
+- edge: mgmt .73, inside gateway 10.10.0.1, outside 203.0.113.1,
+  loopback 198.51.100.1, all up; DHCP pool serving VLAN 10.
+- insrv: static 10.10.0.10/24. extsrv 203.0.113.101, esrv
+  203.0.113.251, both reach the edge and each other.
+- kali: eth0 up, no lease yet.
+
+The inside cannot reach the outside, and Kali cannot get DHCP, because
+VLAN 10 only reaches VLAN 20 through an inline set on an active
+firewall, and the pair is not built yet: ftd1 shows registration
+Completed but failover Disabled, no inline set, data interfaces
+administratively down. That is the cdFMC work in the operator's hands.
+So everything the lab owns is configured; what remains is the HA pair
+and the inline set, then Kali gets DHCP and the scans cross.
+
+Both tooling blockers cleared the same evening: the stale host key
+was removed with `ssh-keygen -R`, and the env file was back to clean
+KEY=VALUE lines, so cml-mcp console sessions work again.
+
+The rebuild wiped the CML users, as every rebuild does. The lab user
+with the personal address no longer exists and its lab rights could not be
+re-granted. Either recreate it in the UI, or add a row to
+`config/mcp-env/users.csv` and run `70-users.sh`; the script's
+username rule does not allow an @, so a plain username with the email
+in the email column is the fit.
+
+## 2026-09-11, early morning
+
+Torn down at 03:33 UTC. Both labs exported to blob under
+`exports/20260911T033320Z` (the first attempt refused a 2.10-shaped
+export; fixed, LESSONS-LEARNED), license NOT_REGISTERED, 13 resources
+destroyed, data disk unattached with twelve images on it: the ten
+from the refplat lists plus FTDv 10.0.0 and Kali 2026.2. The next
+build reimports the two labs with `60-import-lab.sh`; the Kali node
+definition and image are on the disk, and their blob copies under
+`custom/` are the fallback. No VM exists.
+
+The FTDv cluster lab ran for an hour and was retired. The vPC pair,
+HSRP, eBGP to the edge, and ECMP toward the firewalls all came up from
+the reference configs, and the inside host's LACP bond bundled once
+the virtio members were given a link speed (LESSONS-LEARNED). The
+firewalls never registered: Threat Defense rejected the day-0
+password for lacking a special character and then blocked all
+configuration. The deeper problem was design: a Threat Defense
+Virtual cluster cannot run inline sets, and the operator wants an IPS
+lab. The cluster lab was wiped and deleted from the controller; its
+files stay under `labs/ftdv-cluster*` as a retired design.
+
+Replacement: `labs/ips-ha.yaml`, spec
+`docs/superpowers/specs/2026-09-11-ips-ha-lab-design.md`. An FTD HA
+pair with inline sets between VLAN 10 and 20 on one Nexus, a cat8000v
+edge as gateway and DHCP, Kali and an Ubuntu server inside, two
+servers outside, cdFMC management. Kali 2026.2 came from the official
+QEMU image: downloaded on the CML host, unpacked there with 7z from
+apt, registered through the dropfolder and the definitions API under
+`config/node-definitions/kali.yaml`, and copied to blob under
+`custom/` for future rebuilds (15 GB, fourteen seconds inside Azure).
+
+Built the same night. `labs/ips-ha.yaml` imported with all eleven
+nodes; n9k1, edge, the three Ubuntu hosts, Kali, and both FTDv are
+up. VLAN 10 and 20 verified on the switch, the edge answers on all
+three addresses and reaches both outside servers, no DHCP lease yet
+because VLAN 10 is isolated until an inline set exists. Both
+firewalls accepted the day-0 password this time and show the cdFMC
+manager with registration Pending. Kali needed a serial console
+edited into its base image (LESSONS-LEARNED); it now logs in on the
+console, nmap 7.99 present, and VNC is available through the video
+device in its node definition.
+
+Registration is the open problem. The tenant host refuses 8305 from
+everywhere while 443 answers with the tenant's certificate; every
+device-side variant was tried and is written up in LESSONS-LEARNED.
+Both firewalls currently carry a plain `DONTRESOLVE` manager entry at
+the operator's request, Registration Pending. The two device records
+in Security Cloud Control are in the onboarding state with the
+generated keys, which are in `config/mcp-env/labs.env`; both lines
+also passed through the chat transcript, so regenerate them if the
+records are recreated. Next step is on the tenant side: find out
+which host and port the Online device BOWSER uses, or ask SCC support
+why 8305 is refused. Then delete and re-add the manager on both
+consoles from the env file.
+
+Everything else in the lab is up and correct. The inline set does
+not exist until cdFMC has the pair, so VLAN 10 is still isolated and
+Kali has no address; that is by design.
+
+Was blocked on the operator: `FTD_ADMIN_PASSWORD` in
+`config/mcp-env/labs.env`, upper, lower, digit, special character, no
+sequences. The import refuses to render without it. Then: import,
+start the switches, Nexus, and edge, then hosts, then the two FTDv,
+console password change if day-0 still trips, registration, and the
+HA pair plus inline set in cdFMC.
 
 ## 2026-09-10
 
@@ -19,7 +395,7 @@ on the first try through `60-import-lab.sh`: eleven nodes, 22 links,
 image names resolved, kind-host at 4 vCPU and 8 GB. It sits stopped.
 
 The six switches were started by hand and booted. The lab user
-mruiznet@gmail.com holds lab_edit and lab_exec on the lab, set through
+with the personal address holds lab_edit and lab_exec on the lab, set through
 the API because the cml-mcp tool for it is broken (LESSONS-LEARNED).
 `labs/cilium-evpn-fabric/` holds the reference fabric configuration,
 one NX-OS file per switch, generated from one address plan: eBGP
@@ -272,7 +648,8 @@ risks from the 2026-09-04 handoff are closed.
 Getting SSH to work took most of the afternoon. The Mac was on Cisco
 Secure Client, which shows Azure three different source addresses
 depending on the port. See LESSONS-LEARNED, "SSH to the host times out".
-The two NSG rules were patched by CLI to admit `151.186.182.0/24` and the
+The two NSG rules were patched by CLI to admit the operator's VPN exit
+range and the
 home /32. `config/cml.tfvars` and the rendered `cml.yml` carry the same
 lists, so the next build renders them into the VM. Until then the fork's
 plan shows the VM as "must be replaced", and applying it would be a
@@ -326,7 +703,8 @@ paths work.
 ### Watch out for
 
 - The NSG dies with the VM and comes back from tfvars. Proven today.
-- The exit pool inside `151.186.182.0/24` rotates per connection. Never
+- The exit pool inside the operator's VPN exit range rotates per
+  connection. Never
   narrow that entry to a /32.
 - The home address is a residential dynamic IP and will change.
 - The Mac ran out of memory twice today and killed background Terraform

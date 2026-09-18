@@ -9,8 +9,9 @@
 > it. Kept for the fabric design and address plan, not as a build
 > target; do not import `labs/ftdv-cluster.yaml`.
 
-Status: draft, 2026-09-10. The `ftdv-10-0-0` image is on the data disk
-and registered with the controller; no rebuild is needed.
+Status: retired (2026-09-11, superseded by
+`2026-09-11-ips-ha-lab-design.md`). The `ftdv-10-0-0` image is on the
+data disk and registered with the controller.
 
 ## Goal
 

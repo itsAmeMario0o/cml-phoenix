@@ -1,4 +1,12 @@
-# Active Directory Implementation Plan
+# Active Directory implementation plan
+
+> Executed on 2026-09-17: `terraform/ad`, `scripts/24-ad-up.sh`,
+> `scripts/46-ad-down.sh`, and the three PowerShell scripts merged in
+> PR #18, the DC was built, and ISE joined the domain the same night.
+> Eight of the fourteen boxes below were ticked at the time and the rest
+> were not; `docs/STATUS.md` is the record of what shipped. See ADR 0010,
+> `docs/AD.md` for the concepts, and `docs/ISE-AD-BUILD.md` for the
+> runbook.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -43,7 +51,7 @@ Spec: `docs/superpowers/specs/2026-09-13-active-directory-session-design.md` (re
 | `scripts/24-ad-up.sh` | init, apply, `ad.env`, three checks, the ISE form values |
 | `scripts/46-ad-down.sh` | destroy, remove `ad.env` |
 | `tests/test_ad_dry_run.sh`, `tests/stubs/terraform` | Dry runs, the env file's mode and silence, PowerShell static and parse checks |
-| `docs/decisions/0010-...md`, `docs/AD.md`, `config/tunnels.conf.example` | The decision, the runbook, the RDP forward |
+| `docs/decisions/0010-...md`, `docs/AD.md`, `config/tunnels.conf.example` | The decision, the concepts document (the runbook is `docs/ISE-AD-BUILD.md`), the RDP forward |
 
 ### Task 1: The Terraform root
 
