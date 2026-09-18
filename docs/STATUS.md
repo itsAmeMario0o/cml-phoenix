@@ -15,7 +15,7 @@ persistent plan was clean at the last teardown. The latest lab export
 is in blob under `exports/20260917T214927Z`, the untracked "cat9kv
 probe" lab among them.
 
-Proven, on real builds: CML built and destroyed from nothing, repeatedly,
+Proven on live builds: CML built and destroyed from nothing, repeatedly,
 with images surviving on the disk; the routed path of ADR 0003 (a lab
 switch seen by ISE at its own address, RADIUS both ways, CoA back to the
 switch); MAB, EAP-MD5 and PEAP sessions on a Catalyst 9000v against ISE;

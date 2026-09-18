@@ -4,7 +4,7 @@ Status: accepted, 2026-09-17
 
 ## Context
 
-The working tree sits under `~/Library/CloudStorage/OneDrive-MarioJRuiz/`,
+The working tree sits under `~/Library/CloudStorage/OneDrive-<account>/`,
 a folder a sync client uploads. The git database does not: `.git` in the
 repository is a symlink to `~/.local-git/cml-azure-lab.git`, outside
 OneDrive, so history and refs never sync. What syncs is the working tree,
@@ -62,8 +62,8 @@ The repository stays where it is. The operator accepted this on
 
 ## Options considered
 
-1. Move the folder out of OneDrive. It is a relocation, not a redesign, and
-   it removes both the sync exposure and the placeholder failures. Rejected
+1. Move the folder out of OneDrive. It is only a relocation, and it
+   removes both the sync exposure and the placeholder failures. Rejected
    by the operator on 2026-09-17.
 2. Stay, and move the secrets into Key Vault. ADR 0004 defers Key Vault
    until a second operator joins, and `CLAUDE.md` keeps it out of scope
