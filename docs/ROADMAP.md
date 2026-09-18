@@ -1,9 +1,13 @@
 # Roadmap
 
 This is the backlog of ideas that have been agreed on but do not yet have a
-spec. Nothing here is in scope until it does. Within each section the order
-reflects rough priority, and once an item has a spec, it is linked and
-moved to the Done section at the bottom.
+spec. Nothing here is in scope until it does. Items are numbered in the
+order they were added, and a number is never reused or reassigned, because
+other documents, a code comment, and `config/ise/README.md` cite items by
+number. So the numbers run in order within a section but not across
+sections. Within each section the order reflects rough priority, and once
+an item has shipped it moves to the Done section at the bottom under its
+number.
 
 ## Operator experience
 
@@ -128,7 +132,12 @@ moved to the Done section at the bottom.
     the stdlib-only rule (CLAUDE.md code style) still holds or pytest
     and a small dependency set earn an ADR, how live checks (smoke,
     readiness, the pyATS layer) fit beside unit tests, and an order of
-    migration that never leaves the kit unable to build.
+    migration that never leaves the kit unable to build. The 2026-09-17
+    architecture review's "Stack verdicts" gives the order when this is
+    picked up: fix the test seam first (run the scripts with dry run off
+    against stub `az`, `ssh`, `curl`, and `terraform`), then move only
+    `25-ise-up.sh`, `45-ise-down.sh`, `00-preflight.sh`, and
+    `60-import-lab.sh`; the rest stays thin bash.
 22. ISE as policy as code. Operator direction, 2026-09-17: drive ISE from
     declared policy, built out from the API calls already proven live
     (ERS network devices and internal users, OpenAPI policy sets and
@@ -166,7 +175,7 @@ moved to the Done section at the bottom.
 
 ## Images and scenarios
 
-8. Moved to Done.
+8. Nexus 9300v and the SD-WAN set on the server. In Done below.
 9. Scenario topologies under `labs/`. One YAML per scenario. The first
    one landed 2026-09-10: the Cilium EVPN fabric, blank edition, with
    placeholders rendered at import (ADR 0006). Still to come in that
@@ -210,11 +219,16 @@ moved to the Done section at the bottom.
 
 ## From the design spec, still deferred
 
-11. The lab edge router and the host's local bridge.
-12. ISE and FTD virtual machines with their own persistent disks.
 13. Key Vault and a managed identity for the secrets that are tfvars
-    today.
-14. CI, Bastion, and CML clusters.
+    today. ADR 0004 defers it until a second operator joins, and ADR 0011
+    names that as the exit condition for keeping the repository's secrets
+    where they are.
+14. CI and CML clusters. Bastion is item 17. CI would be one small job
+    running `tests/run.sh` and gitleaks, and it is the operator's to
+    approve since `CLAUDE.md` excludes it. Clusters are not a scope line
+    to lift: the routed path of ADR 0003 is one layer 3 hop, one route
+    next hop, and one bridge on one host, so a cluster means redesigning
+    that ADR first.
 
 ## Other clouds
 
@@ -227,7 +241,18 @@ moved to the Done section at the bottom.
 
 ## Done
 
-- Nexus 9300v on the server, 2026-09-07. Two vCPU and 12 GB each by the
+- 11, the lab edge router and the host's local bridge, 2026-09-17. The
+  fork's `06-transit.sh` builds `bridge1` and the `transit` libvirt
+  network on the CML host, the C8000v in `labs/trustsec-phase1.yaml` is
+  the edge at 10.100.0.2, and the path was proven with RADIUS and CoA
+  (ADR 0003 and its amendment, `docs/STATUS.md`).
+- 12, ISE and FTD virtual machines, in a different shape than the spec
+  drew. ISE is a per-session Marketplace deploy (ADR 0008 and its
+  amendment) and FTDv runs inside CML from the persistent data disk
+  (`labs/ips-ha.yaml`). Neither has a persistent disk of its own; the
+  operator rejected a second monthly disk when the same question came up
+  for the domain controller (ADR 0010).
+- 8, Nexus 9300v on the server, 2026-09-07. Two vCPU and 12 GB each by the
   node definition in this refplat. With
   it came the Catalyst SD-WAN Manager, Validator, Controller, and edge
   from the supplemental ISO, uploaded with the `REFPLAT_ISO` override.
