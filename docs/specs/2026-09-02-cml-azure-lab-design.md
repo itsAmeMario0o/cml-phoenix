@@ -98,12 +98,12 @@ cml-azure-lab/
 │   ├── 50-tunnels.sh
 │   └── 90-smoke-test.sh
 ├── docs/
-│   ├── design-notes.md
+│   ├── archive/design-notes.md
 │   ├── decisions/0001..0004
 │   ├── superpowers/specs/
 │   ├── STATUS.md
 │   └── LESSONS-LEARNED.md
-└── deep-dive/
+└── docs/archive/deep-dive/  (moved 2026-09-18)
 ```
 
 Gitignored: `*.tfstate*`, `*.tfvars` except `*.example`, `config/cml.yml`,

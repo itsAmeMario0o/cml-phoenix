@@ -7,7 +7,7 @@
 # with routed uplinks to a cat8000v edge, two Threat Defense Virtual
 # nodes (one per Nexus) that form a cluster under cloud-delivered
 # management, an inside host bonded across the pair, and an outside host
-# on the edge. Spec: docs/superpowers/specs/2026-09-10-ftdv-cluster-lab-design.md.
+# on the edge. Spec: docs/specs/2026-09-10-ftdv-cluster-lab-design.md.
 #
 # The Nexus pair and the edge boot with hostname, admin user, and
 # management address only; the fabric configuration is in

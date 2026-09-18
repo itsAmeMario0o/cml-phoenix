@@ -20,7 +20,7 @@
 
 This code was written by Cisco, not by an AI, but the point of the exercise is the
 same: understand what it does and why before changing it. Design decisions from the
-companion notes (`docs/design-notes.md`) are called out where they touch
+companion notes (`docs/archive/design-notes.md`) are called out where they touch
 specific lines.
 
 ---

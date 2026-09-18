@@ -3,7 +3,7 @@
 # a DHCP scope, two FTDv in high availability each with an inline set
 # bridging VLAN 10 to VLAN 20, Kali and an Ubuntu server inside, two
 # Ubuntu servers outside. Managed by cdFMC.
-# Spec: docs/superpowers/specs/2026-09-11-ips-ha-lab-design.md.
+# Spec: docs/specs/2026-09-11-ips-ha-lab-design.md.
 #
 # Every node boots configured. Placeholders come from
 # config/mcp-env/labs.env through scripts/60-import-lab.sh (ADR 0006).

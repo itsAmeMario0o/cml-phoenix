@@ -67,7 +67,7 @@ hand after every CML rebuild: `70-users.sh`, the cloudflared reinstall in
 
 Open and older: an ISE certificate from `corp-rooez-CA`; the Phase 2
 implementation plan (the spec is
-`docs/superpowers/specs/2026-09-17-trustsec-phase2-design.md`); the
+`docs/specs/2026-09-17-trustsec-phase2-design.md`); the
 Cloudflare tunnel token rotation owed since 2026-09-11.
 
 ## Log
@@ -255,7 +255,7 @@ this week (ISE is reached by the CML jump, not its public IP, and is
 already deployed with a public resolver).
 
 The Phase 2 design is drafted for review (PR #17,
-`docs/superpowers/specs/2026-09-17-trustsec-phase2-design.md`), in two
+`docs/specs/2026-09-17-trustsec-phase2-design.md`), in two
 acts after the operator's five-step slide: Act 1 is the SNMP-only
 inventory job against the switches, RADIUS untouched; Act 2 adds tags,
 SGACLs on the switch, and FTD enforcing by inline tag. Routed access is
@@ -397,7 +397,7 @@ its CLI once the SSH key the Marketplace deploy was given is known
 (SSH there is key-only; the try with `keys/cml-lab` was interrupted).
 Full state, the exact next steps, and the Phase 2 topology with FTDv
 and Kali added are in the Phase 2 note,
-`docs/superpowers/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`.
+`docs/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`.
 
 Two things to carry forward. The rendered `config/cml.yml` secrets,
 sysadmin's sudo password among them, appeared unmasked in this
@@ -489,7 +489,7 @@ omitted steps):
    takes effect on the next build. If ISE does see the request and stays
    silent, the Live Log drop reason says why. Only after RADIUS answers:
    the first MAB session on `ep1`, then the Phase 2 spec with FTDv and
-   Kali (`docs/superpowers/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`).
+   Kali (`docs/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`).
 
 ### 2026-09-16, TrustSec Phase 2 scoped: profiling, and why it needs a real switch
 
@@ -542,7 +542,7 @@ Full findings, the live test output, and the open questions (UADP or
 Q200, where the switch sits relative to the C8000v, what plays the
 endpoint, how much of the operator's five-step SNMP profiling procedure
 ISE can reproduce) are in
-`docs/superpowers/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`.
+`docs/specs/2026-09-16-trustsec-phase2-cat9kv-profiling-plan.md`.
 No lab YAML, refplat, or node-definition file changed yet; brainstorming
 is not done.
 

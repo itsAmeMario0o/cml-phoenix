@@ -9,7 +9,7 @@ or node-definition files have been touched; everything here is findings
 and open questions, per the brainstorming skill's gate.
 
 This extends Phase 2 as scoped in
-`docs/superpowers/specs/2026-09-12-trustsec-phase1-routed-ise-design.md`
+`docs/specs/2026-09-12-trustsec-phase1-routed-ise-design.md`
 ("the Catalyst 9000v fabric, endpoints, and the FTD... SGT
 classification, the SGACL matrix, SXP, and pxGrid").
 

@@ -293,7 +293,7 @@ in Azure, which is the cheapest place to learn them.
 - Symptom: `send_cli_command` answered "PyATS and Genie are required to
   send commands to running devices" on a booted Nexus. Seen 2026-09-10.
 - Cause: the plain `cml-mcp` package has no pyATS. The `cml-mcp[pyats]`
-  extra carries it, which `docs/design-notes.md` had named from the
+  extra carries it, which `docs/archive/design-notes.md` had named from the
   start and the wrapper never used. A second trap sits behind the
   first: the tool logs in to every device as `PYATS_USERNAME` and
   `PYATS_PASSWORD`, cisco and cisco when unset, which no topology in

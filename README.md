@@ -66,7 +66,7 @@ empty subscription to CML, the directory, and ISE joined to it. Then
 `docs/STATUS.md`, which records where the build stands today, and
 `docs/PREREQUISITES.md`, which lists what only you can provide, chiefly a
 license and two Cisco downloads. For how the project is meant to be worked
-in, `CLAUDE.md` holds the working rules, `docs/superpowers/specs/` holds
+in, `CLAUDE.md` holds the working rules, `docs/specs/` holds
 the designs, and `docs/decisions/` explains the reasoning behind each
 choice. `docs/ARCHITECTURE-REVIEW.md` is a 2026-09-17 self-audit with an
 ordered list of what to fix. Two further guides depend on your goal:

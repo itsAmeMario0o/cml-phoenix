@@ -388,7 +388,7 @@ The numbers: about 17,200 lines of tracked Markdown against 10,650 lines of
 code, tests and lab YAML included. That is 1.6 to 1 overall and 2.2 to 1
 against non-test code. 116 of 235 commits are `docs:`.
 
-Half of it is fossil. `docs/superpowers/` is 8,361 lines, 49 percent of all
+Half of it is fossil. `docs/specs/ and docs/plans/` is 8,361 lines, 49 percent of all
 Markdown, and one archived plan is 5,302 of them; its own banner says its
 contents have diverged and to read the real files. The trustsec and pyATS
 plans show 0 of 31 and 0 of 30 boxes ticked for work that shipped. Four
@@ -430,7 +430,7 @@ is consistent and plain. It has also grown its own tics, which are the new
 tells: ", not X" 116 times, "real" or "really" 119 times, "by hand" 77,
 "the operator" 92, "proven" 40. It breaks in three places: `STATUS.md`
 (first person slips, one unwrapped 1,500 character paragraph), the two
-`deep-dive/` files (essay voice, 22 negative parallelisms in one), and
+`docs/archive/deep-dive/` files (essay voice, 22 negative parallelisms in one), and
 `USER-GUIDE.md`. The opposite failure is present too: `STATUS.md` assumes a
 reader who was in the sessions (sw1, emp-pc, the probe lab, the classifier,
 PR numbers) and has no glossary.

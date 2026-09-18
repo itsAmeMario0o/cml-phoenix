@@ -1,7 +1,9 @@
 # Using the lab
 
-> `docs/index.html`, the published copy of this page, was last synced from
-> it on 2026-09-11. This Markdown is the authoritative version.
+> `docs/index.html` is the published end-user page at
+> https://itsamemario0o.github.io/cml-phoenix/. It carries the login steps
+> from this file in its own shorter form and not the owner's section. When
+> the steps change here, change them there too.
 
 Welcome. You have been given an account on a Cisco Modeling Labs server
 that runs on demand. You reach it entirely through your browser, with no

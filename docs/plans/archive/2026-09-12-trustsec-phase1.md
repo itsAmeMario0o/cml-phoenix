@@ -19,7 +19,7 @@
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-09-12-trustsec-phase1-routed-ise-design.md`. ADR 0003 (routed path), ADR 0004 (secrets).
+- Spec: `docs/specs/2026-09-12-trustsec-phase1-routed-ise-design.md`. ADR 0003 (routed path), ADR 0004 (secrets).
 - ISE is the one instance built outside Terraform, by `az` CLI. Its NIC and NSG are `az`-managed too. The persistent apps subnet, route table, and IP forwarding stay Terraform. No `terraform/ise` root.
 - No secret in a tracked file. The ISE admin password lives in a gitignored env file and reaches ISE through `--custom-data` (user-data), never on the `az` command line, never in a commit or chat.
 - Never `0.0.0.0/0` in an NSG rule. ISE NSG rules are scoped to the operator addresses and the lab summary.
