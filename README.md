@@ -24,20 +24,23 @@ GitHub repository is named `cml-phoenix`.
 ## Build
 
     scripts/00-preflight.sh
-    scripts/20-up.sh
+    scripts/20-up.sh                        # first time on a subscription: BUILD-FROM-SCRATCH phases 0 and 1 come first
     # wait a minute: the controller's API is not ready the moment the script ends
-    scripts/50-tunnels.sh up
+    scripts/50-tunnels.sh up                # needs config/tunnels.conf, copied from its .example
     scripts/90-smoke-test.sh                # summary: 13 OK, 0 WARN, 0 FAIL
+    # by hand until the spec lands: connector rescan, cloudflared, lab re-import (BUILD-FROM-SCRATCH phases 2 and 6)
+    scripts/70-users.sh                     # accounts die with the VM; rerun after every import
     scripts/24-ad-up.sh
-    # ISE: the portal form, then log in once at https://localhost:8443 and set the password
+    # ISE: the portal form (docs/ISE-AD-BUILD.md Part 2), then log in once at
+    # https://localhost:8443 and set the password to ISE_ADMIN_PASSWORD from config/mcp-env/ise.env
     scripts/25-ise-up.sh --post-deploy
     # then docs/ISE-AD-BUILD.md Part 3: the join and the groups
 
 ## Use
 
-    scripts/60-import-lab.sh labs/<x>.yaml  # or re-import the last export, BUILD-FROM-SCRATCH phase 6
-    scripts/70-users.sh
-    scripts/80-verify-lab.sh <scenario>
+    scripts/60-import-lab.sh labs/<x>.yaml  # imports stopped; start it in the CML UI
+    scripts/70-users.sh                     # grant the new lab to everyone
+    scripts/80-verify-lab.sh <scenario>     # the lab must be running
 
 ## Stop
 
@@ -45,12 +48,9 @@ GitHub repository is named `cml-phoenix`.
     scripts/45-ise-down.sh
     scripts/46-ad-down.sh
 
-Every apply asks first. The bootstrap and persistent roots carry
-`prevent_destroy` on the state storage account and the data disk, and no
-script in this repository runs `destroy` against either root. The test for
-that (`tests/test_down_dry_run.sh`) only checks that the text of
-`40-down.sh` never names those roots next to the word "destroy"; it does
-not exercise Terraform.
+Every apply asks first. No script in this repository runs `destroy` against
+the bootstrap or persistent root, and both carry `prevent_destroy` on their
+most precious resource. A test checks the scripts' text, not Terraform.
 
 ## Read next
 

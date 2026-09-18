@@ -136,7 +136,8 @@ from nothing on 2026-09-18, with `10-promote-forest.ps1` setting
 ISE's join on the first call: `PUT .../join` returned 204, no restart of
 the DC, and both lab groups listed and selected afterward.
 
-The session lifetime in this ADR's title changes. The operator decided on
+The session lifetime in this ADR's title will change once the spec below
+lands. The operator decided on
 2026-09-18 to build the DC once and deallocate it between sessions instead
 of destroying it, so its forest, CA, identities, and ISE's join survive to
 the next session at about $2 a month for the 30 GB disk. The root is still

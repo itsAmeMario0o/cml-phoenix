@@ -9,8 +9,10 @@ selected. On top of that sits whatever lab you import.
 
 Each phase says what it gets you, what has to be true first, the command,
 how to check it, and what usually goes wrong. The detail lives in the
-documents each phase links to. Every step here has run on a live build; the
-last full run was 2026-09-18.
+documents each phase links to. Every step here has run on a live build, the
+last full run on 2026-09-18, except three things this guide says so about
+where they appear: the 300 GB Standard SSD form values for ISE, a base-only
+image upload, and `40-down.sh --skip-export`.
 
 If you are an AI agent working in this repo: `CLAUDE.md` makes
 `terraform apply`, `scripts/20-up.sh`, `scripts/24-ad-up.sh`,
@@ -62,6 +64,19 @@ public IP, data disk, blob containers), and blob outlive a session (ADR
 the DC between sessions,
 `docs/specs/2026-09-18-persistent-ise-dc-and-script-consolidation-design.md`,
 is approved and not built; this guide describes what exists.
+
+## Words this guide uses
+
+| Term | Meaning |
+|---|---|
+| Persistent root | The Terraform root that is never destroyed: images, exports, the static public IP, the VNet |
+| The transit, `bridge1` | The bridge on the CML host where lab nodes get `10.100.0.0/16` addresses and reach the VNet without NAT (ADR 0003) |
+| The forward | The `cml` SSH port forward (`localhost:9443`) every script uses to reach the controller (ADR 0012) |
+| NAD | Network access device: a switch or router that ISE treats as a RADIUS client |
+| Join point | ISE's record of an Active Directory domain it has joined |
+| ERS | ISE's REST API for configuration objects, on port 443 under `/ers/config` |
+| CoA, MAB | Change of Authorization (ISE telling a switch to re-evaluate a session); MAC Authentication Bypass (a port authenticated by MAC address) |
+| `sw1`, `emp-pc` | The Catalyst 9000v and the Ubuntu endpoint in the hand-built test lab, "cat9kv probe"; not a tracked topology |
 
 ## Time budget
 
@@ -160,7 +175,10 @@ state storage account's name is a literal in that tracked file, and yours is
 different because the name carries a random suffix. Read yours and put it in
 `storage_account_name`:
 
-    terraform -chdir=terraform/bootstrap output -raw storage_account_name
+    terraform -chdir=terraform/bootstrap output -raw storage_account_name   # st...tfstate, 24 characters
+
+Commit that edit on your own fork or branch: the name is not a secret, and
+the tracked literal is what lets a fresh clone find the state again.
 
 Run `scripts/20-up.sh` again. It reports the bootstrap as already applied.
 Answer `y` to the persistent apply, and answer `n` when it asks to apply the
@@ -243,7 +261,13 @@ alone on 2026-09-18. Check three things by hand:
    `postprocess` swallows the script's exit code, so the log is the only
    signal.
 2. The CML NIC's NSG carries both `lab-transit-in` (400) and
-   `lab-transit-out` (410).
+   `lab-transit-out` (410). The NSG's name carries a random suffix:
+
+       nsg="$(az network nsg list -g rg-cml-lab --query "[?starts_with(name,'cml-sg')].name" -o tsv)"
+       az network nsg rule list -g rg-cml-lab --nsg-name "$nsg" \
+         --query "[?starts_with(name,'lab-transit')].{name:name,dir:direction,pri:priority}" -o table
+
+   Two rows, Inbound 400 and Outbound 410.
 3. The controller lists the bridge as an external connector. It does not
    until it is told to rescan, because the transit script runs after the
    controller's own startup scan. By hand until the spec lands:
@@ -251,8 +275,10 @@ alone on 2026-09-18. Check three things by hand:
        set -a; source config/mcp-env/cml.env; set +a
        TOKEN="$(printf '{"username":"%s","password":"%s"}' "$CML_USERNAME" "$CML_PASSWORD" |
          curl -sk -H 'Content-Type: application/json' -d @- "$CML_API_BASE/api/v0/authenticate" | jq -r .)"
-       curl -sk -X PUT -H "Authorization: Bearer $TOKEN" "$CML_API_BASE/api/v0/system/external_connectors"
-       curl -sk -H "Authorization: Bearer $TOKEN" "$CML_API_BASE/api/v0/system/external_connectors" | jq .
+       curl -sk -X PUT -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}\n' \
+         "$CML_API_BASE/api/v0/system/external_connectors"      # 200
+       curl -sk -H "Authorization: Bearer $TOKEN" "$CML_API_BASE/api/v0/system/external_connectors" \
+         | jq -r '.[] | "\(.label) -> \(.device_name)"'          # NAT -> virbr0, Bridge 1 -> bridge1
 
    The last call lists "Bridge 1" on device `bridge1`. The password travels
    on stdin, not on a command line, and to the forward.
@@ -264,7 +290,7 @@ carry nothing until phases 3 and 4.
 
 | Symptom | Where to look |
 |---|---|
-| The tunnels or the smoke test fail right after the build | Timing. Wait a minute and rerun once. LESSONS-LEARNED, "The smoke test fails five checks straight after a build" |
+| The tunnels or the smoke test fail right after the build | Timing. Wait a minute and rerun once. LESSONS-LEARNED, "Tunnels and the smoke test fail in the minute after a build" |
 | `[FAIL] CML API forward not up` from any script or cml-mcp | `scripts/50-tunnels.sh up`. LESSONS-LEARNED, "Every script fails with 'CML API forward not up' after a build" |
 | SSH times out while the UI works | LESSONS-LEARNED, "SSH to the host times out while the web UI and the API work fine" |
 | Your own `ssh`, or a cml-mcp console, complains about a changed host key | LESSONS-LEARNED, "After a rebuild every script that uses SSH fails with a changed host key" and "After a rebuild cml-mcp cannot reach any node console". The scripts use `keys/known_hosts`; your own file is yours to clear |
@@ -435,10 +461,15 @@ The labs from the last session are in `exports/<stamp>/` in the repo
 by `40-down.sh`. Re-importing them is by hand until the spec lands. Check
 `ls exports/` for every lab that should come back, because a lab that was
 not on the CML when the newest export was taken is only in an older
-folder; the Cilium fabric was missed for two builds that way. For each
-file, with the `TOKEN` from the phase 2 rescan:
+folder; the Cilium fabric was missed for two builds that way. The local
+folders are `ls exports/`; the blob copy is
+`az storage blob list --account-name <lab storage account> --container-name exports --auth-mode login -o table`.
+For each file, in a fresh shell:
 
-    curl -skf -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type:" \
+    set -a; source config/mcp-env/cml.env; set +a
+    TOKEN="$(printf '{"username":"%s","password":"%s"}' "$CML_USERNAME" "$CML_PASSWORD" |
+      curl -sk -H 'Content-Type: application/json' -d @- "$CML_API_BASE/api/v0/authenticate" | jq -r .)"
+    curl -skf -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/yaml" \
       --data-binary @exports/<stamp>/<lab>.yaml "$CML_API_BASE/api/v0/import" | jq -r .id
 
 Each call prints a lab id. Labs come back stopped. Start them from the UI or
@@ -477,9 +508,16 @@ Everything in this table is something you can run yourself.
 
 `80-verify-lab.sh` knows `cilium-evpn` and `trustsec-phase1`, and takes
 `--dry-run`. `trustsec-phase1` needs `verify/.venv`, the lab running, an
-ISE internal user `trustsec-verify` (made over ERS, again on every new
-ISE), and its credentials in `labs.env` as `TRUSTSEC_TEST_USERNAME` and
-`TRUSTSEC_TEST_PASSWORD`. Expect RadiusServerReachable and
+ISE internal user `trustsec-verify`, made again on every new ISE with the
+values from `labs.env` (`TRUSTSEC_TEST_USERNAME`, `TRUSTSEC_TEST_PASSWORD`):
+
+    set -a; source config/mcp-env/ise.env; source config/mcp-env/labs.env; set +a
+    jq -n --arg u "$TRUSTSEC_TEST_USERNAME" --arg p "$TRUSTSEC_TEST_PASSWORD" \
+      '{InternalUser: {name: $u, password: $p, enabled: true}}' \
+      | curl -sk -u "iseadmin:$ISE_ADMIN_PASSWORD" -H 'Content-Type: application/json' \
+        -d @- -o /dev/null -w '%{http_code}\n' https://localhost:8443/ers/config/internaluser   # 201
+
+The password rides on stdin, never on a command line. Expect RadiusServerReachable and
 RadiusAccessAccept to pass and CoAReceived to fail at 0: ISE sends a CoA
 only for a live session, and a router with no endpoints has none. No pyATS
 scenario covers 802.1X, MAB, a switch, or Active Directory yet.

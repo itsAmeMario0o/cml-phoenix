@@ -1,5 +1,10 @@
 # Architecture review, 2026-09-17
 
+> A snapshot of `main` at `52042d3` on 2026-09-17. It is kept as written.
+> Items in "What to do, in order" that were done on 2026-09-17 and
+> 2026-09-18 are marked `[done]` there; the findings above them describe the
+> repository before those fixes. The current state is `docs/STATUS.md`.
+
 A self-audit of this repository at `main` `52042d3`, asked for by the
 operator with one instruction: be honest. It covers how the kit is built,
 how far it scales, how readable it is, and whether it follows ordinary good
@@ -505,34 +510,34 @@ An afternoon, mostly one-liners:
 1. Rotate the two CML passwords before the next build. Operator's apply.
 2. `pre-commit install`. Operator's decision, since it changes how commits
    behave.
-3. Pin `cml-mcp` to a version in `scripts/mcp-cml.sh`.
-4. Fix the export loop in `cml-remote.sh` and make `40-down.sh` compare
+3. [done, PR #23] Pin `cml-mcp` to a version in `scripts/mcp-cml.sh`.
+4. [done, PR #23] Fix the export loop in `cml-remote.sh` and make `40-down.sh` compare
    counts. Add the failing-API test.
-5. Make `test_transit.sh` call `finish`.
-6. Give easypy an archive and runinfo directory under `verify/`, and ignore
+5. [done, PR #23] Make `test_transit.sh` call `finish`.
+6. [done, PR #21] Give easypy an archive and runinfo directory under `verify/`, and ignore
    them. The `.gitignore` edit needs the operator.
 7. Add `prevent_destroy` to the public address and the lab storage account.
    Operator's apply.
-8. Correct the false `STATUS.md` rotation claim and the wrong bound in the
+8. [done, PR #20, #22] Correct the false `STATUS.md` rotation claim and the wrong bound in the
    ADR 0010 amendment.
 
 A day or two:
 
-9. `45-ise-down.sh`: delete in three passes by type, list again, fail on
+9. [done, PR #23, #25] `45-ise-down.sh`: delete in three passes by type, list again, fail on
    leftovers. End every down script with a listing of the resource group
    against the persistent set.
-10. `--skip-export` for `40-down.sh`, and render `config/cml.yml` again
+10. [done, PR #23] `--skip-export` for `40-down.sh`, and render `config/cml.yml` again
     before destroy.
-11. Resolve outputs into variables before building argument lists in
+11. [done, PR #23] Resolve outputs into variables before building argument lists in
     `24-ad-up.sh`, `46-ad-down.sh`, and `20-up.sh`.
-12. One `Invoke-Native` helper for the six PowerShell native calls, and
+12. [done, PR #21] One `Invoke-Native` helper for the six PowerShell native calls, and
     `$ErrorActionPreference='Stop'` in the DNS check.
-13. `users.py`: write each credential as it is created, and append.
+13. [done, PR #21] `users.py`: write each credential as it is created, and append.
 14. A deny block in `.claude/settings.json` and a fifteen line GitHub Actions
     job running `tests/run.sh` and gitleaks. Both are the operator's to
     approve, since `CLAUDE.md` guards the first and excludes the second.
-15. Send CML API traffic through an SSH forward, and write the ADR.
-16. Documentation: delete the 5,302 line archived plan, archive executed
+15. [done, PR #24] Send CML API traffic through an SSH forward, and write the ADR.
+16. [done, PR #22, #29 in part] Documentation: delete the 5,302 line archived plan, archive executed
     plans with one line each, give every spec a status, rewrite the README's
     fifteen stale lines and pick one project name, turn `STATUS.md` into a
     current-state block plus a log, strip task numbers and dated stories
@@ -542,14 +547,14 @@ A day or two:
 
 Before Phase 2:
 
-18. Make the next build a proving run and nothing else: no other work until
+18. [done, 2026-09-18, all five proven] Make the next build a proving run and nothing else: no other work until
     the smoke test and a domain join pass without touching a host. Record the
     result. Five things have never run in a clean build.
-19. Run the numbered scripts with dry run off against canned stubs. This is
+19. [done, PR #25] Run the numbered scripts with dry run off against canned stubs. This is
     the single change that would have caught the most bugs.
 20. Teach `ise_config.py` the join, the groups, and the second NAD, or
     choose a different policy layer first.
-21. Move the repository out of OneDrive, or write the ADR that accepts it.
+21. [done, ADR 0011, stays in OneDrive] Move the repository out of OneDrive, or write the ADR that accepts it.
 
 Not worth doing: a generic VM module or Terragrunt, remote state for the
 session roots, plan and apply pipelines or OIDC to Azure, per-port rules for

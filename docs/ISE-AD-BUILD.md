@@ -13,14 +13,16 @@ No password appears here. Each is named by its variable in
 Build order:
 
     scripts/20-up.sh                       # CML
+    scripts/50-tunnels.sh up               # a minute after 20-up ends
+    scripts/90-smoke-test.sh
     scripts/24-ad-up.sh                    # Part 1, about 20 minutes
     (portal deploy, first login)           # Part 2
     scripts/25-ise-up.sh --post-deploy     # Part 2
     (join point, join, groups)             # Part 3
     ...work...
-    scripts/45-ise-down.sh                 # ISE first: it depends on the DC
+    scripts/40-down.sh                     # CML depends on neither server
+    scripts/45-ise-down.sh                 # ISE before the DC: it depends on it
     scripts/46-ad-down.sh
-    scripts/40-down.sh
 
 ## Part 1: the Windows server
 
@@ -382,6 +384,11 @@ Check: `HTTP/1.1 201`. The join point's id is the last segment of the
 
     JP=<id from Location>
 
+Or, at any later time, look it up:
+
+    JP="$(curl -sk -u "iseadmin:$ISE_ADMIN_PASSWORD" -H 'Accept: application/json' \
+      https://localhost:8443/ers/config/activedirectory | jq -r '.SearchResult.resources[0].id')"
+
 ### Join
 
     umask 077
@@ -415,18 +422,23 @@ point. Ask the domain for its groups:
     curl -sk -u iseadmin -H 'Content-Type: application/json' -H 'Accept: application/json' \
         -X PUT "https://localhost:8443/ers/config/activedirectory/${JP}/getGroupsByDomain" \
         -d '{"OperationAdditionalData": {"additionalData": [{"name": "domain", "value": "corp.rooez.com"}]}}' \
-        | jq . | grep -B1 -A2 'Mushroom-Kingdom\|Koopa-Troop'
+        | jq -r '.ERSActiveDirectoryGroups.groups[] | select(.name | test("Mushroom-Kingdom|Koopa-Troop")) | "\(.name) \(.sid)"' \
+        | tee /tmp/ise-groups.txt
 
-Check: both `corp.rooez.com/Users/Mushroom-Kingdom` and
-`corp.rooez.com/Users/Koopa-Troop`, type `GLOBAL`, each with a `sid`. SIDs
-differ in every build of the forest; never write them down.
+Check: two lines, `corp.rooez.com/Users/Mushroom-Kingdom` and
+`corp.rooez.com/Users/Koopa-Troop`, each followed by its SID. SIDs differ
+in every build of the forest; never write them down. Read them back into
+variables for the next call:
+
+    MK="$(awk '/Mushroom-Kingdom/ {print $2}' /tmp/ise-groups.txt)"
+    KT="$(awk '/Koopa-Troop/ {print $2}' /tmp/ise-groups.txt)"
 
 Add them. A plain `PUT .../activedirectory/<id>` returns 405; the call is
 `addGroups`, with the join point exactly as GET returned it, minus `link`:
 
     curl -sk -u iseadmin -H 'Accept: application/json' \
         "https://localhost:8443/ers/config/activedirectory/${JP}" \
-        | jq --arg mk '<Mushroom-Kingdom sid>' --arg kt '<Koopa-Troop sid>' \
+        | jq --arg mk "$MK" --arg kt "$KT" \
             'del(.ERSActiveDirectory.link)
              | .ERSActiveDirectory.adgroups = {groups: [
                  {name: "corp.rooez.com/Users/Mushroom-Kingdom", sid: $mk, type: "GLOBAL"},

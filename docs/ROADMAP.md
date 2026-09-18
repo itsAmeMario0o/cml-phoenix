@@ -112,7 +112,7 @@ number.
     (`1homas/ISE_Ansible_Sandbox`) stays a reference for item 18.
 24. Persistent ISE and directory, three commands to start. In progress.
     Spec: `docs/specs/2026-09-18-persistent-ise-dc-and-script-consolidation-design.md`,
-    approved 2026-09-18. ISE and the DC are built once and deallocated
+    approved 2026-09-18, not built. ISE and the DC will be built once and deallocated
     between sessions; the ten hand touches of the 2026-09-18 start fold
     into `20-up.sh`, `24-ad-up.sh`, and `25-ise-up.sh`; no orchestrator,
     no state file. Order of work, one PR each:

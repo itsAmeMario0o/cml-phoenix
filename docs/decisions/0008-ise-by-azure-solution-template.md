@@ -120,7 +120,9 @@ time, though the check stays a deploy-time gate.
 Two directions follow, both deferred and tracked on the roadmap: make the
 `cisco.ise` Ansible collection the default ISE configuration layer, and adopt
 the ISE Eternal Evaluation (ISEEE) patterns to make a per-session ISE
-practical without a fresh portal deploy every time.
+practical without a fresh portal deploy every time. (The second was
+superseded on 2026-09-18 by the decision to keep ISE between sessions; see
+the amendment below and roadmap item 24.)
 
 ## Amendment, 2026-09-18: the form carries the DC's DNS, and ISE is kept between sessions
 
@@ -133,7 +135,8 @@ resolving through the DC, joined the domain on the first call, and needed
 no CLI repoint. The repoint is now the exception path for an ISE deployed
 before the DC (`docs/ISE-AD-BUILD.md`, Part 2).
 
-ISE is no longer destroyed per session. The operator decided on
+ISE will no longer be destroyed per session once the spec below lands.
+The operator decided on
 2026-09-18 to build it once and deallocate it between sessions, so the
 portal form is filled in once per evaluation instead of once per session.
 Deallocated compute is not billed; the disk is, by tier, so the next
