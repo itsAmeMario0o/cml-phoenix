@@ -13,6 +13,8 @@ source "${REPO_ROOT}/tests/lib/asserts.sh"
 
 FAKE_PASSWORD="Sup3rSecretTestOnly-DoNotLeak"
 mkdir -p "${TMP}/bin"
+# The $* and ${CML_PASSWORD} below are the fake uvx's own, on purpose.
+# shellcheck disable=SC2016
 printf '#!/usr/bin/env bash\necho "uvx $*"\necho "server sees password: ${CML_PASSWORD:-unset}"\n' > "${TMP}/bin/uvx"
 chmod +x "${TMP}/bin/uvx"
 printf 'CML_URL=https://203.0.113.5\nCML_USERNAME=admin\nCML_PASSWORD=%s\nCML_VERIFY_SSL=false\n' "${FAKE_PASSWORD}" > "${TMP}/cml.env"
