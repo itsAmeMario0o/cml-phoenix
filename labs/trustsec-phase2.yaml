@@ -26,6 +26,11 @@
 # connector has one port, so nat-sw, an unmanaged switch, fans it out;
 # that makes eleven nodes where the spec counted ten.
 #
+# emp-pc and iot-dev set real vendor MAC prefixes (Dell, HP) inside the
+# guest, because ISE's first classification is the MAC vendor and CML's own
+# 52:54:00 prefix maps to nobody; CML refuses any other prefix on the NIC
+# itself. kali keeps the CML prefix on purpose: it is the unknown device.
+#
 # Render with scripts/60-import-lab.sh, which fills __LAB_PASSWORD__,
 # __FTD_ADMIN_PASSWORD__, __ISE_IP__ and __RADIUS_SECRET__ from
 # config/mcp-env/labs.env and __LAB_SSH_PUBKEY__ from keys/cml-lab.pub
@@ -382,6 +387,9 @@ nodes:
         version: 2
         ethernets:
           ens2:
+            # A Dell prefix: ISE's first classification is the MAC vendor,
+            # and CML's own 52:54:00 maps to nobody.
+            macaddress: 00:14:22:5a:10:01
             dhcp4: true
             dhcp4-overrides:
               use-routes: false
@@ -414,6 +422,8 @@ nodes:
       USERNAME=cisco
       PASSWORD=__LAB_PASSWORD__
       kill "$(cat /var/run/udhcpc.eth0.pid)" 2>/dev/null
+      # An HP prefix on the wire, for the same reason as emp-pc's Dell one.
+      ip link set eth0 down; ip link set eth0 address 3c:d9:2b:7e:10:02; ip link set eth0 up
       udhcpc -i eth0 -b -R -p /var/run/udhcpc.eth0.pid -x hostname:hp-printer-01 -V "Hewlett-Packard JetDirect"
       adduser -D cisco 2>/dev/null
       install -d -m 700 -o cisco -g cisco /home/cisco/.ssh
