@@ -8,6 +8,8 @@ overridden by environment variables read at startup:
 - FAKE_LABS=0 starts with no labs (default: labs present).
 - FAKE_DEREGISTER_FAILS=1 makes DELETE /licensing/deregistration respond
   202 but leave the registration state unchanged (default: it succeeds).
+- FAKE_USER_CREATE_FAILS=name1,name2 makes POST /users respond 500 for
+  those usernames, so a run that fails part way can be tested.
 """
 from __future__ import annotations
 
@@ -30,6 +32,7 @@ STATE: dict = {
     "labs": _default_labs() if os.environ.get("FAKE_LABS") != "0" else {},
     "registration": os.environ.get("FAKE_REGISTRATION", "REGISTERED"),
     "deregister_fails": os.environ.get("FAKE_DEREGISTER_FAILS") == "1",
+    "user_create_fails": {n for n in os.environ.get("FAKE_USER_CREATE_FAILS", "").split(",") if n},
     # Users and groups, shaped like GET /users and GET /groups on 2.10.
     # Passwords are kept aside so a created user can authenticate.
     "users": {"u-admin": {"id": "u-admin", "username": "admin", "fullname": "", "email": "",
@@ -73,6 +76,9 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(body)
             if _user_by_name(data["username"]) is not None:
                 self._send(422, {"description": "User already exists."})
+                return
+            if data["username"] in STATE["user_create_fails"]:
+                self._send(500, {"description": "simulated failure"})
                 return
             uid = f"u-{len(STATE['users'])}"
             STATE["users"][uid] = {"id": uid, "username": data["username"], "fullname": data.get("fullname", ""),
