@@ -218,7 +218,7 @@ check_blobs() {
 
 # check_ise_marketplace: confirm the Cisco ISE Marketplace offer's terms
 # are accepted, needed before the portal deploy in
-# docs/ISE-MARKETPLACE-DEPLOY.md (ADR 0008 amendment) regardless of
+# docs/ISE-AD-BUILD.md (Part 2) (ADR 0008 amendment) regardless of
 # deploy method. ISE is optional until that deploy runs, so an absent
 # ISE_ENV_FILE only WARNs.
 check_ise_marketplace() {

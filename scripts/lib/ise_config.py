@@ -297,7 +297,7 @@ def main(argv: list[str]) -> int:
     api_base = os.environ.get("ISE_API_BASE", "")
     # "iseadmin", not "admin": the Azure Marketplace ISE image's admin
     # account is always named iseadmin (fixed by the deploy wizard's User
-    # Details tab, docs/ISE-MARKETPLACE-DEPLOY.md), never customizable to
+    # Details tab, docs/ISE-AD-BUILD.md (Part 2)), never customizable to
     # plain "admin". The wrong default here caused a live 401 on the ERS
     # call while the same password authenticated fine as iseadmin against
     # the mnt API (caught live, first real deploy). ISE_ADMIN_USERNAME

@@ -62,7 +62,7 @@ while idle, by tier, and 600 GB rounds up to the 1 TB tier:
 A managed disk cannot shrink, so the current ISE is redeployed once with
 Volume Size 300 and Disk Storage Type Standard SSD. That redeploy is the
 last time the portal form is filled in until the evaluation expires.
-`docs/ISE-MARKETPLACE-DEPLOY.md`, `docs/BUILD-FROM-SCRATCH.md`, and
+`docs/ISE-AD-BUILD.md (Part 2)`, `docs/BUILD-FROM-SCRATCH.md`, and
 `docs/PREREQUISITES.md` change to those two values, and ADR 0008 gains an
 amendment recording the lifecycle and the disk decision. The DC's 30 GB
 Standard SSD is about $2 a month and stays as it is.
