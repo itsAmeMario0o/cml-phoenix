@@ -12,7 +12,7 @@
 #
 # --post-deploy is required, not optional: there is no other mode left,
 # and naming it keeps this command line matching what the walkthrough and
-# docs/superpowers/specs/2026-09-13-active-directory-session-design.md
+# docs/specs/2026-09-13-active-directory-session-design.md
 # already document.
 #
 # Order:

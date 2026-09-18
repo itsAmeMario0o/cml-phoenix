@@ -15,7 +15,7 @@
 - `verify/README.md`, `verify/lib/gen_testbed.py`, `verify/requirements.txt`
 - `.mcp.json`, `scripts/mcp-cml.sh`, `config/mcp-env/`
 
-This code was written by Claude Code against `docs/superpowers/specs/2026-09-02-cml-azure-lab-design.md`
+This code was written by Claude Code against `docs/specs/2026-09-02-cml-azure-lab-design.md`
 and the ADRs in `docs/decisions/`. The companion deep dive,
 `deep-dive/cloud-cml-azure-2026-09-02.md`, covers the vendored Cisco Terraform
 module. This one covers what the operator actually runs day to day: the

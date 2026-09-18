@@ -337,7 +337,7 @@ lab. The cluster lab was wiped and deleted from the controller; its
 files stay under `labs/ftdv-cluster*` as a retired design.
 
 Replacement: `labs/ips-ha.yaml`, spec
-`docs/superpowers/specs/2026-09-11-ips-ha-lab-design.md`. An FTD HA
+`docs/specs/2026-09-11-ips-ha-lab-design.md`. An FTD HA
 pair with inline sets between VLAN 10 and 20 on one Nexus, a cat8000v
 edge as gateway and DHCP, Kali and an Ubuntu server inside, two
 servers outside, cdFMC management. Kali 2026.2 came from the official

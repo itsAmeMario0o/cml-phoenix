@@ -11,7 +11,7 @@ Day-1 configuration for the Nexus pair and the edge in
 passwords; day-0 already set those. The FTDv nodes are not here: their
 day-0 registers them with cdFMC, and the cluster, interfaces, and
 policy are built in cdFMC. Design and address plan:
-`docs/superpowers/specs/2026-09-10-ftdv-cluster-lab-design.md`.
+`docs/specs/2026-09-10-ftdv-cluster-lab-design.md`.
 
 ## Order
 

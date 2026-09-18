@@ -82,7 +82,7 @@ cluster under cloud-delivered management from the operator's Security
 Cloud Control tenant, an inside host bonded across the pair, and an
 outside host on the edge. No FMCv. Design, address plan, and the
 platform rules it follows are in
-`docs/superpowers/specs/2026-09-10-ftdv-cluster-lab-design.md`; the
+`docs/specs/2026-09-10-ftdv-cluster-lab-design.md`; the
 Nexus and edge configuration is in `ftdv-cluster-fabric/`.
 
 The FTDv admin password is `FTD_ADMIN_PASSWORD`, separate from the lab
@@ -117,7 +117,7 @@ a cat8000v edge as the internet with the inside gateway and a DHCP
 scope, ftd1 and ftd2 in high availability each with an inline set
 bridging VLAN 10 to VLAN 20, Kali and an Ubuntu server inside, two
 Ubuntu servers outside. Managed by cdFMC; no FMCv. Spec:
-`docs/superpowers/specs/2026-09-11-ips-ha-lab-design.md`. Replaces the
+`docs/specs/2026-09-11-ips-ha-lab-design.md`. Replaces the
 FTDv cluster lab, which could not run inline sets.
 
 Every node boots configured. Needs `FTD_ADMIN_PASSWORD` and the five
@@ -149,7 +149,7 @@ an external ISE. This is the proof step for TrustSec: the routed path
 from ADR 0003, a RADIUS authentication, and a Change of Authorization
 that gets back to the right switch. No Catalyst 9000v fabric yet; that
 arrives with the TrustSec policy in Phase 2. Spec:
-`docs/superpowers/specs/2026-09-12-trustsec-phase1-routed-ise-design.md`.
+`docs/specs/2026-09-12-trustsec-phase1-routed-ise-design.md`.
 
 The external connector maps onto `bridge1`, a bridge that a fork
 customize script creates on the CML host at 10.100.0.1/24. The edge sits

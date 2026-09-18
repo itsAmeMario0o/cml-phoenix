@@ -6,7 +6,7 @@ that is never destroyed. An Active Directory domain controller and ISE sit
 beside it, each built and destroyed per session too. Claude Code runs on the Mac and drives CML through
 the cml-mcp server and SSH.
 
-Spec: `docs/superpowers/specs/2026-09-02-cml-azure-lab-design.md`.
+Spec: `docs/specs/2026-09-02-cml-azure-lab-design.md`.
 Prerequisites you must provide: `docs/PREREQUISITES.md`.
 The whole build in order: `docs/BUILD-FROM-SCRATCH.md`.
 
@@ -39,11 +39,11 @@ Do not add out-of-scope components. If a task seems to need one, stop and ask.
 | `software/` | Cisco downloads. Gitignored except its README. |
 | `labs/` | One YAML topology per scenario. |
 | `docs/decisions/` | ADRs. One file per decision. |
-| `docs/superpowers/` | Specs and plans this repo's work was built from. |
+| `docs/specs/`, `docs/plans/` | Design specs and implementation plans. Executed plans and retired specs sit in each one's `archive/`. |
 | `docs/AD.md`, `docs/ISE-AD-BUILD.md` | How the directory and ISE are built and joined: the concepts, then the step by step runbook. |
 | `docs/STATUS.md` | Dated handoff. Read it first in a new session. |
 | `docs/LESSONS-LEARNED.md` | Symptom, cause, fix. Add to it when something bites. |
-| `deep-dive/` | AntiVibe deep dives: what the AI-written code does and why. Tracked. |
+| `docs/archive/` | Superseded documents kept for the record: the two AntiVibe deep dives and the early design notes. |
 
 ## Commands
 

@@ -468,7 +468,7 @@ stays `DEFINED_ON_CORE`, the rescan in phase 2 was missed.
 ### The TrustSec demo lab is not built yet
 
 The lab this platform is for is TrustSec Phase 2, designed in
-`docs/superpowers/specs/2026-09-17-trustsec-phase2-design.md`. It is a draft
+`docs/specs/2026-09-17-trustsec-phase2-design.md`. It is a draft
 spec. There is no implementation plan, no `labs/trustsec-phase2.yaml`, and
 nothing of it is built.
 

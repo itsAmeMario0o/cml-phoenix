@@ -5,7 +5,7 @@
 > Threat Defense Virtual cluster cannot run inline sets, which the
 > operator needs. It was wiped and deleted from the controller
 > (`docs/STATUS.md`, 2026-09-11 early morning). `labs/ips-ha.yaml` and
-> `docs/superpowers/specs/2026-09-11-ips-ha-lab-design.md` replaced
+> `docs/specs/2026-09-11-ips-ha-lab-design.md` replaced
 > it. Kept for the fabric design and address plan, not as a build
 > target; do not import `labs/ftdv-cluster.yaml`.
 

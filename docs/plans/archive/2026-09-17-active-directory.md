@@ -16,7 +16,7 @@
 
 **Tech Stack:** Terraform azurerm ~> 4.0 and random ~> 3.6, Windows PowerShell 5.1 on the DC, bash 3.2 on the Mac, `az vm run-command` for the readiness checks.
 
-Spec: `docs/superpowers/specs/2026-09-13-active-directory-session-design.md` (revised 2026-09-17).
+Spec: `docs/specs/2026-09-13-active-directory-session-design.md` (revised 2026-09-17).
 
 ## Global Constraints
 
