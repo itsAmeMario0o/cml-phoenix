@@ -40,8 +40,16 @@ expected_calls() {
 # 1. Static checks.
 for ps in 20-install-ca 30-create-identities run-as-admin; do
   file="${AD_DIR}/${ps}.ps1"
-  raw="$(grep -cE '&[[:space:]]+(certutil|dsacls|icacls)\.exe' "${file}" || true)"
-  assert_eq "${ps}: no raw native call outside the helper" "0" "${raw}"
+  # certutil -ping is the CA readiness probe: it is expected to fail until
+  # the service answers, so it is the one raw call allowed, by design.
+  raw="$(grep -E '&[[:space:]]+(certutil|dsacls|icacls)\.exe' "${file}" | grep -vc 'certutil.exe -ping' || true)"
+  assert_eq "${ps}: no raw native call outside the helper (certutil -ping excepted)" "0" "${raw}"
+  if [[ "${ps}" == "20-install-ca" ]]; then
+    assert_contains "${ps}: waits for the CA to answer before publishing the CRL" "certutil.exe -ping" "$(cat "${file}")"
+    ping_line="$(grep -n 'certutil.exe -ping' "${file}" | head -1 | cut -d: -f1)"
+    crl_line="$(grep -n "Invoke-Native certutil.exe '-crl'" "${file}" | head -1 | cut -d: -f1)"
+    assert_eq "${ps}: the ping wait precedes the CRL publish" "yes" "$([[ "${ping_line}" -lt "${crl_line}" ]] && echo yes || echo no)"
+  fi
   defs="$(grep -c '^function Invoke-Native' "${file}" || true)"
   assert_eq "${ps}: carries its own Invoke-Native" "1" "${defs}"
   calls="$(grep -cE '^[[:space:]]+Invoke-Native ' "${file}" || true)"
