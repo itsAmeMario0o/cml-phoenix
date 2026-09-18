@@ -106,8 +106,14 @@ write_ad_env() {
 
 # dc_check LABEL EXPECT SCRIPT: run SCRIPT on the DC, pass when its output
 # contains EXPECT. Runs as SYSTEM, which on a DC can read the directory.
+# SCRIPT runs under $ErrorActionPreference='Stop': cmdlet failures are
+# non-terminating by default, so the DNS check's trailing 'dns-ok' was
+# printed whether or not Resolve-DnsName resolved anything (architecture
+# review, 2026-09-17). With Stop the first failure ends the script and
+# EXPECT never appears.
 dc_check() {
   local label="$1" expect="$2" script="$3" rg out
+  script="\$ErrorActionPreference='Stop'; ${script}"
   rg="$(out_or_placeholder resource_group_name)"
   if [[ "${DRY_RUN}" == "1" ]]; then
     echo "+ az vm run-command invoke -g ${rg} -n ${DC_NAME} --command-id RunPowerShellScript --scripts ${script}"

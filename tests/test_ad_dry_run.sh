@@ -27,6 +27,10 @@ assert_contains "failed run commands cleared before the apply" "+ delete any Fai
 assert_contains "env file step planned" "mode 0600 from terraform output (values never printed)" "${out}"
 assert_contains "directory check planned" "(Get-ADDomain).DNSRoot" "${out}"
 assert_contains "DNS check planned" "Resolve-DnsName login.microsoftonline.com" "${out}"
+# Resolve-DnsName failures are non-terminating, so without Stop the
+# trailing 'dns-ok' printed regardless and the check could never fail.
+assert_contains "DNS check stops on the first failure" "\$ErrorActionPreference='Stop'; Resolve-DnsName dc1.corp.rooez.com" "${out}"
+assert_eq "every DC check runs strict" "3" "$(grep -c "RunPowerShellScript --scripts \$ErrorActionPreference='Stop'; " <<<"${out}")"
 assert_contains "CA check planned" "certutil -ping" "${out}"
 assert_contains "prints ISE's name server" "Primary Name Server: 10.20.2.10" "${out}"
 assert_contains "prints ISE's domain" "DNS domain name:     corp.rooez.com" "${out}"
