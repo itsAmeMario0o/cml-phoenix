@@ -1034,3 +1034,41 @@ in Azure, which is the cheapest place to learn them.
 - Fix: before reimporting, list every `exports/<stamp>/` folder, locally
   and in blob, and take each lab from the newest export that has it. All
   three labs are back on the 2026-09-18 build.
+
+## An endpoint behind the switch cannot reach the VNet, though the switch can
+
+- Symptom: from `emp-pc` (10.100.10.100, on VLAN 10 behind `sw1`),
+  `ping 10.20.2.10` answered `From 10.100.0.1 icmp_seq=1 Destination Port
+  Unreachable` and a DNS query to the domain controller got nothing. From
+  `sw1` the same ping succeeded when sourced from Vlan100 (10.100.0.2) and
+  returned `UUU` when sourced from Vlan10 (10.100.10.1). Seen 2026-09-18,
+  the first day a lab had endpoints behind the switch.
+- How it was narrowed: the rejection came from 10.100.0.1, the CML host,
+  so it was not the DC, Azure, or DNS. One device, one destination, one
+  path, only the source address changed, so the switch's routing, the UDR,
+  and both NSG rules (all written for 10.100.0.0/16) were ruled out. On
+  the host, `iptables -S` showed libvirt's rules for the transit bridge:
+  accept source 10.100.0.0/24 out of `bridge1`, reject everything else
+  with icmp-port-unreachable, and the mirror image inbound. That is the
+  symptom exactly. Two inserted accept rules for 10.100.0.0/16, and
+  nothing else, made the endpoint reach the DC and ISE.
+- Cause: the transit network is a libvirt network in `route` mode, and
+  route mode's job is "forward this one subnet and reject the rest". The
+  `<route>` element adds a kernel route for 10.100.0.0/16 but no forward
+  rule for it. Every Cisco device in the earlier labs sat inside the /24
+  (the probe switch at 10.100.0.3, the Phase 1 edge at 10.100.0.2), and
+  every flow that matters to ISE (RADIUS, CoA, SNMP, the switch's own DNS
+  lookups sourced from Vlan100) still does, which is why nothing showed
+  until endpoints got addresses on 10.100.10.0/24.
+- Fix: `<forward mode='open'/>`, under which libvirt adds no firewall
+  rules at all, with `zone='libvirt-routed'` on the `<bridge>` element so
+  firewalld still accepts forwarding for it (open mode does not place the
+  bridge in that zone by itself, and the default zone is what rejected
+  forwarding on the first day of the transit bridge). Proven live on
+  2026-09-18 by redefining the network on the running host: zero
+  `bridge1` rules in iptables, the bridge in `libvirt-routed`, and the
+  endpoint pinging and resolving the DC and pinging ISE. Redefining the
+  network drops the bridge for a second; the lab's `bridge1` connector node
+  needs a stop and start afterwards, the switch does not. The two inserted
+  rules are the fallback if open mode ever misbehaves; they vanish on
+  `virsh net-restart`. The permanent form is in the fork's `06-transit.sh`.
