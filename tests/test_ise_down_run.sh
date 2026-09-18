@@ -47,9 +47,9 @@ run_down AZ_STUB_FAIL="network nsg delete"
 assert_eq "failed nsg delete exits 1" "1" "${rc}"
 assert_not_contains "failed nsg delete never claims success" "[OK]" "${out}"
 assert_contains "az's own error reaches the operator" "az stub: 'network nsg delete' failed" "${out}"
-assert_not_contains "documents current behaviour: no [FAIL] line on a failed delete" "[FAIL]" "${out}"
-assert_not_contains "documents current behaviour: disk delete skipped after the failure" "az disk delete" "${log}"
-assert_eq "documents current behaviour: listed once only" "1" "$(grep -c 'az resource list' <<<"${log}")"
+assert_contains "a failed delete is named" "[FAIL]  delete of ise-nsg failed" "${out}"
+assert_contains "the remaining deletes still run" "az disk delete" "${log}"
+assert_eq "the tag re-list still runs after a failure" "2" "$(grep -c 'az resource list' <<<"${log}")"
 
 # 3. Every delete is accepted, but the re-list still shows the disk.
 run_down AZ_STUB_ISE_LEFTOVER=1
@@ -74,8 +74,8 @@ assert_not_contains "unlistable deletes nothing" " delete " "${log}"
 #    in find_ise_resources, then flip these three assertions.
 run_down TF_STUB_FAIL=1
 assert_contains "no persistent outputs names the output" "[FAIL]  persistent output resource_group_name unavailable" "${out}"
-assert_eq "documents current behaviour: no persistent outputs still exits 0" "0" "${rc}"
-assert_contains "documents current behaviour: lists with an empty resource group" "az resource list --resource-group  --query" "${log}"
-assert_contains "documents current behaviour: deletes anyway" "az vm delete" "${log}"
+assert_eq "no persistent outputs exits 1" "1" "${rc}"
+assert_not_contains "never lists with an empty resource group" "az resource list --resource-group  --query" "${log}"
+assert_not_contains "deletes nothing without a resource group" "az vm delete" "${log}"
 
 finish "test_ise_down_run"
