@@ -26,6 +26,8 @@ assert_contains "render planned" "+ python3 ${REPO_ROOT}/scripts/lib/render_cml_
 assert_contains "old host key forgotten before the build" "+ ssh-keygen -R [203.0.113.5]:1122 -f ${REPO_ROOT}/keys/known_hosts" "${out}"
 assert_contains "cml apply planned" "+ terraform -chdir=${REPO_ROOT}/vendor/cloud-cml apply" "${out}"
 assert_contains "env file planned" "+ write ${REPO_ROOT}/config/mcp-env/cml.env" "${out}"
+assert_contains "env file carries the public URL and the forwarded base" "(CML_URL=https://203.0.113.5, CML_API_BASE=https://127.0.0.1:9443)" "${out}"
+assert_contains "next step is the tunnels" "Next:         scripts/50-tunnels.sh up, then scripts/90-smoke-test.sh" "${out}"
 
 b="$(line_of "terraform/bootstrap apply" "${out}")"; p="$(line_of "terraform/persistent apply" "${out}")"
 r="$(line_of "render_cml_config.py" "${out}")"; c="$(line_of "vendor/cloud-cml apply" "${out}")"
@@ -61,6 +63,28 @@ out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" AZ_STUB_RG_MISSING=1 bash -c "
 " 2>&1)" || rc=$?
 assert_eq "missing resource group exits 0" "0" "${rc}"
 assert_contains "missing resource group passes" "no existing CML VM" "${out}"
+
+# An unreadable persistent output stops render_config with one [FAIL]
+# before the renderer runs. With the passwords readable and the rest not,
+# the twelve `--set "X=$(out_or_placeholder X)"` arguments once printed
+# eleven [FAIL] lines and rendered blanks anyway, because bash runs a
+# "$(...)" with errexit off (architecture review, 2026-09-17). CML_YML is
+# pointed at a scratch path so a regression cannot write config/cml.yml.
+TMP="$(mktemp -d "${REPO_ROOT}/tests/.tmp.XXXXXX")"
+trap 'rm -rf "${TMP}"; mv "${MARKER}.saved" "${MARKER}" 2>/dev/null || true' EXIT
+rc=0
+out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" ARM_SUBSCRIPTION_ID=x bash -c "
+  source '${SCRIPT}'
+  DRY_RUN=0
+  CML_YML='${TMP}/cml.yml'
+  tf_out() { case \"\$2\" in app_admin_password|sys_admin_password) echo pw ;; *) return 1 ;; esac; }
+  render_config
+" 2>&1)" || rc=$?
+assert_eq "render with an unreadable output exits 1" "1" "${rc}"
+assert_contains "render names the missing output" "[FAIL]  persistent output resource_group_name unavailable" "${out}"
+assert_eq "render stops at the first missing output" "1" "$(grep -c '^\[FAIL\]' <<<"${out}")"
+assert_not_contains "renderer never runs" "render_cml_config" "${out}"
+assert_eq "nothing rendered" "absent" "$([[ -f "${TMP}/cml.yml" ]] && echo present || echo absent)"
 
 # Without the preflight marker, a real run refuses before doing anything.
 rm -f "${REPO_ROOT}/.preflight-ok"

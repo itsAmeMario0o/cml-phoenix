@@ -11,6 +11,10 @@
 # other process still holds the port afterward, it is left alone with a
 # warning rather than killed.
 #
+# The "cml" forward is not optional: every script that logs in to the
+# controller, and the MCP server, dial CML_API_BASE from cml.env, which is
+# this forward's local port (ADR 0012). "up" refuses a conf without it.
+#
 # Overrides: TUNNELS_CONF, STATE_DIR.
 set -euo pipefail
 
@@ -22,12 +26,15 @@ STATE_DIR="${STATE_DIR:-${REPO_ROOT}/.cml-tunnels}"
 KEY_FILE="${CML_SSH_KEY:-${REPO_ROOT}/keys/cml-lab}"
 DRY_RUN=0
 
-port_listening() {
-  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
-}
-
 require_conf() {
   [[ -f "${TUNNELS_CONF}" ]] || die "${TUNNELS_CONF} missing. Copy config/tunnels.conf.example."
+}
+
+# A conf from before ADR 0012 has no cml line. Say so here, where the fix
+# is one line, rather than later as "forward not up" from every script.
+require_cml_line() {
+  grep -qE "^cml[[:space:]]" "${TUNNELS_CONF}" ||
+    die "${TUNNELS_CONF} has no cml forward. Add: cml ${CML_FORWARD_LOCAL_PORT} 127.0.0.1 443 (ADR 0012)"
 }
 
 each_tunnel() {
@@ -109,7 +116,8 @@ main() {
   require_cmd ssh lsof nc
   case "${cmd}" in
     up)
-      CML_HOST_IP="$(cml_ip)"
+      require_cml_line
+      CML_HOST_IP="$(cml_ip)" || die "persistent output public_ip_address unavailable; is the persistent root applied?"
       host_reachable "${CML_HOST_IP}" || die "CML host ${CML_HOST_IP} not reachable on 1122"
       each_tunnel start_one || die "one or more tunnels did not come up, see ${STATE_DIR}/*.log"
       ;;

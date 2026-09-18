@@ -53,8 +53,13 @@ api_raw() {
   curl -sf -X "${method}" -H "Authorization: Bearer ${TOKEN}" "${CML_API}${path}"
 }
 
+# lab_ids: one id per line. Callers assign it first, `ids="$(lab_ids)"`,
+# and only then loop. `for id in $(lab_ids)` discards the substitution's
+# exit status, so a failed GET /labs looked like zero labs, 40-down.sh saw
+# "exported 0 labs", and destroyed the VM with the labs still on it
+# (architecture review, 2026-09-17).
 lab_ids() {
-  api GET /labs | jq -r '.[]'
+  api GET /labs | jq -r '.[]' || { echo "cml-remote: GET /labs failed" >&2; return 1; }
 }
 
 lab_row() {
@@ -67,16 +72,18 @@ slugify() {
 }
 
 cmd_list_labs() {
-  local id
-  for id in $(lab_ids); do
+  local ids id
+  ids="$(lab_ids)"
+  for id in ${ids}; do
     lab_row "${id}"
   done
 }
 
 cmd_export_labs() {
-  local dir="$1" id title file count=0
+  local dir="$1" ids id title file count=0
+  ids="$(lab_ids)"
   mkdir -p "${dir}"
-  for id in $(lab_ids); do
+  for id in ${ids}; do
     title="$(api GET "/labs/${id}" | jq -r .lab_title)"
     file="${dir}/$(slugify "${title}")-${id}.yaml"
     api_raw GET "/labs/${id}/download" > "${file}"
@@ -94,8 +101,9 @@ cmd_export_labs() {
 }
 
 cmd_stop_labs() {
-  local id state count=0
-  for id in $(lab_ids); do
+  local ids id state count=0
+  ids="$(lab_ids)"
+  for id in ${ids}; do
     state="$(api GET "/labs/${id}" | jq -r .state)"
     if [[ "${state}" != "STOPPED" ]]; then
       api PUT "/labs/${id}/stop" > /dev/null

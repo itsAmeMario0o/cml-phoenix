@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Stand-in for sleep: returns at once so a readiness loop's wall clock is
+# the interval the script believes it waited, not the real one. Logged
+# to STUB_LOG when set, so a test can prove the interval was honoured.
+if [[ -n "${STUB_LOG:-}" ]]; then
+  printf '%s\n' "sleep $*" >> "${STUB_LOG}"
+fi

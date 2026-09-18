@@ -26,8 +26,9 @@ dictionary passwords, so a shared password like "labpass1" works but
 
 Users and grants that already exist are left as they are, so the same
 file can be applied after every rebuild. Controller credentials come
-from the environment: CML_URL, CML_USERNAME, CML_PASSWORD,
-CML_VERIFY_SSL. Stdlib only. ADR 0007.
+from the environment: CML_API_BASE (the loopback SSH forward, never the
+public CML_URL, ADR 0012), CML_USERNAME, CML_PASSWORD, CML_VERIFY_SSL.
+Stdlib only. ADR 0007.
 """
 from __future__ import annotations
 
@@ -338,9 +339,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
     except UsersError as exc:
         print(f"users: {args.csv}: {exc}", file=sys.stderr)
         return 1
-    url = os.environ.get("CML_URL", "")
+    # Only the forwarded loopback URL. CML_URL, the public address, is
+    # deliberately not a fallback: that is the path ADR 0012 closed.
+    url = os.environ.get("CML_API_BASE", "")
     if not url:
-        print("users: CML_URL is not set; source config/mcp-env/cml.env", file=sys.stderr)
+        print("users: CML_API_BASE is not set; source config/mcp-env/cml.env", file=sys.stderr)
         return 1
     group_name = os.environ.get("LAB_GROUP", DEFAULT_GROUP)
     permission = os.environ.get("LAB_PERMISSION", DEFAULT_PERMISSION)

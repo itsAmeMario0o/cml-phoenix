@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Stand-in for scp: cml_scp (scripts/lib/common.sh) pulls the export
+# folder off the host. Creates the destination folder holding
+# SCP_STUB_FILES (default 1) empty YAML files, so the caller's count
+# check has something to count. SCP_STUB_FAIL=1 exits 1 instead. Every
+# invocation is appended to STUB_LOG when it is set.
+if [[ -n "${STUB_LOG:-}" ]]; then
+  printf '%s\n' "scp $*" >> "${STUB_LOG}"
+fi
+if [[ "${SCP_STUB_FAIL:-0}" == "1" ]]; then
+  echo "scp: /data/exports: No such file or directory" >&2; exit 1
+fi
+dest=""
+for arg in "$@"; do dest="${arg}"; done
+mkdir -p "${dest}"
+i=0
+while [[ "${i}" -lt "${SCP_STUB_FILES:-1}" ]]; do
+  i=$((i + 1))
+  printf 'lab:\n' > "${dest}/lab-${i}.yaml"
+done

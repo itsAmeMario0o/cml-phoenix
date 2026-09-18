@@ -1,26 +1,107 @@
 #!/usr/bin/env bash
-# Stand-in for the Azure CLI in dry-run tests. Answers only what 20-up.sh,
-# scripts/00-preflight.sh, 25-ise-up.sh, and 45-ise-down.sh ask.
+# Stand-in for the Azure CLI in tests. Answers only what 20-up.sh,
+# 00-preflight.sh, 24-ad-up.sh, 25-ise-up.sh, 40-down.sh and
+# 45-ise-down.sh ask, and fails loudly on anything else.
+#
+# Every invocation is appended to STUB_LOG when it is set, so a test can
+# assert order and arguments. Failure modes, all through the environment:
+#   AZ_STUB_FAIL="vm delete"      any call containing that text exits 1
+#                                 with an Azure-shaped error on stderr
+#   AZ_STUB_AUTH_FAIL=1           vm show: not logged in
+#   AZ_STUB_RG_MISSING=1          vm show: the resource group is gone
+#   AZ_STUB_ISE_LEFTOVER=1        the second role=ise listing (the re-list
+#                                 after the deletes) still shows the disk
+#   AZ_STUB_RUN_COMMANDS="a:Failed b:Succeeded"
+#                                 run-command list rows as name:state
+#   AZ_STUB_DC_FAIL="dns-ok"      run-command invoke of a script containing
+#                                 that text answers with an error message
+# Plain bash 3.2, like everything else on the Mac side.
+
+if [[ -n "${STUB_LOG:-}" ]]; then
+  printf '%s\n' "az $*" >> "${STUB_LOG}"
+fi
+if [[ -n "${AZ_STUB_FAIL:-}" && "$*" == *"${AZ_STUB_FAIL}"* ]]; then
+  echo "ERROR: (InternalServerError) az stub: '${AZ_STUB_FAIL}' failed. Correlation ID: 00000000-0000-0000-0000-000000000000" >&2
+  exit 1
+fi
+
+# calls TEXT: how many logged invocations contain TEXT, this one included.
+# 0 without STUB_LOG, so the dry-run tests keep their single answer.
+calls() {
+  local n=""
+  if [[ -n "${STUB_LOG:-}" ]]; then
+    n="$(grep -c -- "$1" "${STUB_LOG}" 2>/dev/null || true)"
+  fi
+  echo "${n:-0}"
+}
+
+# ise_listing: one of each resource 25-ise-up.sh tags, named the way the
+# wizard names them for host ise1. The NSG and the public IP come before
+# the NIC on purpose: Azure will not delete either while the NIC
+# references them, and the listing order is not something az promises,
+# so the script must impose its own. The disk's resource group is upper
+# case, as Azure reports it (LESSONS-LEARNED, 2026-09-17).
+ise_listing() {
+  local sub="/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups"
+  printf '%s\n' \
+    "${sub}/rg-cml-lab/providers/Microsoft.Network/networkSecurityGroups/ise-nsg	Microsoft.Network/networkSecurityGroups	ise-nsg" \
+    "${sub}/rg-cml-lab/providers/Microsoft.Network/publicIPAddresses/ise1-ip	Microsoft.Network/publicIPAddresses	ise1-ip" \
+    "${sub}/rg-cml-lab/providers/Microsoft.Compute/virtualMachines/ise1	Microsoft.Compute/virtualMachines	ise1" \
+    "${sub}/RG-CML-LAB/providers/Microsoft.Compute/disks/ise1osdisk	Microsoft.Compute/disks	ise1osdisk" \
+    "${sub}/rg-cml-lab/providers/Microsoft.Network/networkInterfaces/ise1nic	Microsoft.Network/networkInterfaces	ise1nic"
+}
+
+# run_command_rows: AZ_STUB_RUN_COMMANDS filtered the way az applies the
+# script's JMESPath query, an exact string compare against the quoted
+# state in [?provisioningState=='X']. Exact means case sensitive, as in
+# JMESPath itself.
+run_command_rows() {
+  local want="$*" pair
+  want="${want#*provisioningState==\'}"
+  want="${want%%\'*}"
+  for pair in ${AZ_STUB_RUN_COMMANDS:-}; do
+    if [[ "${pair#*:}" == "${want}" ]]; then
+      echo "${pair%%:*}"
+    fi
+  done
+}
+
+# dc_answer: what the DC's PowerShell would print for each of the three
+# checks in 24-ad-up.sh, or an error message when AZ_STUB_DC_FAIL names
+# the script. az itself exits 0 either way: the failure is in the text.
+dc_answer() {
+  if [[ -n "${AZ_STUB_DC_FAIL:-}" && "$*" == *"${AZ_STUB_DC_FAIL}"* ]]; then
+    echo "Resolve-DnsName : dc1.corp.example : DNS name does not exist"
+    return 0
+  fi
+  case "$*" in
+    *Get-ADDomain*) echo "${AZ_STUB_DC_DOMAIN:-corp.example}" ;;
+    *dns-ok*) echo "dns-ok" ;;
+    *certutil*) echo 'Server "dc1-CA" ICertRequest2 interface is alive (0ms)' ;;
+    *) echo "" ;;
+  esac
+}
+
 case "$*" in
   *"account show"*"--query id"*) echo "00000000-0000-0000-0000-000000000000" ;;
   *"account show"*"--query tenantId"*) echo "11111111-1111-1111-1111-111111111111" ;;
   *"account show"*) echo "stub-user" ;;
   *"vm image terms show"*"--query accepted"*) echo "true" ;;
   # 45-ise-down.sh: find_ise_resources reads this directly, dry run
-  # included, so the plan can show exactly what would be deleted. Fixed
-  # ids for one of each resource type 25-ise-up.sh creates.
+  # included. The second call in a logged run is the re-list after the
+  # deletes: empty unless AZ_STUB_ISE_LEFTOVER says the disk survived.
   *"resource list"*"tags.role=='ise'"*)
-    printf '%s\n' \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/virtualMachines/ise	Microsoft.Compute/virtualMachines	ise" \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/networkInterfaces/iseVMNic	Microsoft.Network/networkInterfaces	iseVMNic" \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/networkSecurityGroups/ise-nsg	Microsoft.Network/networkSecurityGroups	ise-nsg" \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Compute/disks/ise_OsDisk	Microsoft.Compute/disks	ise_OsDisk" \
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cml-lab/providers/Microsoft.Network/publicIPAddresses/isePublicIP	Microsoft.Network/publicIPAddresses	isePublicIP"
+    if [[ "$(calls 'resource list')" -ge 2 ]]; then
+      if [[ "${AZ_STUB_ISE_LEFTOVER:-0}" == "1" ]]; then
+        ise_listing | grep 'Microsoft.Compute/disks'
+      fi
+    else
+      ise_listing
+    fi
     ;;
-  # 25-ise-up.sh mutating calls and 45-ise-down.sh deletes all go through
-  # run(), which only echoes "+ ..." in a dry run and never reaches this
-  # stub. These branches exist so the stub also answers a real (non-dry)
-  # invocation, e.g. from a future integration test.
+  *"vm run-command list"*) run_command_rows "$@" ;;
+  *"vm run-command delete"*) ;;
+  *"vm run-command invoke"*) dc_answer "$@" ;;
   *"network nsg create"*) ;;
   *"network nsg rule create"*) ;;
   *"network nic update"*) ;;

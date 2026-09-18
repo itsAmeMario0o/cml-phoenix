@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Tear down the disposable ISE VM created by scripts/25-ise-up.sh. Finds
 # every resource carrying the role=ise tag in the lab resource group and
-# deletes it: VM, NIC, NSG, OS disk, and public IP (the solution template
-# tags the first three, 25-ise-up.sh tags the disk and NSG, ADR 0008).
-# Never touches bootstrap, persistent, or the CML VM, none of which carry
-# this tag.
+# deletes it: VM, NIC, NSG, OS disk, and public IP. The Marketplace wizard
+# tags nothing; 25-ise-up.sh tags all five (ADR 0008). Never touches
+# bootstrap, persistent, or the CML VM, none of which carry this tag.
 #
 #   scripts/45-ise-down.sh [--dry-run]
 #
 # Prompts unless ASSUME_YES=1. --dry-run prints the planned deletes and
-# deletes nothing.
+# deletes nothing. A real run lists by tag again afterwards and fails if
+# anything is still there.
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
@@ -28,7 +28,10 @@ DRY_RUN=0
 # without a word while it goes on billing (LESSONS-LEARNED, 2026-09-17).
 find_ise_resources() {
   local rg
-  rg="$(out_or_placeholder resource_group_name)"
+  # This function runs inside "$(...)", where errexit is off, so a die from
+  # out_or_placeholder would only print. Return the failure by hand
+  # (LESSONS-LEARNED, "A die inside a command substitution").
+  rg="$(out_or_placeholder resource_group_name)" || return 1
   az resource list --resource-group "${rg}" --query "[?tags.role=='ise'].{id:id,type:type,name:name}" -o tsv
 }
 
@@ -47,19 +50,53 @@ delete_by_type() {
   esac
 }
 
-# delete_all ROWS: the VM first. Deleting it only releases the compute
-# allocation; NIC, NSG, disk, and public IP each need their own delete
-# afterward, in any order once the VM is gone.
+# delete_rank TYPE: the pass a type is deleted in. The VM first, since
+# deleting it only releases the compute allocation. Then the NIC: Azure
+# refuses to delete an NSG or a public IP while a NIC still references
+# it, and 25-ise-up.sh attaches ise-nsg to the NIC. Everything else last.
+delete_rank() {
+  case "$1" in
+    Microsoft.Compute/virtualMachines) echo 1 ;;
+    Microsoft.Network/networkInterfaces) echo 2 ;;
+    *) echo 3 ;;
+  esac
+}
+
+# delete_all ROWS: three passes by delete_rank. The order comes from here
+# and never from the listing, because `az resource list` does not promise
+# one (architecture review, 2026-09-17).
 delete_all() {
-  local rows="$1" id type name
-  while IFS=$'\t' read -r id type name || [[ -n "${id}" ]]; do
-    [[ -z "${id}" ]] && continue
-    [[ "${type}" == "Microsoft.Compute/virtualMachines" ]] && delete_by_type "${id}" "${type}" "${name}"
-  done <<< "${rows}"
-  while IFS=$'\t' read -r id type name || [[ -n "${id}" ]]; do
-    [[ -z "${id}" ]] && continue
-    [[ "${type}" == "Microsoft.Compute/virtualMachines" ]] || delete_by_type "${id}" "${type}" "${name}"
-  done <<< "${rows}"
+  local rows="$1" rank id type name
+  for rank in 1 2 3; do
+    while IFS=$'\t' read -r id type name || [[ -n "${id}" ]]; do
+      [[ -z "${id}" ]] && continue
+      [[ "$(delete_rank "${type}")" == "${rank}" ]] || continue
+      # Keep going after one failed delete so confirm_gone can list what is
+      # left, instead of errexit ending the script with only az's text.
+      delete_by_type "${id}" "${type}" "${name}" || miss "delete of ${name} failed"
+    done <<< "${rows}"
+  done
+}
+
+# confirm_gone: list by tag again. A delete that az accepted can still
+# leave the resource behind; only an empty listing is success.
+confirm_gone() {
+  local left
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    pass "dry run: would delete every ISE resource listed above, then list by tag again to confirm nothing remains"
+    return 0
+  fi
+  left="$(find_ise_resources)" || die "cannot re-list ISE resources by tag"
+  if [[ -n "${left}" ]]; then
+    echo "${left}"
+    miss "ISE resources still tagged role=ise after the deletes. Delete them by hand and rerun."
+  elif [[ "${fail}" -gt 0 ]]; then
+    # A delete failed above; the re-list is empty only as far as the tag
+    # query can see. Let the summary line carry the failure, not an [OK].
+    return 0
+  else
+    pass "ISE resources deleted. Persistent resources and the CML VM untouched."
+  fi
 }
 
 main() {
@@ -76,7 +113,7 @@ main() {
   echo "${rows}"
   confirm "Delete every ISE resource listed above?" || die "declined"
   delete_all "${rows}"
-  pass "ISE resources deleted. Persistent resources and the CML VM untouched."
+  confirm_gone
   summary_and_exit
 }
 

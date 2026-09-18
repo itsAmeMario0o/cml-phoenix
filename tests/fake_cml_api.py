@@ -10,6 +10,8 @@ overridden by environment variables read at startup:
   202 but leave the registration state unchanged (default: it succeeds).
 - FAKE_USER_CREATE_FAILS=name1,name2 makes POST /users respond 500 for
   those usernames, so a run that fails part way can be tested.
+- FAKE_LABS_FAIL=1 makes GET /labs answer 500 after a successful
+  authenticate, the shape of a controller whose API is half up.
 """
 from __future__ import annotations
 
@@ -33,6 +35,7 @@ STATE: dict = {
     "registration": os.environ.get("FAKE_REGISTRATION", "REGISTERED"),
     "deregister_fails": os.environ.get("FAKE_DEREGISTER_FAILS") == "1",
     "user_create_fails": {n for n in os.environ.get("FAKE_USER_CREATE_FAILS", "").split(",") if n},
+    "labs_fail": os.environ.get("FAKE_LABS_FAIL") == "1",
     # Users and groups, shaped like GET /users and GET /groups on 2.10.
     # Passwords are kept aside so a created user can authenticate.
     "users": {"u-admin": {"id": "u-admin", "username": "admin", "fullname": "", "email": "",
@@ -131,7 +134,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(401, {})
             return
         if self.path == "/api/v0/labs":
-            self._send(200, list(STATE["labs"]))
+            if STATE["labs_fail"]:
+                self._send(500, {"description": "internal error"})
+            else:
+                self._send(200, list(STATE["labs"]))
         elif self.path == "/api/v0/users":
             self._send(200, list(STATE["users"].values()))
         elif self.path == "/api/v0/groups":

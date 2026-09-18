@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Tear down the CML VM only. Persistent and bootstrap are never touched.
 #
-#   scripts/40-down.sh [--dry-run] [--force-license]
+#   scripts/40-down.sh [--dry-run] [--force-license] [--skip-export]
 #
 # 1. scripts/30-export-labs.sh (refuses if the API is down)
 # 2. Stop every lab
 # 3. /provision/del.sh on the host, then verify NOT_REGISTERED; retry with
 #    cml-remote.sh deregister. A stranded Smart License blocks the next
 #    build, so a failure here stops the teardown unless --force-license.
-# 4. terraform destroy in vendor/cloud-cml
+# 4. Render config/cml.yml again, then terraform destroy in vendor/cloud-cml
 #
+# --skip-export drops steps 1 and 2 for a VM whose API never came up, and
+# makes you type the VM name first: the labs on it are lost with it. The
+# license gate still runs; a wedged VM usually needs --force-license too.
 # --dry-run prints the sequence. Prompts unless ASSUME_YES=1.
 set -euo pipefail
 
@@ -17,9 +20,10 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 CLOUD_CML="${REPO_ROOT}/vendor/cloud-cml"
-CML_YML="${REPO_ROOT}/config/cml.yml"
+CML_VM_NAME="cml-controller"
 DRY_RUN=0
 FORCE_LICENSE=0
+SKIP_EXPORT=0
 
 # license_blocked STATUS: 0 when the teardown must stop. Anything other than
 # a confirmed NOT_REGISTERED blocks, including UNKNOWN, because an
@@ -34,6 +38,21 @@ export_labs() {
   else
     "${REPO_ROOT}/scripts/30-export-labs.sh" || die "export failed, not destroying. Fix the export or run 30-export-labs.sh by hand."
   fi
+}
+
+# confirm_skip_export: destroying without a copy of the labs is answered
+# by typing the VM name, not y, so a reflex cannot pass it. ASSUME_YES
+# stands in only because --skip-export itself was typed on the same
+# command line; it never skips the export on its own.
+confirm_skip_export() {
+  local answer
+  warn "skipping the export and the lab stop: every lab on ${CML_VM_NAME} is lost with it"
+  if [[ "${ASSUME_YES:-0}" == "1" ]]; then
+    return 0
+  fi
+  printf "Type the VM name (%s) to destroy it without an export: " "${CML_VM_NAME}"
+  read -r answer
+  [[ "${answer}" == "${CML_VM_NAME}" ]] || die "declined"
 }
 
 release_license() {
@@ -60,6 +79,9 @@ release_license() {
   fi
 }
 
+# destroy_cml: render config/cml.yml first. Terraform re-reads it for the
+# destroy, and the copy from the build went stale when the fork renamed
+# a customize script (LESSONS-LEARNED, 2026-09-17).
 destroy_cml() {
   local tenant
   if [[ "${DRY_RUN}" == "1" ]]; then
@@ -67,6 +89,7 @@ destroy_cml() {
   else
     tenant="$(az account show --query tenantId -o tsv)"
   fi
+  render_config
   export TF_VAR_cfg_file="${CML_YML}"
   export TF_VAR_azure_subscription_id="${ARM_SUBSCRIPTION_ID}"
   export TF_VAR_azure_tenant_id="${tenant}"
@@ -82,16 +105,25 @@ main() {
     case "${arg}" in
       --dry-run) DRY_RUN=1 ;;
       --force-license) FORCE_LICENSE=1 ;;
-      *) die "usage: 40-down.sh [--dry-run] [--force-license]" ;;
+      --skip-export) SKIP_EXPORT=1 ;;
+      *) die "usage: 40-down.sh [--dry-run] [--force-license] [--skip-export]" ;;
     esac
   done
   require_env ARM_SUBSCRIPTION_ID
-  require_cmd terraform az ssh
-  export_labs
-  run cml_remote stop-labs
+  require_cmd terraform az ssh python3 jq
+  if [[ "${SKIP_EXPORT}" == "1" ]]; then
+    confirm_skip_export
+  else
+    export_labs
+    run cml_remote stop-labs
+  fi
   release_license
   destroy_cml
-  pass "CML VM destroyed. Persistent resources untouched. Next build: scripts/20-up.sh"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    pass "dry run: would destroy the CML VM (vendor/cloud-cml root only). Persistent resources untouched."
+  else
+    pass "CML VM destroyed. Persistent resources untouched. Next build: scripts/20-up.sh"
+  fi
   summary_and_exit
 }
 

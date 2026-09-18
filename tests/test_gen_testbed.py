@@ -199,7 +199,10 @@ class FetchTestbedTest(unittest.TestCase):
             out_path = Path(tmp) / "testbed.yaml"
             env = dict(os.environ)
             env.update({
-                "CML_URL": BASE_URL,
+                # The forward is what the CLI dials; the public CML_URL is
+                # set to a dead address to prove it is never used (ADR 0012).
+                "CML_URL": "https://203.0.113.5",
+                "CML_API_BASE": BASE_URL,
                 "CML_USERNAME": "admin",
                 "CML_PASSWORD": "secret",
                 "CML_VERIFY_SSL": "false",
@@ -233,7 +236,10 @@ class FetchTestbedTest(unittest.TestCase):
             out_path = Path(tmp) / "testbed.yaml"
             env = dict(os.environ)
             env.update({
-                "CML_URL": BASE_URL,
+                # The forward is what the CLI dials; the public CML_URL is
+                # set to a dead address to prove it is never used (ADR 0012).
+                "CML_URL": "https://203.0.113.5",
+                "CML_API_BASE": BASE_URL,
                 "CML_USERNAME": "admin",
                 "CML_PASSWORD": "secret",
                 "CML_VERIFY_SSL": "false",

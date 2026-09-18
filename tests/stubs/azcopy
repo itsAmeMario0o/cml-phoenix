@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Stand-in for azcopy: push_to_blob (scripts/30-export-labs.sh) copies
+# the export folder up. Logs to STUB_LOG when set; AZCOPY_STUB_FAIL=1
+# exits 1 with azcopy's own wording.
+if [[ -n "${STUB_LOG:-}" ]]; then
+  printf '%s\n' "azcopy $*" >> "${STUB_LOG}"
+fi
+if [[ "${AZCOPY_STUB_FAIL:-0}" == "1" ]]; then
+  echo "failed to perform copy command due to error: cannot use redirection" >&2; exit 1
+fi

@@ -108,4 +108,4 @@ assert_contains "outbound rule is outbound" 'direction                   = "Outb
 assert_contains "outbound source is the lab summary" 'source_address_prefix       = try(var.options.cfg.azure.lab_summary_cidr' "${out_block}"
 assert_contains "outbound destination is the apps subnet" 'destination_address_prefix  = var.options.cfg.azure.apps_subnet_cidr' "${out_block}"
 
-echo "test_transit: all passed"
+finish "test_transit"

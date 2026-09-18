@@ -8,10 +8,12 @@ testbed from the controller needs nothing pyATS provides. Keeping it
 stdlib also means it stays covered by tests/run.sh, which does not require
 pyATS to be installed.
 
-Controller credentials come only from the environment (CML_URL,
+Controller credentials come only from the environment (CML_API_BASE,
 CML_USERNAME, CML_PASSWORD, CML_VERIFY_SSL, LAB_PASSWORD), the same
 gitignored env files the rest of the kit reads (config/mcp-env/cml.env
-and labs.env, ADR 0004). They are never taken from argv, where they
+and labs.env, ADR 0004). CML_API_BASE is the loopback SSH forward from
+scripts/50-tunnels.sh; the public CML_URL is never dialled from here
+(ADR 0012). They are never taken from argv, where they
 would show up in `ps` and shell history, and are never printed. CML's
 own testbed export never carries real device credentials, only
 placeholders (patch_terminal_server_credentials and
@@ -47,9 +49,11 @@ def _verify_ssl() -> bool:
 def _ssl_context() -> ssl.SSLContext:
     ctx = ssl.create_default_context()
     if not _verify_ssl():
-        # The lab controller carries a self-signed certificate. CML_VERIFY_SSL=false
-        # in config/mcp-env/cml.env (ADR 0004) is the operator saying skip
-        # verification for this controller; scripts/lib/users.py makes the
+        # The lab controller carries a self-signed certificate, and the
+        # forwarded URL names 127.0.0.1, which no certificate would match
+        # anyway. CML_VERIFY_SSL=false in config/mcp-env/cml.env skips
+        # verification on that loopback leg only; the internet leg is the
+        # pinned SSH session (ADR 0012). scripts/lib/users.py makes the
         # same tradeoff for the same reason.
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -271,9 +275,9 @@ def main(argv: list[str]) -> int:
         print("usage: gen_testbed.py <lab_title> <out_file>", file=sys.stderr)
         return 1
     lab_title, out_file = argv
-    base_url = os.environ.get("CML_URL", "")
+    base_url = os.environ.get("CML_API_BASE", "")
     if not base_url:
-        print("gen_testbed: CML_URL is not set; source config/mcp-env/cml.env", file=sys.stderr)
+        print("gen_testbed: CML_API_BASE is not set; source config/mcp-env/cml.env", file=sys.stderr)
         return 1
     username = os.environ.get("CML_USERNAME", "")
     password = os.environ.get("CML_PASSWORD", "")

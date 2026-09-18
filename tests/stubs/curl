@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Stand-in for curl on the Mac side: cml_api_ready (scripts/lib/common.sh)
+# asks the controller's system_information for .ready. Every invocation
+# is appended to STUB_LOG when it is set.
+#   CURL_STUB_HTTP=200   {"ready":true}          (default)
+#   CURL_STUB_HTTP=502   an HTML error page, not JSON, exit 0
+#   CURL_STUB_HTTP=000   nothing, exit 7: connection refused
+if [[ -n "${STUB_LOG:-}" ]]; then
+  printf '%s\n' "curl $*" >> "${STUB_LOG}"
+fi
+case "$*" in
+  *"/api/v0/system_information"*)
+    case "${CURL_STUB_HTTP:-200}" in
+      200) echo '{"ready":true,"version":"2.9.0"}' ;;
+      000) exit 7 ;;
+      *) echo "<html><body>502 Bad Gateway</body></html>" ;;
+    esac
+    ;;
+  *) echo "curl stub: unhandled: $*" >&2; exit 1 ;;
+esac
