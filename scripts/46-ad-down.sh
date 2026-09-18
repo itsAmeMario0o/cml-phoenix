@@ -15,9 +15,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/24-ad-up.sh"
 
 destroy_root() {
-  local args=() line
-  while IFS= read -r line; do args+=("${line}"); done < <(ad_tf_args)
-  run terraform -chdir="${AD_ROOT}" destroy -auto-approve "${args[@]}"
+  ad_tf_args
+  run terraform -chdir="${AD_ROOT}" destroy -auto-approve "${AD_TF_ARGS[@]}"
 }
 
 main_down() {
@@ -29,7 +28,11 @@ main_down() {
   confirm "Destroy the domain controller (terraform/ad root only)?" || die "declined"
   destroy_root
   run rm -f -- "${AD_ENV}"
-  pass "domain controller destroyed. Persistent resources, ISE, and the CML VM untouched."
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    pass "dry run: would destroy the domain controller (terraform/ad root only) and remove ${AD_ENV}."
+  else
+    pass "domain controller destroyed. Persistent resources, ISE, and the CML VM untouched."
+  fi
   summary_and_exit
 }
 

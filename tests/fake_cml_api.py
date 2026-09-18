@@ -8,6 +8,8 @@ overridden by environment variables read at startup:
 - FAKE_LABS=0 starts with no labs (default: labs present).
 - FAKE_DEREGISTER_FAILS=1 makes DELETE /licensing/deregistration respond
   202 but leave the registration state unchanged (default: it succeeds).
+- FAKE_LABS_FAIL=1 makes GET /labs answer 500 after a successful
+  authenticate, the shape of a controller whose API is half up.
 """
 from __future__ import annotations
 
@@ -30,6 +32,7 @@ STATE: dict = {
     "labs": _default_labs() if os.environ.get("FAKE_LABS") != "0" else {},
     "registration": os.environ.get("FAKE_REGISTRATION", "REGISTERED"),
     "deregister_fails": os.environ.get("FAKE_DEREGISTER_FAILS") == "1",
+    "labs_fail": os.environ.get("FAKE_LABS_FAIL") == "1",
     # Users and groups, shaped like GET /users and GET /groups on 2.10.
     # Passwords are kept aside so a created user can authenticate.
     "users": {"u-admin": {"id": "u-admin", "username": "admin", "fullname": "", "email": "",
@@ -125,7 +128,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(401, {})
             return
         if self.path == "/api/v0/labs":
-            self._send(200, list(STATE["labs"]))
+            if STATE["labs_fail"]:
+                self._send(500, {"description": "internal error"})
+            else:
+                self._send(200, list(STATE["labs"]))
         elif self.path == "/api/v0/users":
             self._send(200, list(STATE["users"].values()))
         elif self.path == "/api/v0/groups":

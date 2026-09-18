@@ -6,7 +6,7 @@
 # Provides: REPO_ROOT, pass/warn/miss counters, summary_and_exit, die,
 # require_cmd, require_env, tf_out, cml_ip, cml_ssh, cml_remote, cml_scp,
 # cml_api_ready, confirm, load_cml_env, run, out_or_placeholder,
-# parse_dry_run_only, azcopy_env_init.
+# parse_dry_run_only, azcopy_env_init, render_config.
 #
 # Must stay bash 3.2 compatible: this runs on macOS.
 
@@ -131,6 +131,52 @@ out_or_placeholder() {
   else
     die "persistent output $1 unavailable"
   fi
+}
+
+# render_config: config/cml.yml from the persistent outputs, cml.tfvars
+# and refplat.txt. 20-up.sh renders it before the build and 40-down.sh
+# again before the destroy: Terraform re-reads the rendered file for a
+# destroy too, and a copy left from the build named a customize script
+# the fork had since renamed (LESSONS-LEARNED, 2026-09-17). Every output
+# is resolved into a variable before the command line is built. A die
+# inside "$(...)" in argument position only empties that argument, since
+# bash runs a command substitution with errexit off; a plain assignment
+# is what set -e stops on (architecture review, 2026-09-17).
+CML_TFVARS="${CML_TFVARS:-${REPO_ROOT}/config/cml.tfvars}"
+REFPLAT_FILE="${REFPLAT_FILE:-${REPO_ROOT}/config/refplat.txt}"
+CML_YML="${REPO_ROOT}/config/cml.yml"
+render_config() {
+  local app_pw sys_pw rg sa container vnet subnet ip pip disk apps_cidr lab_cidr key_name
+  app_pw="$(out_or_placeholder app_admin_password)"
+  sys_pw="$(out_or_placeholder sys_admin_password)"
+  rg="$(out_or_placeholder resource_group_name)"
+  sa="$(out_or_placeholder storage_account_name)"
+  container="$(out_or_placeholder cml_container_name)"
+  vnet="$(out_or_placeholder vnet_name)"
+  subnet="$(out_or_placeholder cml_subnet_name)"
+  ip="$(out_or_placeholder cml_private_ip)"
+  pip="$(out_or_placeholder public_ip_name)"
+  disk="$(out_or_placeholder data_disk_id)"
+  apps_cidr="$(out_or_placeholder apps_subnet_cidr)"
+  lab_cidr="$(out_or_placeholder lab_summary_cidr)"
+  key_name="$(out_or_placeholder ssh_key_name)"
+  # Passwords go through the environment, not --set, so they never appear
+  # in a process listing.
+  APP_PASSWORD="${app_pw}" SYS_PASSWORD="${sys_pw}" run python3 "${REPO_ROOT}/scripts/lib/render_cml_config.py" \
+    --template "${REPO_ROOT}/config/cml.yml.tftpl" \
+    --tfvars "${CML_TFVARS}" --refplat "${REFPLAT_FILE}" --out "${CML_YML}" \
+    --set "RESOURCE_GROUP=${rg}" \
+    --set "STORAGE_ACCOUNT=${sa}" \
+    --set "CONTAINER_NAME=${container}" \
+    --set "VNET_NAME=${vnet}" \
+    --set "SUBNET_NAME=${subnet}" \
+    --set "PRIVATE_IP=${ip}" \
+    --set "PUBLIC_IP_NAME=${pip}" \
+    --set "DATA_DISK_ID=${disk}" \
+    --set "OS_DISK_TYPE=${OS_DISK_TYPE:-Premium_LRS}" \
+    --set "APPS_SUBNET_CIDR=${apps_cidr}" \
+    --set "LAB_SUMMARY_CIDR=${lab_cidr}" \
+    --set "SSH_KEY_NAME=${key_name}"
 }
 
 # parse_dry_run_only "$@": for a script whose only accepted argument is

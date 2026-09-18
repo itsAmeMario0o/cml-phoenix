@@ -9,6 +9,7 @@ PORT=18001
 PORT_DEREGISTER_FAILS=18002
 PORT_NO_LABS=18003
 PORT_COMPLETED=18004
+PORT_LABS_FAIL=18005
 # shellcheck source=tests/lib/asserts.sh
 source "${REPO_ROOT}/tests/lib/asserts.sh"
 
@@ -20,7 +21,9 @@ FAKE_LABS=0 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT_NO_LABS}" &
 API_PID_NO_LABS=$!
 FAKE_REGISTRATION=COMPLETED FAKE_DEREGISTER_FAILS=1 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT_COMPLETED}" &
 API_PID_COMPLETED=$!
-trap 'kill "${API_PID}" "${API_PID_DEREGISTER_FAILS}" "${API_PID_NO_LABS}" "${API_PID_COMPLETED}" 2>/dev/null || true; rm -rf "${TMP}"' EXIT
+FAKE_LABS_FAIL=1 python3 "${REPO_ROOT}/tests/fake_cml_api.py" "${PORT_LABS_FAIL}" &
+API_PID_LABS_FAIL=$!
+trap 'kill "${API_PID}" "${API_PID_DEREGISTER_FAILS}" "${API_PID_NO_LABS}" "${API_PID_COMPLETED}" "${API_PID_LABS_FAIL}" 2>/dev/null || true; rm -rf "${TMP}"' EXIT
 sleep 1
 
 printf 'CFG_APP_USER="admin"\nCFG_APP_PASS="secret"\n' > "${TMP}/vars.sh"
@@ -63,5 +66,16 @@ out="$(CML_API="http://127.0.0.1:${PORT_NO_LABS}/api/v0" bash "${SCRIPT}" list-l
 assert_eq "list-labs with no labs is empty" "" "${out}"
 out="$(CML_API="http://127.0.0.1:${PORT_NO_LABS}/api/v0" bash "${SCRIPT}" export-labs "${TMP}/exports-empty")"
 assert_eq "export-labs with no labs" "exported 0 labs to ${TMP}/exports-empty" "${out}"
+
+# GET /labs failing after a good authenticate must not read as "0 labs":
+# `for id in $(lab_ids)` swallowed the status and 40-down.sh went on to
+# destroy the VM (architecture review, 2026-09-17).
+for sub in export-labs list-labs stop-labs; do
+  rc=0
+  out="$(CML_API="http://127.0.0.1:${PORT_LABS_FAIL}/api/v0" bash "${SCRIPT}" "${sub}" "${TMP}/exports-fail" 2>&1)" || rc=$?
+  assert_eq "${sub} exits 1 when GET /labs fails" "1" "${rc}"
+  assert_contains "${sub} names the failed call" "GET /labs failed" "${out}"
+  assert_not_contains "${sub} never claims a count" " 0 labs" "${out}"
+done
 
 finish "test_cml_remote"

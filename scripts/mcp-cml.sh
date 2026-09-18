@@ -8,11 +8,18 @@
 # default, so when config/mcp-env/labs.env exists the lab password from
 # it is handed over for the admin user every topology under labs/ creates
 # (ADR 0006). Override either variable in the environment if a lab differs.
+#
+# The server runs with the CML admin password in its environment, so the
+# version is pinned rather than whatever PyPI serves next; bump
+# CML_MCP_VERSION in the environment, or the default here, on purpose.
+# 0.31.2 is the version uvx last resolved on this Mac (uv cache, 2026-09-05)
+# and the one LESSONS-LEARNED names.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${CML_MCP_ENV:-${REPO_ROOT}/config/mcp-env/cml.env}"
 LAB_ENV_FILE="${CML_LAB_ENV:-${REPO_ROOT}/config/mcp-env/labs.env}"
+CML_MCP_VERSION="${CML_MCP_VERSION:-0.31.2}"
 
 main() {
   if [[ ! -f "${ENV_FILE}" ]]; then
@@ -31,7 +38,7 @@ main() {
     FTD_ADMIN_PASSWORD="${FTD_ADMIN_PASSWORD:-}"
   fi
   set +a
-  exec uvx "cml-mcp[pyats]" "$@"
+  exec uvx "cml-mcp[pyats]==${CML_MCP_VERSION}" "$@"
 }
 
 main "$@"

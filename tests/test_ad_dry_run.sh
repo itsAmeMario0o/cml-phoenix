@@ -27,6 +27,10 @@ assert_contains "failed run commands cleared before the apply" "+ delete any Fai
 assert_contains "env file step planned" "mode 0600 from terraform output (values never printed)" "${out}"
 assert_contains "directory check planned" "(Get-ADDomain).DNSRoot" "${out}"
 assert_contains "DNS check planned" "Resolve-DnsName login.microsoftonline.com" "${out}"
+# Resolve-DnsName failures are non-terminating, so without Stop the
+# trailing 'dns-ok' printed regardless and the check could never fail.
+assert_contains "DNS check stops on the first failure" "\$ErrorActionPreference='Stop'; Resolve-DnsName dc1.corp.rooez.com" "${out}"
+assert_eq "every DC check runs strict" "3" "$(grep -c "RunPowerShellScript --scripts \$ErrorActionPreference='Stop'; " <<<"${out}")"
 assert_contains "CA check planned" "certutil -ping" "${out}"
 assert_contains "prints ISE's name server" "Primary Name Server: 10.20.2.10" "${out}"
 assert_contains "prints ISE's domain" "DNS domain name:     corp.rooez.com" "${out}"
@@ -63,11 +67,28 @@ out="$(stubbed bash "${DOWN}" --dry-run 2>&1)"
 assert_contains "destroy planned" "+ terraform -chdir=${REPO_ROOT}/terraform/ad destroy -auto-approve" "${out}"
 assert_contains "destroy gets the same variables" "-var=apps_subnet_id=" "${out}"
 assert_contains "env file removed" "+ rm -f -- ${REPO_ROOT}/config/mcp-env/ad.env" "${out}"
+assert_contains "dry run says what would happen" "dry run: would destroy the domain controller" "${out}"
+assert_not_contains "dry run never claims a destroy" "domain controller destroyed." "${out}"
 if grep -qE 'chdir="\$\{REPO_ROOT\}/terraform/(persistent|bootstrap)"|vendor/cloud-cml' "${DOWN}"; then
   echo "[FAIL]  46-ad-down.sh names a root other than terraform/ad"; failures=$((failures + 1))
 else
   echo "[OK]    46-ad-down.sh touches only terraform/ad"
 fi
+
+# 4b. Unreadable persistent outputs stop apply and destroy with a [FAIL]
+#     before terraform runs. `-var=x=$(out_or_placeholder x)` once produced
+#     five empty -var= lines and exit 0, and `done < <(ad_tf_args)` hid the
+#     status from both callers (architecture review, 2026-09-17). The stub
+#     prints "stub: no state" only when terraform itself is reached, since
+#     tf_out silences it.
+for fn in apply_root destroy_root; do
+  rc=0
+  out="$(PATH="${REPO_ROOT}/tests/stubs:${PATH}" TF_STUB_FAIL=1 ARM_SUBSCRIPTION_ID=x ASSUME_YES=1 \
+    bash -c "source '${DOWN}'; DRY_RUN=0; ${fn}" 2>&1)" || rc=$?
+  assert_eq "${fn} with unreadable outputs exits 1" "1" "${rc}"
+  assert_contains "${fn} names the missing output" "[FAIL]  persistent output resource_group_name unavailable" "${out}"
+  assert_not_contains "${fn} never reaches terraform" "stub: no state" "${out}"
+done
 
 # 5. The PowerShell: strict mode, stop on error, a transcript, and a guard
 #    that makes a rerun safe. Parsed with pwsh when it is installed.
