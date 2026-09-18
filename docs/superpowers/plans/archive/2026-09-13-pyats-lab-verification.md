@@ -1,4 +1,11 @@
-# pyATS Lab Verification Implementation Plan
+# pyATS lab verification implementation plan
+
+> Executed. The `verify/` tree, `gen_testbed.py`, and
+> `scripts/80-verify-lab.sh` merged to `main` on 2026-09-13, and the
+> first live runs were 2026-09-16 (`cilium-evpn`, all checks passed) and
+> 2026-09-17 (`trustsec-phase1`, with the CoA check failing for a reason
+> the entry explains). The checkboxes below were never ticked;
+> `docs/STATUS.md` is the record. See ADR 0009 and `verify/README.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

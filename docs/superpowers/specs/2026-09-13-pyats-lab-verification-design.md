@@ -1,6 +1,7 @@
 # pyATS lab verification
 
-Status: draft, 2026-09-13.
+Status: shipped (landed 2026-09-13, first live run 2026-09-16; see ADR
+0009 and `verify/README.md`). Written 2026-09-13.
 
 This spec adds a verification layer for the labs. Each scenario gets a
 repeatable check that a lab is actually working, with a uniform report, so

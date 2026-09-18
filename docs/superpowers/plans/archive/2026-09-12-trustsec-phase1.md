@@ -1,4 +1,13 @@
-# TrustSec Phase 1 Implementation Plan
+# TrustSec Phase 1 implementation plan
+
+> Executed. The code merged to `main` on 2026-09-13 from the
+> `trustsec-phase1` branch, and the routed path it was built to prove
+> (a lab switch seen by ISE at its own address, RADIUS both ways, CoA
+> back) was proven live on 2026-09-17. The checkboxes below were never
+> ticked; `docs/STATUS.md` and `docs/STATUS-ARCHIVE.md` are the record of
+> what shipped. The ISE deploy method changed twice after this plan was
+> written: see ADR 0008 and its amendment, and
+> `docs/ISE-MARKETPLACE-DEPLOY.md`. The routed path is ADR 0003.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

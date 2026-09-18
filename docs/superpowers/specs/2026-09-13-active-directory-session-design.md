@@ -1,8 +1,10 @@
 # Active Directory for the ISE session
 
-Status: draft, 2026-09-13. Revised 2026-09-17 to match what the week's live
-work settled; the section "What changed on 2026-09-17" lists the
-differences. Still not built.
+Status: shipped (2026-09-17, built by `scripts/24-ad-up.sh` and joined
+by ISE the same night, then torn down with the session; see ADR 0010,
+`docs/AD.md`, `docs/ISE-AD-BUILD.md`). Written 2026-09-13, revised
+2026-09-17 to match what the week's live work settled; the section "What
+changed on 2026-09-17" lists the differences.
 
 ISE needs a DNS server it can trust for internal names, an identity store to
 authenticate lab users against, and a certificate authority to sign its
@@ -90,7 +92,8 @@ In scope:
 - A tracked CSV of lab users and groups in a Nintendo theme, plus one
   service account for ISE to join the domain with.
 - Operator scripts `24-ad-up.sh`, `46-ad-down.sh`, and `27-ad-ca.sh`, with
-  dry run tests, and a runbook `docs/AD.md`.
+  dry run tests, and a concepts document, `docs/AD.md` (the runbook is
+  `docs/ISE-AD-BUILD.md`).
 - Changes to the ISE walkthrough so ISE is deployed with the DC as its DNS
   server and `corp.rooez.com` as its domain, and a short procedure for
   repointing an ISE that is already running. `scripts/25-ise-up.sh
@@ -166,7 +169,7 @@ pattern the kit uses for every other lab VM. Azure Bastion is out of scope
 per `CLAUDE.md` and this design does not depend on it. An operator who wants
 a browser RDP session can turn on the free Developer SKU from the portal on
 their own initiative; it needs no subnet and nothing from this repo, but
-nothing here assumes it is there. The runbook documents the SSH forward
+nothing here assumes it is there. `docs/AD.md` documents the SSH forward
 only.
 
 ### ISE reachability

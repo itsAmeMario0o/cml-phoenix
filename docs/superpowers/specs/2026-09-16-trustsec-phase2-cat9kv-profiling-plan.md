@@ -1,8 +1,10 @@
 # TrustSec Phase 2: Catalyst 9000v and profiling, continuity note
 
-Status: brainstorming in progress, not an approved spec. Written so a
-fresh session (the operator is switching models) can pick this up
-without re-deriving anything below. No lab YAML, `config/refplat.txt`,
+Status: retired (2026-09-17, superseded as the design by
+`2026-09-17-trustsec-phase2-design.md`, which keeps this file as its
+background and findings). Brainstorming notes, never an approved spec,
+written so a fresh session could pick the work up without re-deriving
+anything below. No lab YAML, `config/refplat.txt`,
 or node-definition files have been touched; everything here is findings
 and open questions, per the brainstorming skill's gate.
 
