@@ -7,7 +7,10 @@
 CSV columns: email,fullname,role. The email is the CML username, since a
 person logs in to CML with the same address the Cloudflare Access policy
 checks. role is admin or user. A generated password per new user goes to
-config/mcp-env/users-credentials.csv, mode 0600, never to stdout.
+config/mcp-env/users-credentials.csv, mode 0600, never to stdout. The
+sheet is append-only: a user's row is written the moment that user
+exists in CML, so a failure later in the run loses nothing, and rows
+from earlier runs are kept, so adding one person keeps everyone else's.
 
 Every non-admin user is placed in one managed group (LAB_GROUP, default
 "lab-users"), and that group is granted a permission (LAB_PERMISSION,
@@ -43,7 +46,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 COLUMNS = ["email", "fullname", "role"]
 ROLES = {"admin", "user"}
@@ -201,9 +204,11 @@ def _ensure_group(api: CmlApi, groups: dict[str, Any], group_name: str,
 
 def _create_missing_users(rows: list[Row], existing_users: dict[str, Any], api: CmlApi,
                            gid: str, dry_run: bool, log: Any, shared_password: str,
-                           outcome: Outcome) -> None:
+                           outcome: Outcome, on_created: Callable[[Row, str], None] | None) -> None:
     """Create every row not already a CML user. Mutates existing_users so
-    the membership union right after this call sees the new ids too."""
+    the membership union right after this call sees the new ids too.
+    on_created runs right after each create succeeds, before the next
+    one is attempted, so a later failure cannot lose an earlier password."""
     for row in rows:
         if row.username in existing_users:
             outcome.existing.append(row)
@@ -215,6 +220,8 @@ def _create_missing_users(rows: list[Row], existing_users: dict[str, Any], api: 
         else:
             uid = api.create_user(row, password, gid)
             existing_users[row.username] = {"id": uid, "admin": row.admin}
+            if on_created is not None:
+                on_created(row, password)
             log(f"[OK]    created {row.username} ({row.role})")
         outcome.created.append((row, password))
 
@@ -251,12 +258,15 @@ def _grant_labs(rows: list[Row], existing_users: dict[str, Any], api: CmlApi,
 
 
 def apply(rows: list[Row], api: CmlApi, group_name: str, permission: str,
-          dry_run: bool, log: Any = print, shared_password: str = "") -> Outcome:
+          dry_run: bool, log: Any = print, shared_password: str = "",
+          on_created: Callable[[Row, str], None] | None = None) -> Outcome:
     """Create missing users, then give the managed group every lab. Idempotent.
 
     With shared_password set, every new user gets it; otherwise each gets a
     generated one. CML rejects a password under 8 characters or on its
-    common-word list, and that rejection surfaces as a UsersError.
+    common-word list, and that rejection surfaces as a UsersError. A
+    failure part way through leaves the users created before it in CML,
+    which is why on_created is called per user rather than at the end.
     """
     if permission not in PERMISSIONS:
         raise UsersError(f"permission must be one of {sorted(PERMISSIONS)}, got {permission!r}")
@@ -267,24 +277,52 @@ def apply(rows: list[Row], api: CmlApi, group_name: str, permission: str,
 
     group = _ensure_group(api, api.groups(), group_name, dry_run, log, outcome)
     _create_missing_users(rows, existing_users, api, group["id"], dry_run, log,
-                           shared_password, outcome)
+                           shared_password, outcome, on_created)
     _grant_labs(rows, existing_users, api, group, group_name, permission, dry_run, log, outcome)
     return outcome
 
 
-def write_credentials(path: Path, created: list[tuple[Row, str]]) -> None:
-    """Overwrite the sheet with this run's users, mode 0600 from the first byte."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", newline="") as handle:
-        writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(COLUMNS + ["password"])
-        for row, password in created:
-            writer.writerow([row.email, row.fullname, row.role, password])
+class CredentialSheet:
+    """Append-only sheet of generated passwords, one row per created user.
+
+    A row is written and flushed the moment its user exists in CML, so a
+    failure on a later user cannot lose the passwords already handed out;
+    the old sheet was written once at the end and a failed run left users
+    on the controller with passwords nobody held. Rows from earlier runs
+    are never dropped, so adding one person keeps everyone else's.
+
+    The file is opened on the first row, not before, so a run that
+    creates nobody leaves the sheet untouched. A new file gets mode 0600
+    on the create call itself, so no wider mode ever exists, not even
+    between two calls; an existing file is only ever tightened to 0600
+    and appended to. ADR 0007.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.count = 0
+        self._handle: Any = None
+
+    def _open(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        os.fchmod(fd, 0o600)
+        self._handle = os.fdopen(fd, "a", newline="")
+        self._writer = csv.writer(self._handle, lineterminator="\n")
+        if os.fstat(fd).st_size == 0:
+            self._writer.writerow(COLUMNS + ["password"])
+
+    def add(self, row: Row, password: str) -> None:
+        if self._handle is None:
+            self._open()
+        self._writer.writerow([row.email, row.fullname, row.role, password])
+        self._handle.flush()
+        self.count += 1
+
+    def close(self) -> None:
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -310,16 +348,22 @@ def cmd_apply(args: argparse.Namespace) -> int:
     group_name = os.environ.get("LAB_GROUP", DEFAULT_GROUP)
     permission = os.environ.get("LAB_PERMISSION", DEFAULT_PERMISSION)
     shared_password = os.environ.get("LAB_USER_PASSWORD", "").strip()
+    sheet = CredentialSheet(Path(args.credentials))
     try:
         api = CmlApi(url, os.environ.get("CML_USERNAME", ""), os.environ.get("CML_PASSWORD", ""),
                      env_bool("CML_VERIFY_SSL", True))
-        outcome = apply(rows, api, group_name, permission, args.dry_run, shared_password=shared_password)
+        outcome = apply(rows, api, group_name, permission, args.dry_run, shared_password=shared_password,
+                        on_created=None if args.dry_run else sheet.add)
     except UsersError as exc:
         print(f"users: {exc}", file=sys.stderr)
+        if sheet.count:
+            print(f"[WARN]  {sheet.count} user(s) were created before the failure; "
+                  f"their password(s) are in {args.credentials}", file=sys.stderr)
         return 1
-    if outcome.created and not args.dry_run:
-        write_credentials(Path(args.credentials), outcome.created)
-        print(f"[OK]    {len(outcome.created)} password(s) written to {args.credentials}")
+    finally:
+        sheet.close()
+    if sheet.count:
+        print(f"[OK]    {sheet.count} password(s) written to {args.credentials}")
     elif not outcome.created:
         print("[OK]    no new users; credentials file untouched")
     print("[OK]    Access policy emails: " + ", ".join(sorted(r.email for r in rows)))

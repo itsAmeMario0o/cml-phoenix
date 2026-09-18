@@ -146,8 +146,10 @@ class RadiusAccessAccept(aetest.Testcase):
             # change it if not.
             checked_any = True
             # The test password appears in cleartext in this exec command's
-            # console output, which pyATS archives under verify/.archive and
-            # the device may log. IOS has no test-aaa form that hides it. Use
+            # console output, which pyATS archives under verify/.archive
+            # (gitignored; scripts/80-verify-lab.sh passes -archive_dir so
+            # it never lands in ~/.pyats) and the device may log. IOS has no
+            # test-aaa form that hides it. Use
             # a throwaway, rotatable ISE test account for TRUSTSEC_TEST_*,
             # never a real user's credential, and treat the archive as
             # sensitive. Confirmed and applied at the Task 7 live run.

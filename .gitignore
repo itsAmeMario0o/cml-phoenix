@@ -43,6 +43,11 @@ config/tunnels.conf
 # Python bytecode from the test suite
 __pycache__/
 
-# pyATS verification layer (ADR 0009): the venv and generated testbeds
+# pyATS verification layer (ADR 0009): the venv and generated testbeds,
+# plus easypy's archive and runinfo, which scripts/80-verify-lab.sh keeps
+# here so nothing is written outside the repo. The archive can hold the
+# test AAA password in clear text.
 verify/.venv/
 verify/.testbed/
+verify/.archive/
+verify/.runinfo/

@@ -11,8 +11,11 @@
 # every lab on the controller, so rerunning after importing a lab grants
 # it to everyone. Users that already exist are left alone. Generated
 # passwords go to config/mcp-env/users-credentials.csv, mode 0600, and
-# nowhere else. Each email still needs its Access policy entry; the
-# script prints the list. ADR 0007, docs/ACCESS.md "Adding a person".
+# nowhere else. The sheet is append-only: each row is written as soon as
+# its user exists, so a failure part way through loses no password, and
+# earlier runs' rows are kept. Each email still needs its Access policy
+# entry; the script prints the list. ADR 0007, docs/ACCESS.md "Adding a
+# person".
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh

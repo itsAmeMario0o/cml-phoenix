@@ -83,21 +83,32 @@ class PasswordAndClassTest(unittest.TestCase):
             users.class_rows("netsec", 0, "cisco.com")
 
 
+def _start_fake(port: int, env: dict[str, str]) -> subprocess.Popen:
+    proc = subprocess.Popen([sys.executable, str(REPO / "tests" / "fake_cml_api.py"), str(port)],
+                            env={**os.environ, **env})
+    for _ in range(50):
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/v0/labs", timeout=1):
+                pass
+            break
+        except urllib.error.HTTPError:
+            break
+        except OSError:
+            time.sleep(0.1)
+    return proc
+
+
+def _sheet_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
 class ApplyAgainstFakeApiTest(unittest.TestCase):
     proc: subprocess.Popen
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.proc = subprocess.Popen([sys.executable, str(REPO / "tests" / "fake_cml_api.py"), str(PORT)])
-        for _ in range(50):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/v0/labs", timeout=1):
-                    pass
-                break
-            except urllib.error.HTTPError:
-                break
-            except OSError:
-                time.sleep(0.1)
+        cls.proc = _start_fake(PORT, {})
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -166,18 +177,92 @@ class ApplyAgainstFakeApiTest(unittest.TestCase):
             users.apply(self.rows, self.api, "lab-users", "lab_exec",
                         dry_run=True, log=self.log.append, shared_password="short")
 
-    def test_write_credentials_private(self) -> None:
+    def test_sheet_new_file_is_private_and_untouched_without_rows(self) -> None:
         with tempfile.TemporaryDirectory(prefix=".tmp.users.", dir=REPO / "tests") as tmp:
             path = Path(tmp) / "creds.csv"
-            path.write_text("old")
-            os.chmod(path, 0o644)
-            users.write_credentials(path, [(self.rows[0], "Pw1"), (self.rows[1], "Pw2")])
+            sheet = users.CredentialSheet(path)
+            sheet.close()
+            self.assertFalse(path.exists(), "no row, no file")
+            sheet = users.CredentialSheet(path)
+            sheet.add(self.rows[0], "Pw1")
+            sheet.add(self.rows[1], "Pw2")
+            sheet.close()
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-            with path.open(newline="") as handle:
-                sheet = list(csv.DictReader(handle))
-            self.assertEqual([r["email"] for r in sheet], ["jdoe@example.com", "astudent@example.com"])
-            self.assertEqual(sheet[1]["password"], "Pw2")
-            self.assertEqual(sheet[1]["role"], "user")
+            rows = _sheet_rows(path)
+            self.assertEqual([r["email"] for r in rows], ["jdoe@example.com", "astudent@example.com"])
+            self.assertEqual(rows[1]["password"], "Pw2")
+            self.assertEqual(rows[1]["role"], "user")
+
+    def test_sheet_existing_wider_file_is_tightened_and_kept(self) -> None:
+        with tempfile.TemporaryDirectory(prefix=".tmp.users.", dir=REPO / "tests") as tmp:
+            path = Path(tmp) / "creds.csv"
+            path.write_text("email,fullname,role,password\nold@example.com,Old,user,OldPw\n")
+            os.chmod(path, 0o644)
+            sheet = users.CredentialSheet(path)
+            sheet.add(self.rows[0], "Pw1")
+            sheet.close()
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertEqual([r["password"] for r in _sheet_rows(path)], ["OldPw", "Pw1"])
+
+    def test_second_run_appends_new_user_and_keeps_earlier_rows(self) -> None:
+        first = users.load_rows("email,fullname,role\n"
+                                "appenda@example.com,Append A,user\n"
+                                "appendb@example.com,Append B,user\n")
+        second = users.load_rows("email,fullname,role\n"
+                                 "appenda@example.com,Append A,user\n"
+                                 "appendb@example.com,Append B,user\n"
+                                 "appendc@example.com,Append C,user\n")
+        with tempfile.TemporaryDirectory(prefix=".tmp.users.", dir=REPO / "tests") as tmp:
+            path = Path(tmp) / "creds.csv"
+            for rows in (first, second):
+                sheet = users.CredentialSheet(path)
+                users.apply(rows, self.api, "lab-users", "lab_exec", dry_run=False,
+                            log=self.log.append, on_created=sheet.add)
+                sheet.close()
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            rows_out = _sheet_rows(path)
+            self.assertEqual([r["email"] for r in rows_out],
+                             ["appenda@example.com", "appendb@example.com", "appendc@example.com"])
+            for r in rows_out:
+                users.CmlApi(f"http://127.0.0.1:{PORT}", r["email"], r["password"])
+
+
+class FailingCreateTest(unittest.TestCase):
+    """A separate fake, started with the failure knob, so the third user's
+    create fails after the first two have already been made in CML."""
+    proc: subprocess.Popen
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.proc = _start_fake(PORT + 1, {"FAKE_USER_CREATE_FAILS": "failc@example.com"})
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.proc.terminate()
+        cls.proc.wait(timeout=5)
+
+    def test_failure_on_third_user_keeps_first_two_passwords(self) -> None:
+        api = users.CmlApi(f"http://127.0.0.1:{PORT + 1}", "admin", "secret")
+        rows = users.load_rows("email,fullname,role\n"
+                               "faila@example.com,Fail A,user\n"
+                               "failb@example.com,Fail B,user\n"
+                               "failc@example.com,Fail C,user\n"
+                               "faild@example.com,Fail D,user\n")
+        with tempfile.TemporaryDirectory(prefix=".tmp.users.", dir=REPO / "tests") as tmp:
+            path = Path(tmp) / "creds.csv"
+            sheet = users.CredentialSheet(path)
+            with self.assertRaisesRegex(users.UsersError, "HTTP 500"):
+                users.apply(rows, api, "lab-users", "lab_exec", dry_run=False,
+                            log=[].append, on_created=sheet.add)
+            # The rows are on disk before close: they were flushed per user.
+            rows_out = _sheet_rows(path)
+            sheet.close()
+            self.assertEqual(sheet.count, 2)
+            self.assertEqual([r["email"] for r in rows_out], ["faila@example.com", "failb@example.com"])
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertEqual(set(api.users()) - {"admin"}, {"faila@example.com", "failb@example.com"})
+            for r in rows_out:
+                users.CmlApi(f"http://127.0.0.1:{PORT + 1}", r["email"], r["password"])
 
 
 if __name__ == "__main__":

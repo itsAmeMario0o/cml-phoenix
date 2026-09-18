@@ -28,6 +28,31 @@ $inner = @'
 __INNER_SCRIPT__
 '@
 
+function Invoke-Native {
+    # icacls is a native command: it fails by exit code, not by exception,
+    # so 'Stop' above does nothing for it. Its failure must not be lost:
+    # the arguments file written right after it holds passwords, and with
+    # inherited ACLs the directory is readable by more than administrators.
+    # The preference is relaxed around the call because Windows PowerShell
+    # turns redirected stderr into a terminating error under 'Stop', even
+    # when the command succeeds. The inner script runs as its own
+    # powershell.exe from a file, so this copy is not in scope there; each
+    # inner script carries its own. ADR 0010.
+    param([Parameter(Position = 0)][string]$Command,
+          [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $Command @Arguments 2>&1
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Command $Arguments failed ($LASTEXITCODE): $(($out | Select-Object -Last 3) -join ' | ')"
+    }
+}
+
 function Wait-Directory {
     # After promotion the server reboots and AD DS takes several minutes to
     # start. A domain logon, which the scheduled task needs, fails until
@@ -55,7 +80,7 @@ try {
     Wait-Directory
 
     $null = New-Item -ItemType Directory -Force -Path $bin
-    & icacls.exe $bin /inheritance:r /grant 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' > $null
+    Invoke-Native icacls.exe $bin /inheritance:r /grant 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F'
     Set-Content -Path (Join-Path $bin "$Name.ps1") -Value $inner -Encoding UTF8
     $json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($ArgumentsBase64))
     Set-Content -Path $argsFile -Value $json -Encoding UTF8
