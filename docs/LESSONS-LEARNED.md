@@ -1072,3 +1072,62 @@ in Azure, which is the cheapest place to learn them.
   needs a stop and start afterwards, the switch does not. The two inserted
   rules are the fallback if open mode ever misbehaves; they vanish on
   `virsh net-restart`. The permanent form is in the fork's `06-transit.sh`.
+
+## `60-import-lab.sh --dry-run` does not render; the rendered file can be stale
+
+- Symptom: a node re-provisioned from `exports/.rendered/<lab>.yaml`
+  after editing the tracked topology came up without the edit. Seen
+  2026-09-18.
+- Cause: the dry run prints the render command through `run` and never
+  executes it, so the rendered file was the previous one.
+- Fix: to render without importing, call `scripts/lib/render_lab.py`
+  directly with the env files exported and `umask 077`; check the
+  timestamp of the rendered file before trusting it.
+
+## CML refuses a MAC address outside its own prefix, and locks a booted node's NICs
+
+- Symptom: `PATCH /labs/<lab>/interfaces/<id>` with `mac_address` returned
+  400 twice: "Physical configuration of node is locked" on a node that had
+  booted, then "OUI does not match. Expected: 52:54:00" once the node was
+  wiped. Seen 2026-09-18, trying to give endpoints real vendor prefixes so
+  ISE could profile them by OUI.
+- Cause: a node's interfaces cannot change once it has run until its disks
+  are wiped, and the controller only issues MACs from its configured
+  prefix (`system_information.oui`).
+- Fix: set the MAC inside the guest, where it reaches the wire: netplan
+  `macaddress:` on Ubuntu, `ip link set eth0 address` in Alpine's
+  `node.cfg`. The switch and ISE see the guest's MAC; the controller's
+  NIC MAC never appears on the wire. Each disk wipe gives the NIC a fresh
+  controller MAC, and ISE keeps the old one as a ghost endpoint; delete
+  those over ERS before a demo.
+
+## ISE's endpoint SNMP scan API wants objects where the GUI takes strings
+
+- Symptom: `POST /api/v1/profiler/snmp/scan/test` answered 400 "networkScope,
+  must not be null, scanSource, must not be null", then "Cannot construct
+  instance of Subnet from String value '10.100.0.0/24'", then "Unable to
+  test connection due to an internal error". Seen 2026-09-18.
+- Cause: the test call needs the whole scan shape, not just `testServer`
+  and credentials; `subnets` is a list of `{subnetIp, mask}` objects, not
+  CIDR strings; `scanSource` is the PSN's FQDN; and the test server has to
+  be the endpoint's current address (a re-provisioned node takes a new
+  lease).
+- Fix: build the body as the scan itself would be created, with
+  `scheduleTime: {scheduleType: NO_SCHEDULE}`, and read the endpoint's
+  address from the switch's DHCP binding first. With that, the test
+  reports "SNMP Connection Successful" and a started scan sweeps a /24 in
+  about two minutes.
+
+## The Profiler Feed offline apply stayed grey
+
+- Symptom: on Administration, FeedService, Profiler, Offline Manual Update,
+  a chosen `feedservice-*.tar.gz.gpg` left Apply Update greyed out and
+  "Latest applied feed occurred on" blank; the profile count stayed at
+  676. Seen 2026-09-18.
+- Cause: the package was not accepted by the page (the file must come from
+  that page's own "Download Updated Profile Policies" link, and the upload
+  has to finish before Apply enables). Not fully diagnosed.
+- Fix: the Online Subscription Update tab: enable, Test Feed Service
+  Connection, Update Now. ISE resolves `isefeed-prd.cisco.com` and has
+  outbound access. Read `GET /ers/config/profilerprofile` total before and
+  after to see it take.

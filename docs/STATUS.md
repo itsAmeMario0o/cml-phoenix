@@ -30,6 +30,22 @@ the three lab imports, and the domain join with its two groups. Not done
 yet: `sw1`'s network device on the new ISE, `70-users.sh`, and no lab has
 been started.
 
+TrustSec Phase 2 started on 2026-09-18 and Act 1 is most of the way
+done, on the running lab. `labs/trustsec-phase2.yaml` is tracked and
+proven for Act 1 (`sw1`, `emp-pc`, `iot-dev`, `kali` running; ASAv, FTDv,
+`srv` present and stopped; ASAv 9.24.1 added to the refplat, blob and the
+controller). `sw1` polls over SNMPv3 from ISE, sends v2c traps, and relays
+DHCP to ISE; `emp-pc` and `iot-dev` carry Dell and HP MAC prefixes in
+their day-0; ISE profiled them `Workstation` and `HP-Device` with no
+RADIUS anywhere, and its 3.5 endpoint SNMP scan swept the endpoint VLAN
+over the API. `docs/ISE-INVENTORY-PARITY.md` holds the customer's
+ForeScout sample, the operator's mapping, and the lab's result per row.
+Found and fixed on the way: the transit network's route mode rejected
+endpoints beyond the /24 (fork `b92b6a2`, ADR 0003 amended). Still by
+hand on ISE: the profiler probes (GUI), the feed update (the offline apply
+did not take; the online tab is next), the NMAP scan (a GUI action). Not
+yet: a reverse DNS zone for 10.100.10.0/24, v3 traps, Act 2.
+
 Next steps, in order:
 
 1. The spec approved today,
