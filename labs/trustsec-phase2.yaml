@@ -1,0 +1,771 @@
+# TrustSec Phase 2: one Catalyst 9000v access switch on the host transit
+# bridge, three endpoints on one VLAN, two firewalls, and a server.
+# Spec: docs/specs/2026-09-17-trustsec-phase2-design.md.
+#
+# asa1 and ftd1 must never run together. Both hold 10.100.11.2 on the
+# firewall VLAN and 10.100.20.1 toward the server; start one, stop the
+# other, and the switch's route and the server's gateway never change.
+#
+# Act 1, the SNMP inventory, starts bridge1, sw1, emp-pc, iot-dev and
+# kali. The firewalls, sw2 and srv stay stopped. The day-0 carries no
+# snmp-server lines on purpose: Act 1 step 2 adds SNMP by hand, so what
+# ISE sees is what the procedure produced, not what the file shipped.
+# RADIUS, AAA, MAB and 802.1X stay in the day-0 because they are proven on
+# this image (the cat9kv probe of 2026-09-17) and the three access ports
+# run `authentication open`, so an endpoint gets its lease whether or not
+# ISE ever answers. Act 2 step 5 removes `authentication open`, step 6
+# uncomments `cts role-based enforcement`, and step 7 uncomments `cts
+# manual` on the two firewall ports; those lines are in the file, commented.
+#
+# The external connector maps onto bridge1, the libvirt routed network a
+# fork customize script creates on the CML host at 10.100.0.1/24. sw1 is
+# 10.100.0.2 on it, the address the host routes 10.100.0.0/16 to (ADR
+# 0003), so ISE and the domain controller reach the endpoints through it.
+# The NAT connector gives ftd1 its management path to cdFMC and lets
+# emp-pc, kali and srv pull packages over a second interface. An external
+# connector has one port, so nat-sw, an unmanaged switch, fans it out;
+# that makes eleven nodes where the spec counted ten.
+#
+# emp-pc and iot-dev set real vendor MAC prefixes (Dell, HP) inside the
+# guest, because ISE's first classification is the MAC vendor and CML's own
+# 52:54:00 prefix maps to nobody; CML refuses any other prefix on the NIC
+# itself. kali keeps the CML prefix on purpose: it is the unknown device.
+#
+# Render with scripts/60-import-lab.sh, which fills __LAB_PASSWORD__,
+# the four __SNMP_*__ values (labs.env, Act 1),
+# __FTD_ADMIN_PASSWORD__, __ISE_IP__ and __RADIUS_SECRET__ from
+# config/mcp-env/labs.env and __LAB_SSH_PUBKEY__ from keys/cml-lab.pub
+# (ADR 0006). emp-pc's PEAP password is the literal CHANGE_ME: the AD
+# user's password lives in ad.env, which the import does not read, so
+# Act 2 step 5 sets it on the node before enabling the supplicant.
+#
+# Addresses
+#   transit   10.100.0.0/24    host .1, sw1 Vlan100 .2, ISE at __ISE_IP__
+#   endpoints 10.100.10.0/24   sw1 Vlan10 .1, DHCP .100 to .199, DNS 10.20.2.10
+#   firewall  10.100.11.0/29   sw1 Vlan11 .1, the running firewall inside .2
+#   servers   10.100.20.0/24   the running firewall .1, srv .10
+#   ftd mgmt  192.168.255.0/24 NAT .1, ftd1 .81
+#
+# RAM: sw1 18 GB, kali 4, emp-pc 2, iot-dev 0.5, asa1 2, ftd1 8, srv 2.
+# Act 1 alone 24.5 GB; with ASAv and srv 28.5; with FTDv and srv 34.5.
+---
+lab:
+  title: TrustSec Phase 2
+  description: A cat9000v access switch on the transit bridge, three endpoints, ASAv or FTDv enforcing by tag, and a server.
+  version: 0.1.0
+nodes:
+- id: n0
+  label: bridge1
+  node_definition: external_connector
+  x: -200
+  y: -300
+  interfaces:
+  - id: n0-port
+    label: port
+    type: physical
+    slot: 0
+  configuration:
+  - name: default
+    content: bridge1
+- id: n1
+  label: nat
+  node_definition: external_connector
+  x: 600
+  y: -300
+  interfaces:
+  - id: n1-port
+    label: port
+    type: physical
+    slot: 0
+  configuration:
+  - name: default
+    content: NAT
+- id: n2
+  label: sw1
+  node_definition: cat9000v-uadp
+  image_definition: cat9000v-uadp-17-18-02
+  x: 0
+  y: 0
+  interfaces:
+  - id: n2-Loopback0
+    label: Loopback0
+    type: loopback
+  - id: n2-GigabitEthernet0_0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: n2-GigabitEthernet1_0_1
+    label: GigabitEthernet1/0/1
+    type: physical
+    slot: 1
+  - id: n2-GigabitEthernet1_0_2
+    label: GigabitEthernet1/0/2
+    type: physical
+    slot: 2
+  - id: n2-GigabitEthernet1_0_3
+    label: GigabitEthernet1/0/3
+    type: physical
+    slot: 3
+  - id: n2-GigabitEthernet1_0_4
+    label: GigabitEthernet1/0/4
+    type: physical
+    slot: 4
+  - id: n2-GigabitEthernet1_0_5
+    label: GigabitEthernet1/0/5
+    type: physical
+    slot: 5
+  - id: n2-GigabitEthernet1_0_6
+    label: GigabitEthernet1/0/6
+    type: physical
+    slot: 6
+  - id: n2-GigabitEthernet1_0_7
+    label: GigabitEthernet1/0/7
+    type: physical
+    slot: 7
+  - id: n2-GigabitEthernet1_0_8
+    label: GigabitEthernet1/0/8
+    type: physical
+    slot: 8
+  - id: n2-GigabitEthernet1_0_9
+    label: GigabitEthernet1/0/9
+    type: physical
+    slot: 9
+  - id: n2-GigabitEthernet1_0_10
+    label: GigabitEthernet1/0/10
+    type: physical
+    slot: 10
+  - id: n2-GigabitEthernet1_0_11
+    label: GigabitEthernet1/0/11
+    type: physical
+    slot: 11
+  - id: n2-GigabitEthernet1_0_12
+    label: GigabitEthernet1/0/12
+    type: physical
+    slot: 12
+  - id: n2-GigabitEthernet1_0_13
+    label: GigabitEthernet1/0/13
+    type: physical
+    slot: 13
+  - id: n2-GigabitEthernet1_0_14
+    label: GigabitEthernet1/0/14
+    type: physical
+    slot: 14
+  - id: n2-GigabitEthernet1_0_15
+    label: GigabitEthernet1/0/15
+    type: physical
+    slot: 15
+  - id: n2-GigabitEthernet1_0_16
+    label: GigabitEthernet1/0/16
+    type: physical
+    slot: 16
+  - id: n2-GigabitEthernet1_0_17
+    label: GigabitEthernet1/0/17
+    type: physical
+    slot: 17
+  - id: n2-GigabitEthernet1_0_18
+    label: GigabitEthernet1/0/18
+    type: physical
+    slot: 18
+  - id: n2-GigabitEthernet1_0_19
+    label: GigabitEthernet1/0/19
+    type: physical
+    slot: 19
+  - id: n2-GigabitEthernet1_0_20
+    label: GigabitEthernet1/0/20
+    type: physical
+    slot: 20
+  - id: n2-GigabitEthernet1_0_21
+    label: GigabitEthernet1/0/21
+    type: physical
+    slot: 21
+  - id: n2-GigabitEthernet1_0_22
+    label: GigabitEthernet1/0/22
+    type: physical
+    slot: 22
+  - id: n2-GigabitEthernet1_0_23
+    label: GigabitEthernet1/0/23
+    type: physical
+    slot: 23
+  - id: n2-GigabitEthernet1_0_24
+    label: GigabitEthernet1/0/24
+    type: physical
+    slot: 24
+  configuration:
+  - name: iosxe_config.txt
+    content: |
+      hostname sw1
+      no logging console
+      aaa new-model
+      aaa group server radius ISE-GROUP
+       server name ISE
+      aaa authentication login default local
+      aaa authentication dot1x default group ISE-GROUP
+      aaa authorization network default group ISE-GROUP
+      aaa accounting dot1x default start-stop group ISE-GROUP
+      aaa server radius dynamic-author
+       client __ISE_IP__ server-key __RADIUS_SECRET__
+      aaa session-id common
+      ip routing
+      ip name-server 10.20.2.10
+      ip domain lookup source-interface Vlan100
+      ip domain name corp.rooez.com
+      license boot level network-advantage addon dna-advantage
+      dot1x system-auth-control
+      spanning-tree mode rapid-pvst
+      enable secret __LAB_PASSWORD__
+      username admin privilege 15 secret __LAB_PASSWORD__
+      ! Act 2, step 6: cts role-based enforcement
+      vlan 10
+       name endpoints
+      vlan 11
+       name firewall
+      vlan 100
+       name transit
+      ip dhcp excluded-address 10.100.10.1 10.100.10.99
+      ip dhcp excluded-address 10.100.10.200 10.100.10.254
+      ip dhcp pool ENDPOINTS
+       network 10.100.10.0 255.255.255.0
+       default-router 10.100.10.1
+       dns-server 10.20.2.10
+       domain-name corp.rooez.com
+       lease 1
+      interface GigabitEthernet0/0
+       shutdown
+      interface GigabitEthernet1/0/1
+       description emp-pc, Act 2 802.1X PEAP
+       switchport access vlan 10
+       switchport mode access
+       authentication open
+       authentication port-control auto
+       authentication violation replace
+       mab
+       dot1x pae authenticator
+       dot1x timeout tx-period 5
+       spanning-tree portfast
+      interface GigabitEthernet1/0/2
+       description iot-dev, Act 2 MAB
+       switchport access vlan 10
+       switchport mode access
+       authentication open
+       authentication port-control auto
+       authentication violation replace
+       mab
+       dot1x pae authenticator
+       dot1x timeout tx-period 5
+       spanning-tree portfast
+      interface GigabitEthernet1/0/3
+       description kali, Act 2 MAB
+       switchport access vlan 10
+       switchport mode access
+       authentication open
+       authentication port-control auto
+       authentication violation replace
+       mab
+       dot1x pae authenticator
+       dot1x timeout tx-period 5
+       spanning-tree portfast
+      interface GigabitEthernet1/0/22
+       description asa1 GigabitEthernet0/0 inside
+       switchport access vlan 11
+       switchport mode access
+       spanning-tree portfast
+       ! Act 2, step 7: cts manual
+       ! Act 2, step 7:  propagate sgt
+      interface GigabitEthernet1/0/23
+       description ftd1 GigabitEthernet0/0 inside
+       switchport access vlan 11
+       switchport mode access
+       spanning-tree portfast
+       ! Act 2, step 7: cts manual
+       ! Act 2, step 7:  propagate sgt
+      interface GigabitEthernet1/0/24
+       description transit bridge1, host gateway 10.100.0.1 (ADR 0003)
+       switchport access vlan 100
+       switchport mode access
+      interface Vlan1
+       no ip address
+       shutdown
+      interface Vlan10
+       description endpoints, DHCP from this switch
+       ip address 10.100.10.1 255.255.255.0
+      interface Vlan11
+       description the running firewall's inside at .2
+       ip address 10.100.11.1 255.255.255.248
+      interface Vlan100
+       description transit to the host, ISE and the domain controller
+       ip address 10.100.0.2 255.255.255.0
+      ip route 0.0.0.0 0.0.0.0 10.100.0.1
+      ip route 10.100.20.0 255.255.255.0 10.100.11.2
+      ip radius source-interface Vlan100
+      radius server ISE
+       address ipv4 __ISE_IP__ auth-port 1812 acct-port 1813
+       key __RADIUS_SECRET__
+      ip ssh version 2
+      line con 0
+       exec-timeout 0 0
+       logging synchronous
+      line vty 0 15
+       exec-timeout 0 0
+       login authentication default
+       transport input ssh
+      end
+- id: n3
+  label: emp-pc
+  node_definition: ubuntu
+  image_definition: ubuntu-24-04-20260307
+  x: -300
+  y: 300
+  interfaces:
+  - id: n3-ens2
+    label: ens2
+    type: physical
+    slot: 0
+  - id: n3-ens3
+    label: ens3
+    type: physical
+    slot: 1
+  configuration:
+  - name: user-data
+    content: |-
+      #cloud-config
+      hostname: emp-pc
+      manage_etc_hosts: true
+      ssh_pwauth: true
+      users:
+        - name: cisco
+          groups: sudo
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          lock_passwd: false
+          ssh_authorized_keys:
+            - __LAB_SSH_PUBKEY__
+      chpasswd:
+        users:
+          - name: cisco
+            password: '__LAB_PASSWORD__'
+            type: text
+        expire: false
+      package_update: true
+      packages:
+        - wpasupplicant
+        - snmpd
+      write_files:
+        - path: /etc/snmp/snmpd.conf
+          permissions: '0600'
+          content: |
+            # Act 1, step 5: ISE's endpoint SNMP scan asks the endpoint
+            # itself. v3 first, v2c kept for the comparison.
+            agentAddress udp:161
+            sysLocation cml-azure-lab, TrustSec Phase 2, VLAN 10
+            sysContact lab-owner
+            createUser __SNMP_V3_USER__ SHA "__SNMP_V3_AUTH_PASSWORD__" AES "__SNMP_V3_PRIV_PASSWORD__"
+            rouser __SNMP_V3_USER__ priv
+            rocommunity __SNMP_RO_COMMUNITY__ 10.20.2.20
+        - path: /etc/wpa_supplicant/wired-peap.conf
+          permissions: '0600'
+          content: |
+            # Act 2, step 5. The password is the AD lab user's, from
+            # config/mcp-env/ad.env, set by hand before enabling the unit.
+            ctrl_interface=/run/wpa_supplicant
+            ap_scan=0
+            network={
+                key_mgmt=IEEE8021X
+                eap=PEAP
+                identity="mario"
+                password="CHANGE_ME"
+                phase2="auth=MSCHAPV2"
+                eapol_flags=0
+            }
+        - path: /etc/systemd/system/wired-peap.service
+          content: |
+            [Unit]
+            Description=802.1X PEAP supplicant on ens2 (Act 2, step 5)
+            After=network-online.target
+            [Service]
+            ExecStartPre=/usr/sbin/ip link set ens2 up
+            ExecStart=/usr/sbin/wpa_supplicant -D wired -i ens2 -c /etc/wpa_supplicant/wired-peap.conf
+            Restart=on-failure
+            [Install]
+            WantedBy=multi-user.target
+      runcmd:
+        - [systemctl, daemon-reload]
+        - [systemctl, restart, snmpd]
+  - name: network-config
+    content: |-
+      #network-config
+      # ens2 is the access port: DHCP from sw1, but no default route from
+      # it, so packages go out over the NAT side and the lab's 10/8 goes
+      # through the switch. on-link because the gateway arrives with the
+      # lease.
+      network:
+        version: 2
+        ethernets:
+          ens2:
+            # A Dell prefix: ISE's first classification is the MAC vendor,
+            # and CML's own 52:54:00 maps to nobody.
+            macaddress: 00:14:22:5a:10:01
+            dhcp4: true
+            # Key the lease by MAC, as a Windows or printer client would;
+            # networkd's default DUID hides the MAC from the switch's
+            # binding table and from ISE's DHCP probe.
+            dhcp-identifier: mac
+            dhcp4-overrides:
+              use-routes: false
+            routes:
+              - to: 10.0.0.0/8
+                via: 10.100.10.1
+                on-link: true
+          ens3:
+            dhcp4: true
+- id: n4
+  label: iot-dev
+  node_definition: alpine
+  image_definition: alpine-base-3-23-3
+  x: 0
+  y: 300
+  interfaces:
+  - id: n4-eth0
+    label: eth0
+    type: physical
+    slot: 0
+  configuration:
+  - name: node.cfg
+    content: |-
+      # Sourced by root at boot, after networking and before the image
+      # creates the user. Looks like an HP printer to a DHCP profiler:
+      # hostname and vendor class (option 60) are what ISE's HP-Device
+      # and printer profiles key on. The image's own udhcpc sends
+      # hostname localhost and no vendor class, so it is replaced.
+      hostname hp-printer-01
+      USERNAME=cisco
+      PASSWORD=__LAB_PASSWORD__
+      kill "$(cat /var/run/udhcpc.eth0.pid)" 2>/dev/null
+      # An HP prefix on the wire, for the same reason as emp-pc's Dell one.
+      ip link set eth0 down; ip link set eth0 address 3c:d9:2b:7e:10:02; ip link set eth0 up
+      udhcpc -i eth0 -b -R -p /var/run/udhcpc.eth0.pid -x hostname:hp-printer-01 -V "Hewlett-Packard JetDirect"
+      adduser -D cisco 2>/dev/null
+      install -d -m 700 -o cisco -g cisco /home/cisco/.ssh
+      echo "__LAB_SSH_PUBKEY__" > /home/cisco/.ssh/authorized_keys
+      chown cisco:cisco /home/cisco/.ssh/authorized_keys
+- id: n5
+  label: kali
+  node_definition: kali
+  image_definition: kali-2026-2
+  x: 300
+  y: 300
+  interfaces:
+  - id: n5-eth0
+    label: eth0
+    type: physical
+    slot: 0
+  - id: n5-eth1
+    label: eth1
+    type: physical
+    slot: 1
+  configuration: []
+- id: n6
+  label: asa1
+  node_definition: asav
+  image_definition: asav-9-24-1
+  x: 500
+  y: -100
+  interfaces:
+  - id: n6-Management0_0
+    label: Management0/0
+    type: physical
+    slot: 0
+  - id: n6-GigabitEthernet0_0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 1
+  - id: n6-GigabitEthernet0_1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 2
+  configuration:
+  - name: day0-config
+    content: |-
+      hostname asa1
+      enable password __LAB_PASSWORD__
+      username admin password __LAB_PASSWORD__ privilege 15
+      interface Management0/0
+       shutdown
+      interface GigabitEthernet0/0
+       nameif inside
+       security-level 100
+       ip address 10.100.11.2 255.255.255.248
+       no shutdown
+      interface GigabitEthernet0/1
+       nameif servers
+       security-level 50
+       ip address 10.100.20.1 255.255.255.0
+       no shutdown
+      route inside 10.100.10.0 255.255.255.0 10.100.11.1 1
+      route inside 10.100.0.0 255.255.0.0 10.100.11.1 1
+      ! Act 1 baseline. Act 2 step 7 replaces it with rules by security-group tag.
+      access-list ALLOW-ALL extended permit ip any any
+      access-group ALLOW-ALL in interface inside
+      access-group ALLOW-ALL in interface servers
+      aaa authentication ssh console LOCAL
+      aaa authentication http console LOCAL
+      http server enable
+      http 10.100.0.0 255.255.0.0 inside
+      ssh 10.100.0.0 255.255.0.0 inside
+      ssh version 2
+      crypto key generate rsa modulus 2048
+      end
+- id: n7
+  label: ftd1
+  node_definition: ftdv
+  image_definition: ftdv-10-0-0
+  x: 500
+  y: 100
+  interfaces:
+  - id: n7-Management0_0
+    label: Management0/0
+    type: physical
+    slot: 0
+  - id: n7-donotuse1
+    label: donotuse1
+    type: physical
+    slot: 1
+  - id: n7-GigabitEthernet0_0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 2
+  - id: n7-GigabitEthernet0_1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 3
+  configuration:
+  - name: day0-config
+    content: |-
+      {
+          "EULA": "accept",
+          "Hostname": "ftd1",
+          "AdminPassword": "__FTD_ADMIN_PASSWORD__",
+          "FirewallMode": "routed",
+          "DNS1": "8.8.8.8",
+          "DNS2": "1.1.1.1",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "192.168.255.81",
+          "IPv4Mask": "255.255.255.0",
+          "IPv4Gw": "192.168.255.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "",
+          "FmcRegKey": "",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+      }
+- id: n8
+  label: sw2
+  node_definition: unmanaged_switch
+  x: 800
+  y: 0
+  interfaces:
+  - id: n8-port0
+    label: port0
+    type: physical
+    slot: 0
+  - id: n8-port1
+    label: port1
+    type: physical
+    slot: 1
+  - id: n8-port2
+    label: port2
+    type: physical
+    slot: 2
+  - id: n8-port3
+    label: port3
+    type: physical
+    slot: 3
+  - id: n8-port4
+    label: port4
+    type: physical
+    slot: 4
+  - id: n8-port5
+    label: port5
+    type: physical
+    slot: 5
+  - id: n8-port6
+    label: port6
+    type: physical
+    slot: 6
+  - id: n8-port7
+    label: port7
+    type: physical
+    slot: 7
+  configuration: []
+- id: n9
+  label: srv
+  node_definition: ubuntu
+  image_definition: ubuntu-24-04-20260307
+  x: 1100
+  y: 0
+  interfaces:
+  - id: n9-ens2
+    label: ens2
+    type: physical
+    slot: 0
+  - id: n9-ens3
+    label: ens3
+    type: physical
+    slot: 1
+  configuration:
+  - name: user-data
+    content: |-
+      #cloud-config
+      hostname: srv
+      manage_etc_hosts: true
+      ssh_pwauth: true
+      users:
+        - name: cisco
+          groups: sudo
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          lock_passwd: false
+          ssh_authorized_keys:
+            - __LAB_SSH_PUBKEY__
+      chpasswd:
+        users:
+          - name: cisco
+            password: '__LAB_PASSWORD__'
+            type: text
+        expire: false
+      package_update: true
+      packages:
+        - nginx
+        - openssh-server
+      write_files:
+        - path: /var/www/html/index.html
+          content: |
+            srv
+  - name: network-config
+    content: |-
+      #network-config
+      # ens2 faces the running firewall; the lab's 10/8 goes through it
+      # and the NAT side keeps the default route for packages.
+      network:
+        version: 2
+        ethernets:
+          ens2:
+            addresses: [10.100.20.10/24]
+            routes:
+              - to: 10.0.0.0/8
+                via: 10.100.20.1
+          ens3:
+            dhcp4: true
+- id: n10
+  label: nat-sw
+  node_definition: unmanaged_switch
+  x: 600
+  y: -150
+  interfaces:
+  - id: n10-port0
+    label: port0
+    type: physical
+    slot: 0
+  - id: n10-port1
+    label: port1
+    type: physical
+    slot: 1
+  - id: n10-port2
+    label: port2
+    type: physical
+    slot: 2
+  - id: n10-port3
+    label: port3
+    type: physical
+    slot: 3
+  - id: n10-port4
+    label: port4
+    type: physical
+    slot: 4
+  - id: n10-port5
+    label: port5
+    type: physical
+    slot: 5
+  - id: n10-port6
+    label: port6
+    type: physical
+    slot: 6
+  - id: n10-port7
+    label: port7
+    type: physical
+    slot: 7
+  configuration: []
+links:
+- id: l0
+  n1: n0
+  i1: n0-port
+  n2: n2
+  i2: n2-GigabitEthernet1_0_24
+- id: l1
+  n1: n1
+  i1: n1-port
+  n2: n10
+  i2: n10-port0
+- id: l2
+  n1: n2
+  i1: n2-GigabitEthernet1_0_1
+  n2: n3
+  i2: n3-ens2
+- id: l3
+  n1: n3
+  i1: n3-ens3
+  n2: n10
+  i2: n10-port1
+- id: l4
+  n1: n2
+  i1: n2-GigabitEthernet1_0_2
+  n2: n4
+  i2: n4-eth0
+- id: l5
+  n1: n2
+  i1: n2-GigabitEthernet1_0_3
+  n2: n5
+  i2: n5-eth0
+- id: l6
+  n1: n5
+  i1: n5-eth1
+  n2: n10
+  i2: n10-port2
+- id: l7
+  n1: n2
+  i1: n2-GigabitEthernet1_0_22
+  n2: n6
+  i2: n6-GigabitEthernet0_0
+- id: l8
+  n1: n6
+  i1: n6-GigabitEthernet0_1
+  n2: n8
+  i2: n8-port0
+- id: l9
+  n1: n2
+  i1: n2-GigabitEthernet1_0_23
+  n2: n7
+  i2: n7-GigabitEthernet0_0
+- id: l10
+  n1: n7
+  i1: n7-GigabitEthernet0_1
+  n2: n8
+  i2: n8-port1
+- id: l11
+  n1: n7
+  i1: n7-Management0_0
+  n2: n10
+  i2: n10-port3
+- id: l12
+  n1: n9
+  i1: n9-ens2
+  n2: n8
+  i2: n8-port2
+- id: l13
+  n1: n9
+  i1: n9-ens3
+  n2: n10
+  i2: n10-port4

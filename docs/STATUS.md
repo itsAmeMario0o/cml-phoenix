@@ -30,6 +30,46 @@ the three lab imports, and the domain join with its two groups. Not done
 yet: `sw1`'s network device on the new ISE, `70-users.sh`, and no lab has
 been started.
 
+TrustSec Phase 2 started on 2026-09-18 and Act 1 is most of the way
+done, on the running lab. `labs/trustsec-phase2.yaml` is tracked and
+proven for Act 1 (`sw1`, `emp-pc`, `iot-dev`, `kali` running; ASAv, FTDv,
+`srv` present and stopped; ASAv 9.24.1 added to the refplat, blob and the
+controller). `sw1` polls over SNMPv3 from ISE, sends v2c traps, and relays
+DHCP to ISE; `emp-pc` and `iot-dev` carry Dell and HP MAC prefixes in
+their day-0; ISE profiled them `Workstation` and `HP-Device` with no
+RADIUS anywhere, and its 3.5 endpoint SNMP scan swept the endpoint VLAN
+over the API. `docs/ISE-INVENTORY-PARITY.md` holds the customer's
+ForeScout sample, the operator's mapping, and the lab's result per row.
+Found and fixed on the way: the transit network's route mode rejected
+endpoints beyond the /24 (fork `b92b6a2`, ADR 0003 amended). Still by
+hand on ISE: the profiler probes (GUI), the feed update (the offline apply
+did not take; the online tab is next), the NMAP scan (a GUI action). Not
+yet: a reverse DNS zone for 10.100.10.0/24, v3 traps, Act 2.
+
+Next steps for Phase 2, in order (Act 1 first, then Act 2):
+
+1. Your two GUI steps on ISE: the feed update (Online tab: enable, Test,
+   Update Now; the profile count should leave 676) and one NMAP scan
+   (Context Visibility, select `emp-pc`, Actions, Scan), which fills rows
+   4 to 6 of `docs/ISE-INVENTORY-PARITY.md`.
+2. A reverse DNS zone for 10.100.10.0/24 on the DC, fed by the switch's
+   DHCP (row 3), through the run-as-admin wrapper.
+3. v3 traps from `sw1` (`snmp-server host ... version 3 priv ise-poll`),
+   and whether ISE's trap probe takes them.
+4. Act 2, step 5: RADIUS and TrustSec on `sw1`'s device entry, MAB for
+   `iot-dev` and `kali`, PEAP as `mario` from `emp-pc` (the supplicant
+   config's password is `CHANGE_ME` until set from `ad.env`).
+5. Act 2, steps 6 and 7: SGACL on the switch, then ASAv enforcing by tag.
+   FTDv (step 8) waits for the operator's cdFMC onboarding.
+6. In parallel, the persistence spec's step 1: redeploy ISE onto 300 GB
+   Standard SSD, since the current ISE idles on a 600 GB Premium disk.
+
+Teardown on 2026-09-19 (UTC): CML destroyed with the labs exported; ISE
+and the DC deallocated, not destroyed, per the persistence spec, so the
+join, probes and identities survive to the next session. Their start is
+`az vm start -g rg-cml-lab -n dc1` then `-n ise1` until the scripts learn
+it.
+
 Next steps, in order:
 
 1. The spec approved today,

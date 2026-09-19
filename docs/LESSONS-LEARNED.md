@@ -1034,3 +1034,100 @@ in Azure, which is the cheapest place to learn them.
 - Fix: before reimporting, list every `exports/<stamp>/` folder, locally
   and in blob, and take each lab from the newest export that has it. All
   three labs are back on the 2026-09-18 build.
+
+## An endpoint behind the switch cannot reach the VNet, though the switch can
+
+- Symptom: from `emp-pc` (10.100.10.100, on VLAN 10 behind `sw1`),
+  `ping 10.20.2.10` answered `From 10.100.0.1 icmp_seq=1 Destination Port
+  Unreachable` and a DNS query to the domain controller got nothing. From
+  `sw1` the same ping succeeded when sourced from Vlan100 (10.100.0.2) and
+  returned `UUU` when sourced from Vlan10 (10.100.10.1). Seen 2026-09-18,
+  the first day a lab had endpoints behind the switch.
+- How it was narrowed: the rejection came from 10.100.0.1, the CML host,
+  so it was not the DC, Azure, or DNS. One device, one destination, one
+  path, only the source address changed, so the switch's routing, the UDR,
+  and both NSG rules (all written for 10.100.0.0/16) were ruled out. On
+  the host, `iptables -S` showed libvirt's rules for the transit bridge:
+  accept source 10.100.0.0/24 out of `bridge1`, reject everything else
+  with icmp-port-unreachable, and the mirror image inbound. That is the
+  symptom exactly. Two inserted accept rules for 10.100.0.0/16, and
+  nothing else, made the endpoint reach the DC and ISE.
+- Cause: the transit network is a libvirt network in `route` mode, and
+  route mode's job is "forward this one subnet and reject the rest". The
+  `<route>` element adds a kernel route for 10.100.0.0/16 but no forward
+  rule for it. Every Cisco device in the earlier labs sat inside the /24
+  (the probe switch at 10.100.0.3, the Phase 1 edge at 10.100.0.2), and
+  every flow that matters to ISE (RADIUS, CoA, SNMP, the switch's own DNS
+  lookups sourced from Vlan100) still does, which is why nothing showed
+  until endpoints got addresses on 10.100.10.0/24.
+- Fix: `<forward mode='open'/>`, under which libvirt adds no firewall
+  rules at all, with `zone='libvirt-routed'` on the `<bridge>` element so
+  firewalld still accepts forwarding for it (open mode does not place the
+  bridge in that zone by itself, and the default zone is what rejected
+  forwarding on the first day of the transit bridge). Proven live on
+  2026-09-18 by redefining the network on the running host: zero
+  `bridge1` rules in iptables, the bridge in `libvirt-routed`, and the
+  endpoint pinging and resolving the DC and pinging ISE. Redefining the
+  network drops the bridge for a second; the lab's `bridge1` connector node
+  needs a stop and start afterwards, the switch does not. The two inserted
+  rules are the fallback if open mode ever misbehaves; they vanish on
+  `virsh net-restart`. The permanent form is in the fork's `06-transit.sh`.
+
+## `60-import-lab.sh --dry-run` does not render; the rendered file can be stale
+
+- Symptom: a node re-provisioned from `exports/.rendered/<lab>.yaml`
+  after editing the tracked topology came up without the edit. Seen
+  2026-09-18.
+- Cause: the dry run prints the render command through `run` and never
+  executes it, so the rendered file was the previous one.
+- Fix: to render without importing, call `scripts/lib/render_lab.py`
+  directly with the env files exported and `umask 077`; check the
+  timestamp of the rendered file before trusting it.
+
+## CML refuses a MAC address outside its own prefix, and locks a booted node's NICs
+
+- Symptom: `PATCH /labs/<lab>/interfaces/<id>` with `mac_address` returned
+  400 twice: "Physical configuration of node is locked" on a node that had
+  booted, then "OUI does not match. Expected: 52:54:00" once the node was
+  wiped. Seen 2026-09-18, trying to give endpoints real vendor prefixes so
+  ISE could profile them by OUI.
+- Cause: a node's interfaces cannot change once it has run until its disks
+  are wiped, and the controller only issues MACs from its configured
+  prefix (`system_information.oui`).
+- Fix: set the MAC inside the guest, where it reaches the wire: netplan
+  `macaddress:` on Ubuntu, `ip link set eth0 address` in Alpine's
+  `node.cfg`. The switch and ISE see the guest's MAC; the controller's
+  NIC MAC never appears on the wire. Each disk wipe gives the NIC a fresh
+  controller MAC, and ISE keeps the old one as a ghost endpoint; delete
+  those over ERS before a demo.
+
+## ISE's endpoint SNMP scan API wants objects where the GUI takes strings
+
+- Symptom: `POST /api/v1/profiler/snmp/scan/test` answered 400 "networkScope,
+  must not be null, scanSource, must not be null", then "Cannot construct
+  instance of Subnet from String value '10.100.0.0/24'", then "Unable to
+  test connection due to an internal error". Seen 2026-09-18.
+- Cause: the test call needs the whole scan shape, not just `testServer`
+  and credentials; `subnets` is a list of `{subnetIp, mask}` objects, not
+  CIDR strings; `scanSource` is the PSN's FQDN; and the test server has to
+  be the endpoint's current address (a re-provisioned node takes a new
+  lease).
+- Fix: build the body as the scan itself would be created, with
+  `scheduleTime: {scheduleType: NO_SCHEDULE}`, and read the endpoint's
+  address from the switch's DHCP binding first. With that, the test
+  reports "SNMP Connection Successful" and a started scan sweeps a /24 in
+  about two minutes.
+
+## The Profiler Feed offline apply stayed grey
+
+- Symptom: on Administration, FeedService, Profiler, Offline Manual Update,
+  a chosen `feedservice-*.tar.gz.gpg` left Apply Update greyed out and
+  "Latest applied feed occurred on" blank; the profile count stayed at
+  676. Seen 2026-09-18.
+- Cause: the package was not accepted by the page (the file must come from
+  that page's own "Download Updated Profile Policies" link, and the upload
+  has to finish before Apply enables). Not fully diagnosed.
+- Fix: the Online Subscription Update tab: enable, Test Feed Service
+  Connection, Update Now. ISE resolves `isefeed-prd.cisco.com` and has
+  outbound access. Read `GET /ers/config/profilerprofile` total before and
+  after to see it take.
