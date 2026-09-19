@@ -63,6 +63,18 @@ Next steps for Phase 2, in order (Act 1 first, then Act 2):
    FTDv (step 8) waits for the operator's cdFMC onboarding.
 6. In parallel, the persistence spec's step 1: redeploy ISE onto 300 GB
    Standard SSD, since the current ISE idles on a 600 GB Premium disk.
+7. Splunk as a CML container (roadmap 23). Cisco's
+   `refplat-20260701-splunk.iso` (Splunk Enterprise 10.4.1, Docker node, 4
+   GB, one interface) is in `software/` with its signature;
+   `SPLUNK_ADMIN_PASSWORD` is in `labs.env`. Next lab: register it the way
+   ASAv was (blob, then the controller's upload API), add it to the Phase 2
+   topology on the transit at a 10.100.0.x address with the password as a
+   placeholder in the `environment` day-0 file, point ISE's remote logging
+   and `sw1`'s `logging host` at it, and tunnel 8000 for the web UI. The
+   node definition's boot completes on "Ansible playbook complete".
+8. Windows 11 as a CML endpoint waits on the Enterprise evaluation ISO
+   from the operator (Microsoft sign-in); the build is headless on the CML
+   host with an autounattend that joins `corp.rooez.com`.
 
 Teardown on 2026-09-19 (UTC): CML destroyed with the labs exported; ISE
 and the DC deallocated, not destroyed, per the persistence spec, so the
