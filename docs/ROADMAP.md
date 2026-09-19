@@ -226,6 +226,21 @@ number.
     12 GB, so a spine, two leaves, the interconnect, and a WAN or internet
     simulator need sizing against the host or boot waves, which ties to the
     lab calculator, item 5. Needs its own spec.
+25. Blue-green network infrastructure on NX-OS, with the pipeline that
+    makes it real. Operator idea, 2026-09-18: explore what a blue-green
+    deployment looks like for network infrastructure, with two parallel
+    fabrics carrying different versions of the configuration (and of the
+    code that renders it), a cutover between them, and a rollback that is
+    a switch back rather than a repair. The interesting parts are the ones
+    ForeScout-style labs never touch: the CI/CD pipeline that validates a
+    version before it is allowed near the green side (render, lint, deploy
+    to CML, pyATS against it), the automation that moves traffic (an
+    upstream router or the EVPN control plane preferring one fabric), and
+    what "state" means when the fabric is meant to be replaced rather than
+    edited. Builds on item 20's NX-OS fabric and on the pyATS layer, and
+    would be the first lab where the repo's own CI (item 14) is part of
+    the story rather than the plumbing. Needs its own spec; mutable versus
+    immutable is the first question it has to settle.
 
 ## From the design spec, still deferred
 
