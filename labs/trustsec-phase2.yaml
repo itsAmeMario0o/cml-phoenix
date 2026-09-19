@@ -32,6 +32,7 @@
 # itself. kali keeps the CML prefix on purpose: it is the unknown device.
 #
 # Render with scripts/60-import-lab.sh, which fills __LAB_PASSWORD__,
+# the four __SNMP_*__ values (labs.env, Act 1),
 # __FTD_ADMIN_PASSWORD__, __ISE_IP__ and __RADIUS_SECRET__ from
 # config/mcp-env/labs.env and __LAB_SSH_PUBKEY__ from keys/cml-lab.pub
 # (ADR 0006). emp-pc's PEAP password is the literal CHANGE_ME: the AD
@@ -347,7 +348,19 @@ nodes:
       package_update: true
       packages:
         - wpasupplicant
+        - snmpd
       write_files:
+        - path: /etc/snmp/snmpd.conf
+          permissions: '0600'
+          content: |
+            # Act 1, step 5: ISE's endpoint SNMP scan asks the endpoint
+            # itself. v3 first, v2c kept for the comparison.
+            agentAddress udp:161
+            sysLocation cml-azure-lab, TrustSec Phase 2, VLAN 10
+            sysContact lab-owner
+            createUser __SNMP_V3_USER__ SHA "__SNMP_V3_AUTH_PASSWORD__" AES "__SNMP_V3_PRIV_PASSWORD__"
+            rouser __SNMP_V3_USER__ priv
+            rocommunity __SNMP_RO_COMMUNITY__ 10.20.2.20
         - path: /etc/wpa_supplicant/wired-peap.conf
           permissions: '0600'
           content: |
@@ -376,6 +389,7 @@ nodes:
             WantedBy=multi-user.target
       runcmd:
         - [systemctl, daemon-reload]
+        - [systemctl, restart, snmpd]
   - name: network-config
     content: |-
       #network-config
@@ -391,6 +405,10 @@ nodes:
             # and CML's own 52:54:00 maps to nobody.
             macaddress: 00:14:22:5a:10:01
             dhcp4: true
+            # Key the lease by MAC, as a Windows or printer client would;
+            # networkd's default DUID hides the MAC from the switch's
+            # binding table and from ISE's DHCP probe.
+            dhcp-identifier: mac
             dhcp4-overrides:
               use-routes: false
             routes:
